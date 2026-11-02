@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
@@ -22,9 +21,10 @@ type mergedResult struct {
 
 // Deduplicate takes raw provider responses from multiple search engines,
 // canonicalizes and deduplicates URLs, merges engine positions, titles,
-// and snippets, and returns a unified list of unique search results along
-// with the total count of unique results before limit truncation.
-func Deduplicate(responses []*model.ProviderResponse, limit int) (results []model.SearchResult, dedupedCount int) {
+// and snippets, applies ranking (defaulting to RRFRanker if no custom ranker is passed),
+// and returns the unified list of ranked results along with the total count
+// of unique results before limit truncation.
+func Deduplicate(responses []*model.ProviderResponse, limit int, rankers ...Ranker) (results []model.SearchResult, dedupedCount int) {
 	if len(responses) == 0 {
 		return []model.SearchResult{}, 0
 	}
@@ -130,41 +130,32 @@ func Deduplicate(responses []*model.ProviderResponse, limit int) (results []mode
 		})
 	}
 
-	// Sort merged results:
-	// 1. Higher engine consensus (discovered by more engines)
-	// 2. Best original rank position in SERP
-	// 3. Stable discovery order
-	sort.Slice(list, func(i, j int) bool {
-		if list[i].engineCount != list[j].engineCount {
-			return list[i].engineCount > list[j].engineCount
-		}
-		if list[i].bestPosition != list[j].bestPosition {
-			return list[i].bestPosition < list[j].bestPosition
-		}
-		return list[i].firstSeen < list[j].firstSeen
-	})
-
-	finalList := list
-	if limit > 0 && len(finalList) > limit {
-		finalList = finalList[:limit]
-	}
-
-	results = make([]model.SearchResult, len(finalList))
-	for i, item := range finalList {
-		rank := i + 1
-		results[i] = model.SearchResult{
-			ID:            fmt.Sprintf("res_%d", rank),
+	// Build unranked SearchResult slice
+	unranked := make([]model.SearchResult, len(list))
+	for i, item := range list {
+		unranked[i] = model.SearchResult{
 			Title:         item.title,
 			URL:           item.url,
 			Snippet:       item.snippet,
-			Rank:          rank,
-			Score:         1.0 / float64(rank),
 			Engines:       item.engines,
 			PublishedDate: item.publishedDate,
 		}
 	}
 
-	return results, dedupedCount
+	// Apply Ranker (defaults to RRFRanker with k=60)
+	var ranker Ranker = DefaultRanker
+	if len(rankers) > 0 && rankers[0] != nil {
+		ranker = rankers[0]
+	}
+
+	ranked := ranker.Rank(unranked)
+
+	// Apply limit truncation
+	if limit > 0 && len(ranked) > limit {
+		ranked = ranked[:limit]
+	}
+
+	return ranked, dedupedCount
 }
 
 func selectBetterTitle(curr, candidate string) string {

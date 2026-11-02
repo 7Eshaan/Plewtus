@@ -22,7 +22,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - [x] **Phase 3: Integrate additional search engines** — Bing & Yahoo scrapers with automated URL unwrapping and ad filtering; Mojeek evaluated and cut due to Altcha captcha. (Verified with fixtures & live queries)
 - [x] **Phase 4: Parallel search orchestration** — Concurrent dispatch, per-provider timeouts, partial response resilience, server integration. (Verified with unit tests, live integration, and live curl)
 - [x] **Phase 5: Result normalization and deduplication** — Canonical URL normalization, tracker stripping, result merging, engine discovery preservation. (Verified with pipeline tests, orchestrator tests, and live curl)
-- [ ] **Phase 6: Ranking and result fusion** — Reciprocal Rank Fusion (RRF).
+- [x] **Phase 6: Ranking and result fusion** — Reciprocal Rank Fusion (RRF) with standard $k=60$, decoupled Ranker interface, transparent score computation. (Verified with formula tests, consensus tests, and live curl)
 - [ ] **Phase 7: AI-friendly content extraction** — Clean text, highlights, Markdown with SSRF & resource guards.
 - [ ] **Phase 8: Search API features** — Query filters, freshness, domain constraints, content options.
 - [ ] **Phase 9: Reliability and usage management** — In-memory caching, rate limiting, quotas, fallback.
@@ -52,11 +52,15 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
    - Strips tracking query parameters (`utm_*`, `gclid`, `fbclid`, `msclkid`, `twclid`, `guccounter`, `ref`, etc.) while strictly preserving semantic parameters.
    - Deterministic query parameter sorting (`a=1&b=2`).
    - Normalizes schemes to lowercase https, cleans paths via `path.Clean`, removes trailing fragments (`#...`), and canonicalizes default index files (`/index.html`).
-   - Two-tier representation: a clean display URL (`https://...`) and a canonical comparison key (stripping `www.`, scheme variance, and non-root trailing slashes) for robust identity matching.
+   - Two-tier representation: clean display URL (`https://...`) and invariant canonical comparison key (stripping `www.`, scheme variance, and non-root trailing slashes) for robust identity matching.
 7. **Multi-Engine Consensus & Metadata Merging:**
    - Retains all discovering engines and their original SERP ranks in `SearchResult.Engines`.
-   - Intelligent metadata selection: prefers non-truncated titles and richer, more informative snippets; preserves published dates.
-   - Consensus-aware ordering before Phase 6 RRF: pages confirmed by more engines rank higher.
+   - Metadata enhancement: prefers non-truncated titles and richer snippets; preserves published dates.
+8. **Decoupled Ranking & Reciprocal Rank Fusion (RRF):**
+   - `Ranker` interface decouples ranking algorithms from deduplication and orchestrator logic, allowing custom or chained rerankers (`MultiRanker`).
+   - `RRFRanker`: Computes \( \text{score}(d) = \sum_{m \in M} \frac{1}{k + r_m(d)} \) with standard smoothing constant \( k = 60 \). Scores are rounded to 6 decimal places for clean consumption.
+   - Scale-invariant: avoids comparing incomparable raw relevance scores from different engines.
+   - Deterministic tie-breaking: RRF score descending, engine count descending, best original position ascending, stable discovery order.
 
 ## Tests Performed
 - `internal/config`: Default configs, environment variable overrides.
@@ -72,15 +76,21 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
   - `TestNormalizeURL_TrackingParameters`: Stripping UTM, click IDs, referral tokens, deterministic query sorting.
   - `TestNormalizeURL_CanonicalMatching`: Canonical key matching across schemes, ports, www prefixes, trailing slashes, fragments, index files.
   - `TestDeduplicate_IdenticalURLsAcrossEngines`: Deduplicating identical URLs across DuckDuckGo, Bing, and Yahoo into a single result with 3 discovering engine sources.
-  - `TestDeduplicate_EngineConsensusRanking`: Verifying multi-engine consensus ranking (trio > duo > solo).
+  - `TestDeduplicate_EngineConsensusRanking`: Multi-engine consensus ranking (trio > duo > solo).
   - `TestDeduplicate_TitleTruncationSelection`: Automatic selection of non-truncated titles.
   - `TestDeduplicate_LimitEnforcement`: Preserving accurate `dedupedCount` before limit truncation.
+  - `TestRRFRanker_Formula`: Verified exact formula output for \( k=60 \).
+  - `TestRRFRanker_MultiEngineConsensusBeatsSingleHighRank`: Confirmed 2-engine #2 consensus outranks single-engine #1.
+  - `TestRRFRanker_TieBreaking`: Deterministic stable ordering on identical scores.
+  - `TestRRFRanker_CustomK`: Configurable smoothing parameter.
+  - `TestRRFRanker_MultiRankerChain`: Chained RRF ranker with secondary reranker.
+  - `TestRRFRanker_EdgeCases`: Empty inputs, non-positive positions, duplicate engine sources.
 - `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, live multi-engine queries.
-- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8889/search` returning deduplicated results with honest `raw_count` and `deduped_count`.
+- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8890/search` returning RRF-ranked results with honest `score` and `engines`.
 
 ## Next Step
-Proceed to **Phase 6 — Ranking and result fusion**:
-1. Implement Reciprocal Rank Fusion (RRF) algorithm: \( \text{score}(d) = \sum_{m \in M} \frac{1}{k + r_m(d)} \) with standard smoothing parameter \( k = 60 \).
-2. Decouple ranking logic into a dedicated fusion module so future re-ranking algorithms or ML models can be plugged in seamlessly.
-3. Compute honest fused scores and final ranked ordering across all discovering engines.
-4. Verify RRF with algorithmic unit tests, edge-case tests, and live multi-provider queries.
+Proceed to **Phase 7 — AI-friendly content extraction**:
+1. Implement webpage content extractor with SSRF & resource guards (reject private/loopback IPs, link-local, oversized responses, non-HTML content, timeout limits).
+2. Modes: metadata extraction, highlights/summaries, and full Markdown conversion.
+3. Configurable limits (`max_pages`, `max_chars_per_page`) to avoid fetching pages unnecessarily.
+4. Integrate extraction into the search pipeline when `extract.enabled: true`.
