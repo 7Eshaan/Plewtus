@@ -21,7 +21,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - [x] **Phase 2: Build the provider architecture** — Modular provider interface, provider registry, polite HTTP client, HTML DOM utilities, DuckDuckGo scraper with primary `/html/` and fallback `/lite/`. (Verified with fixtures & live queries)
 - [x] **Phase 3: Integrate additional search engines** — Bing & Yahoo scrapers with automated URL unwrapping and ad filtering; Mojeek evaluated and cut due to Altcha captcha. (Verified with fixtures & live queries)
 - [x] **Phase 4: Parallel search orchestration** — Concurrent dispatch, per-provider timeouts, partial response resilience, server integration. (Verified with unit tests, live integration, and live curl)
-- [ ] **Phase 5: Result normalization and deduplication** — Canonical URL normalization, tracker stripping, result merging, engine discovery preservation.
+- [x] **Phase 5: Result normalization and deduplication** — Canonical URL normalization, tracker stripping, result merging, engine discovery preservation. (Verified with pipeline tests, orchestrator tests, and live curl)
 - [ ] **Phase 6: Ranking and result fusion** — Reciprocal Rank Fusion (RRF).
 - [ ] **Phase 7: AI-friendly content extraction** — Clean text, highlights, Markdown with SSRF & resource guards.
 - [ ] **Phase 8: Search API features** — Query filters, freshness, domain constraints, content options.
@@ -42,14 +42,21 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
    - Bing wraps external links in `/ck/a?!...&u=a1<base64>`. Decoded via base64 URL unpadding directly in `htmlutil.UnwrapURL`.
    - Yahoo wraps external links in `/RU=<encoded_url>/`. Unescaped directly in `htmlutil.UnwrapURL`.
    - DuckDuckGo wraps external links in `/l/?uddg=<encoded_url>`. Unescaped directly in `htmlutil.UnwrapURL`.
-   - Completely avoids wasteful HTTP redirect roundtrips and protects agent privacy.
-5. **Parallel Search Orchestration Design:**
+   - Avoids wasteful HTTP redirect roundtrips and protects agent privacy.
+5. **Parallel Search Orchestration:**
    - `orchestrator.Orchestrator`: Dispatches concurrent goroutines for each requested provider with bounded per-provider contexts.
    - Per-goroutine panic recovery prevents individual scraper panics from affecting the process.
    - Partial response resilience: if some providers fail or time out, successful results are preserved and failures are recorded in `metadata.providers.failed`.
    - Context cancellation resilience: drains available responses and safely terminates without leaking goroutines.
-   - Fair round-robin interleaving prior to Phase 6 RRF ranking.
-6. **Server Integration via Searcher Interface:** `server.Server` receives a `Searcher` interface, enabling fast unit testing with mock searchers alongside live end-to-end orchestrator tests.
+6. **URL Normalization & Canonicalization (`internal/pipeline`):**
+   - Strips tracking query parameters (`utm_*`, `gclid`, `fbclid`, `msclkid`, `twclid`, `guccounter`, `ref`, etc.) while strictly preserving semantic parameters.
+   - Deterministic query parameter sorting (`a=1&b=2`).
+   - Normalizes schemes to lowercase https, cleans paths via `path.Clean`, removes trailing fragments (`#...`), and canonicalizes default index files (`/index.html`).
+   - Two-tier representation: a clean display URL (`https://...`) and a canonical comparison key (stripping `www.`, scheme variance, and non-root trailing slashes) for robust identity matching.
+7. **Multi-Engine Consensus & Metadata Merging:**
+   - Retains all discovering engines and their original SERP ranks in `SearchResult.Engines`.
+   - Intelligent metadata selection: prefers non-truncated titles and richer, more informative snippets; preserves published dates.
+   - Consensus-aware ordering before Phase 6 RRF: pages confirmed by more engines rank higher.
 
 ## Tests Performed
 - `internal/config`: Default configs, environment variable overrides.
@@ -61,20 +68,19 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - `internal/provider/bing`: Fixtures, challenge detection, live queries.
 - `internal/provider/yahoo`: Fixtures, challenge detection, live queries with ATS EOF retry.
 - `internal/provider/all`: Registry initialization with all active providers.
-- `internal/orchestrator`:
-  - `TestOrchestrator_ParallelExecution`: 3 providers running in ~100ms instead of 300ms sequential.
-  - `TestOrchestrator_PerProviderTimeout`: Slow provider cancelled at 60ms while fast provider succeeds.
-  - `TestOrchestrator_PartialResponseResilience`: Working provider succeeds while rate-limited and panicking providers are reported in `metadata.providers.failed`.
-  - `TestOrchestrator_UnknownProvider`: Missing providers recorded as failed without erroring the request.
-  - `TestOrchestrator_AllProvidersFail`: Returns empty results slice with all errors recorded.
-  - `TestOrchestrator_ContextCancelled`: Handles parent cancellation cleanly without goroutine leak.
-  - `TestOrchestrator_InterleavingAndLimit`: Round-robin rank interleaving and limit truncation.
-  - `TestOrchestrator_LiveEngines`: Live parallel query to DuckDuckGo, Bing, and Yahoo simultaneously in 1.17s.
-- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8888/search` returning real results from all 3 engines.
+- `internal/pipeline`:
+  - `TestNormalizeURL_TrackingParameters`: Stripping UTM, click IDs, referral tokens, deterministic query sorting.
+  - `TestNormalizeURL_CanonicalMatching`: Canonical key matching across schemes, ports, www prefixes, trailing slashes, fragments, index files.
+  - `TestDeduplicate_IdenticalURLsAcrossEngines`: Deduplicating identical URLs across DuckDuckGo, Bing, and Yahoo into a single result with 3 discovering engine sources.
+  - `TestDeduplicate_EngineConsensusRanking`: Verifying multi-engine consensus ranking (trio > duo > solo).
+  - `TestDeduplicate_TitleTruncationSelection`: Automatic selection of non-truncated titles.
+  - `TestDeduplicate_LimitEnforcement`: Preserving accurate `dedupedCount` before limit truncation.
+- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, live multi-engine queries.
+- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8889/search` returning deduplicated results with honest `raw_count` and `deduped_count`.
 
 ## Next Step
-Proceed to **Phase 5 — Result normalization and deduplication**:
-1. Implement URL canonicalization and normalization (strip tracking params like UTM, fbclid, gclid, normalize schemes, lowercasing domains, removing fragments and trailing slashes).
-2. Deduplicate results referring to identical canonical URLs across providers.
-3. Merge duplicate result metadata (preserve all discovering engines in `SearchResult.Engines` with their original ranks, combine snippets or pick the most informative snippet).
-4. Integrate deduplication into the search processing pipeline.
+Proceed to **Phase 6 — Ranking and result fusion**:
+1. Implement Reciprocal Rank Fusion (RRF) algorithm: \( \text{score}(d) = \sum_{m \in M} \frac{1}{k + r_m(d)} \) with standard smoothing parameter \( k = 60 \).
+2. Decouple ranking logic into a dedicated fusion module so future re-ranking algorithms or ML models can be plugged in seamlessly.
+3. Compute honest fused scores and final ranked ordering across all discovering engines.
+4. Verify RRF with algorithmic unit tests, edge-case tests, and live multi-provider queries.

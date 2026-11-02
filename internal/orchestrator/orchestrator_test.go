@@ -363,8 +363,65 @@ func TestOrchestrator_InterleavingAndLimit(t *testing.T) {
 	if resp.Metadata.Stats.RawCount != 6 {
 		t.Errorf("expected RawCount 6, got %d", resp.Metadata.Stats.RawCount)
 	}
+	if resp.Metadata.Stats.DedupedCount != 6 {
+		t.Errorf("expected DedupedCount 6, got %d", resp.Metadata.Stats.DedupedCount)
+	}
+	if resp.Metadata.TotalResults != 3 {
+		t.Errorf("expected TotalResults 3, got %d", resp.Metadata.TotalResults)
+	}
+}
+
+func TestOrchestrator_Deduplication(t *testing.T) {
+	reg := provider.NewRegistry()
+
+	reg.Register(&mockProvider{
+		name: "ddg",
+		results: []model.RawSearchResult{
+			{Title: "Go Lang", URL: "https://golang.org", Position: 1},
+			{Title: "DDG Only", URL: "https://duckduckgo.com", Position: 2},
+		},
+	})
+	reg.Register(&mockProvider{
+		name: "bing",
+		results: []model.RawSearchResult{
+			{Title: "The Go Programming Language", URL: "https://www.golang.org/?utm_source=bing#intro", Position: 1},
+			{Title: "Bing Only", URL: "https://bing.com", Position: 2},
+		},
+	})
+
+	orch := New(reg, 1*time.Second, "test-agent", testLogger())
+
+	resp, err := orch.Search(context.Background(), &model.SearchRequest{
+		Query:     "go",
+		Limit:     10,
+		Providers: []string{"ddg", "bing"},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected search error: %v", err)
+	}
+
+	// 4 raw results, but golang.org is duplicated -> 3 unique results
+	if resp.Metadata.Stats.RawCount != 4 {
+		t.Errorf("expected RawCount 4, got %d", resp.Metadata.Stats.RawCount)
+	}
 	if resp.Metadata.Stats.DedupedCount != 3 {
 		t.Errorf("expected DedupedCount 3, got %d", resp.Metadata.Stats.DedupedCount)
+	}
+	if resp.Metadata.TotalResults != 3 {
+		t.Errorf("expected TotalResults 3, got %d", resp.Metadata.TotalResults)
+	}
+
+	// Top result should be the duplicate URL confirmed by 2 engines
+	first := resp.Results[0]
+	if first.URL != "https://golang.org/" && first.URL != "https://www.golang.org/" {
+		t.Errorf("expected golang.org as first result, got %s", first.URL)
+	}
+	if len(first.Engines) != 2 {
+		t.Fatalf("expected 2 discovering engines for first result, got %d", len(first.Engines))
+	}
+	if first.Title != "The Go Programming Language" {
+		t.Errorf("expected richer title, got %q", first.Title)
 	}
 }
 

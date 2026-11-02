@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"plewtus/internal/model"
+	"plewtus/internal/pipeline"
 	"plewtus/internal/provider"
 )
 
@@ -176,19 +177,19 @@ collectLoop:
 		failed = []model.ProviderError{}
 	}
 
-	// 5. Aggregate and interleave results across successful providers
-	combined := o.interleaveResults(rawResponses, req.Limit)
+	// 5. Canonicalize, deduplicate, and merge results across successful providers
+	uniqueResults, dedupedCount := pipeline.Deduplicate(rawResponses, req.Limit)
 
 	// 6. Build the final unified response
 	resp := model.NewSearchResponse(req.Query)
-	resp.Results = combined
-	resp.Metadata.TotalResults = len(combined)
+	resp.Results = uniqueResults
+	resp.Metadata.TotalResults = len(uniqueResults)
 	resp.Metadata.TookMs = time.Since(start).Milliseconds()
 	resp.Metadata.Providers.Queried = providers
 	resp.Metadata.Providers.Successful = successful
 	resp.Metadata.Providers.Failed = failed
 	resp.Metadata.Stats.RawCount = rawCount
-	resp.Metadata.Stats.DedupedCount = len(combined)
+	resp.Metadata.Stats.DedupedCount = dedupedCount
 
 	return resp, nil
 }
@@ -239,56 +240,4 @@ func drainResponses(
 			return
 		}
 	}
-}
-
-// interleaveResults round-robin interleaves raw results from multiple providers.
-func (o *Orchestrator) interleaveResults(rawResponses []*model.ProviderResponse, limit int) []model.SearchResult {
-	if len(rawResponses) == 0 {
-		return []model.SearchResult{}
-	}
-
-	// Sort providers by name for deterministic interleaving
-	sort.Slice(rawResponses, func(i, j int) bool {
-		return rawResponses[i].Engine < rawResponses[j].Engine
-	})
-
-	maxLen := 0
-	for _, r := range rawResponses {
-		if len(r.Results) > maxLen {
-			maxLen = len(r.Results)
-		}
-	}
-
-	combined := make([]model.SearchResult, 0)
-	rank := 1
-
-	for pos := 0; pos < maxLen; pos++ {
-		for _, r := range rawResponses {
-			if pos < len(r.Results) {
-				raw := r.Results[pos]
-				combined = append(combined, model.SearchResult{
-					ID:            fmt.Sprintf("res_%d", rank),
-					Title:         raw.Title,
-					URL:           raw.URL,
-					Snippet:       raw.Snippet,
-					Rank:          rank,
-					Score:         1.0 / float64(rank),
-					Engines: []model.EngineSource{
-						{
-							Name:     r.Engine,
-							Position: raw.Position,
-						},
-					},
-					PublishedDate: raw.PublishedDate,
-				})
-				rank++
-
-				if limit > 0 && len(combined) >= limit {
-					return combined
-				}
-			}
-		}
-	}
-
-	return combined
 }
