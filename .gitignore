@@ -1,0 +1,36 @@
+# Binaries
+bin/
+dist/
+plewtus
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts and coverage
+*.test
+*.out
+coverage.html
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# OS & Editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
