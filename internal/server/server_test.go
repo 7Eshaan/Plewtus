@@ -2,7 +2,9 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,10 +15,45 @@ import (
 	"plewtus/internal/model"
 )
 
-func newTestServer() *Server {
+type mockSearcher struct {
+	response *model.SearchResponse
+	err      error
+}
+
+func (m *mockSearcher) Search(ctx context.Context, req *model.SearchRequest) (*model.SearchResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.response != nil {
+		return m.response, nil
+	}
+
+	resp := model.NewSearchResponse(req.Query)
+	resp.Results = []model.SearchResult{
+		{
+			ID:      "res_1",
+			Title:   "Go Concurrency",
+			URL:     "https://go.dev/concurrency",
+			Snippet: "Concurrency in Go",
+			Rank:    1,
+			Score:   1.0,
+			Engines: []model.EngineSource{{Name: "duckduckgo", Position: 1}},
+		},
+	}
+	resp.Metadata.TotalResults = 1
+	resp.Metadata.Providers.Queried = req.Providers
+	resp.Metadata.Providers.Successful = req.Providers
+	return resp, nil
+}
+
+func newTestServer(searcher ...Searcher) *Server {
 	cfg := config.Load()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return New(cfg, logger)
+	var s Searcher = &mockSearcher{}
+	if len(searcher) > 0 && searcher[0] != nil {
+		s = searcher[0]
+	}
+	return New(cfg, logger, s)
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -99,6 +136,63 @@ func TestSearchEndpoint_ValidRequest(t *testing.T) {
 	}
 	if searchResp.Results == nil {
 		t.Errorf("expected non-nil results slice")
+	}
+	if len(searchResp.Results) != 1 {
+		t.Errorf("expected 1 result, got %d", len(searchResp.Results))
+	}
+}
+
+func TestSearchEndpoint_SearcherError(t *testing.T) {
+	srv := newTestServer(&mockSearcher{err: errors.New("database outage")})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	reqPayload := model.SearchRequest{
+		Query: "golang testing",
+	}
+	data, _ := json.Marshal(reqPayload)
+
+	resp, err := http.Post(ts.URL+"/search", "application/json", bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("failed to POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", resp.StatusCode)
+	}
+
+	var errResp model.ErrorResponse
+	_ = json.NewDecoder(resp.Body).Decode(&errResp)
+	if errResp.Error != "search_error" {
+		t.Errorf("expected 'search_error', got %s", errResp.Error)
+	}
+}
+
+func TestSearchEndpoint_SearcherTimeout(t *testing.T) {
+	srv := newTestServer(&mockSearcher{err: context.DeadlineExceeded})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	reqPayload := model.SearchRequest{
+		Query: "golang testing",
+	}
+	data, _ := json.Marshal(reqPayload)
+
+	resp, err := http.Post(ts.URL+"/search", "application/json", bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("failed to POST: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusRequestTimeout {
+		t.Errorf("expected status 408, got %d", resp.StatusCode)
+	}
+
+	var errResp model.ErrorResponse
+	_ = json.NewDecoder(resp.Body).Decode(&errResp)
+	if errResp.Error != "request_timeout" {
+		t.Errorf("expected 'request_timeout', got %s", errResp.Error)
 	}
 }
 

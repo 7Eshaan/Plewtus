@@ -2,6 +2,7 @@ package duckduckgo
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +35,10 @@ func TestDuckDuckGo_LiveQueries(t *testing.T) {
 
 			resp, err := p.Search(ctx, req)
 			if err != nil {
+				if errors.Is(err, ErrChallengeEncountered) || strings.Contains(err.Error(), "challenge") || strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "429") {
+					t.Skipf("DuckDuckGo temporary IP-level rate-limit/challenge encountered for %q: %v", q, err)
+					return
+				}
 				t.Fatalf("live query %q failed: %v", q, err)
 			}
 

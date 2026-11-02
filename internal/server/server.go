@@ -9,22 +9,30 @@ import (
 	"time"
 
 	"plewtus/internal/config"
+	"plewtus/internal/model"
 )
+
+// Searcher defines the interface for orchestrating search requests.
+type Searcher interface {
+	Search(ctx context.Context, req *model.SearchRequest) (*model.SearchResponse, error)
+}
 
 // Server coordinates HTTP routing, middleware, and lifecycle.
 type Server struct {
 	cfg       *config.Config
 	logger    *slog.Logger
+	searcher  Searcher
 	startTime time.Time
 	mux       *http.ServeMux
 	server    *http.Server
 }
 
 // New creates and configures a new Server instance.
-func New(cfg *config.Config, logger *slog.Logger) *Server {
+func New(cfg *config.Config, logger *slog.Logger, searcher Searcher) *Server {
 	s := &Server{
 		cfg:       cfg,
 		logger:    logger,
+		searcher:  searcher,
 		startTime: time.Now(),
 		mux:       http.NewServeMux(),
 	}

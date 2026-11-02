@@ -18,10 +18,16 @@ type HTTPClient struct {
 // NewHTTPClient creates a client configured with cookie jar and redirect handling.
 func NewHTTPClient(timeout time.Duration, userAgent string) *HTTPClient {
 	jar, _ := cookiejar.New(nil)
+	var transport *http.Transport
+	if defTr, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = defTr.Clone()
+	}
+
 	return &HTTPClient{
 		client: &http.Client{
-			Jar:     jar,
-			Timeout: timeout,
+			Transport: transport,
+			Jar:       jar,
+			Timeout:   timeout,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
 					return fmt.Errorf("stopped after 10 redirects")
@@ -52,6 +58,13 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 	}
 
 	return c.client.Do(req)
+}
+
+// CloseIdleConnections closes any idle TCP connections in the client transport.
+func (c *HTTPClient) CloseIdleConnections() {
+	if tr, ok := c.client.Transport.(*http.Transport); ok && tr != nil {
+		tr.CloseIdleConnections()
+	}
 }
 
 // ReadBody reads and closes the response body.

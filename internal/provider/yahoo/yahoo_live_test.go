@@ -34,6 +34,10 @@ func TestYahoo_LiveQueries(t *testing.T) {
 
 			resp, err := p.Search(ctx, req)
 			if err != nil {
+				if isRetryable(err) || strings.Contains(err.Error(), "unexpected EOF") {
+					t.Skipf("Yahoo temporary transient EOF/rate-limit encountered for %q: %v", q, err)
+					return
+				}
 				t.Fatalf("live query %q failed: %v", q, err)
 			}
 

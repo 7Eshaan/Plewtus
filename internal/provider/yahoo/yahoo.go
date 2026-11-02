@@ -61,10 +61,10 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	var resp *http.Response
 	var err error
 
-	// Retry once on transient network errors (such as unexpected EOF during Yahoo's initial cookie redirect)
-	for attempt := 0; attempt < 2; attempt++ {
+	// Retry on transient network errors (such as unexpected EOF during Yahoo's initial cookie redirect)
+	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(time.Duration(attempt) * 400 * time.Millisecond)
 		}
 
 		var httpReq *http.Request
@@ -84,6 +84,7 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 		if !isRetryable(err) {
 			break
 		}
+		p.client.CloseIdleConnections()
 	}
 
 	if err != nil {

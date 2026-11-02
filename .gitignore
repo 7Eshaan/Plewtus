@@ -1,7 +1,10 @@
+# Brief file
+/docs/BRIEF.md
+
 # Binaries
 bin/
 dist/
-plewtus
+/plewtus
 *.exe
 *.exe~
 *.dll
