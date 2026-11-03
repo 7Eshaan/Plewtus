@@ -1,7 +1,7 @@
 # Plewtus Project Context
 
 ## Overview
-Plewtus is an AI-agent search API backend that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture. It normalizes, deduplicates, and ranks results via Reciprocal Rank Fusion (RRF), with optional AI-friendly webpage extraction (clean text, highlights, Markdown), in-memory response caching, token-bucket rate limiting, configurable free-tier quotas, and provider circuit breaking.
+Plewtus is an AI-agent search API backend that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture. It normalizes, deduplicates, and ranks results via Reciprocal Rank Fusion (RRF), with optional AI-friendly webpage extraction (clean text, highlights, Markdown), in-memory response caching, token-bucket rate limiting, configurable free-tier quotas, provider circuit breaking, and native Model Context Protocol (MCP) support.
 
 ## Environment
 - **Go Version:** `go1.27.3 darwin/arm64`
@@ -26,7 +26,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - [x] **Phase 7: AI-friendly content extraction** — SSRF & resource guards (loopback, private, link-local, CGNAT, DNS rebinding, redirect validation, 2MB size limit, HTML MIME check), DOM cleaning, extraction modes (markdown, highlights, text, metadata), developer limits (max_pages, max_chars_per_page), orchestrator integration. (Verified with unit tests, live extraction, live integration, and live curl)
 - [x] **Phase 8: Search API features** — Query filters, freshness mapping (day, week, month, year), domain inclusion & exclusion with Boolean OR queries and pipeline post-filtering, ISO country/language settings, offset & limit pagination, transparent metadata.filters reflection. (Verified with unit tests, live integration, and live curl)
 - [x] **Phase 9: Reliability and usage management** — In-memory LRU cache with TTL and deterministic key hashing, token bucket rate limiting (per API key and client IP), daily request quotas with UTC reset, configurable free usage tier, API key authentication, provider circuit breaking (Closed/Open/Half-Open) and fallback to alternative healthy engines. (Verified with unit tests, server integration, and live curl)
-- [ ] **Phase 10: Final integration and documentation** — End-to-end integration, OpenAPI spec, MCP server.
+- [x] **Phase 10: Final integration and documentation** — End-to-end full lifecycle integration tests, Model Context Protocol (MCP) stdio server (`internal/mcp`, `cmd/plewtus-mcp`, `plewtus mcp`), complete OpenAPI 3.1.0 specifications (`docs/openapi.yaml`, `docs/openapi.json`), comprehensive documentation (`README.md`, `docs/API.md`, `docs/CONFIGURATION.md`, `docs/MCP.md`, `.env.example`). (Verified with unit tests, E2E tests, and live MCP stdio sessions)
 
 ## Architectural Decisions
 1. **Zero External Dependencies for Base Server:** Used Go standard library `net/http` (with Go 1.22+ pattern routing like `"GET /health"`, `"POST /search"`) and `log/slog` for structured logging. Minimal footprint.
@@ -75,6 +75,10 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
     - In-Memory LRU Cache: Canonical query + filter + extract key hashing with SHA-256. Deep-cloned cache retrieval with transparent `metadata.cached: true` flag. Configurable TTL and max entry bounds.
     - Usage Management & Configurable Free Tier: Token bucket rate limiting and UTC daily quota tracking per identity (`api_key:<token>` or anonymous `ip:<addr>`). Standard rate limit and quota response headers (`X-RateLimit-*`, `X-Quota-*`, `Retry-After`). 401 Unauthorized on invalid/missing keys when auth is required, 429 Too Many Requests on rate limit or daily quota exhaustion.
     - Provider Circuit Breaking & Fallback: Automatic failure tracking per upstream provider with Closed, Open, and Half-Open probe states. Degraded providers fast-fail during cooldown without network latency; orchestrator automatically queries alternative healthy registered engines when primary providers trip.
+12. **Native Model Context Protocol (MCP) Support (`internal/mcp`, `cmd/plewtus-mcp`):**
+    - Direct AI Agent Integration: Exposes `search` and `extract` tools over standard JSON-RPC 2.0 stdio protocol (`protocolVersion: 2024-11-05`), compatible out-of-the-box with Claude Desktop, Cursor, and custom agent frameworks.
+    - Stream Isolation: Enforces strict separation between stdout (JSON-RPC messages only) and stderr (all diagnostic logs), preventing parse errors in agent hosts.
+    - Dual-Binary & Subcommand Invocations: Available as both a dedicated binary (`./bin/plewtus-mcp`) and a CLI subcommand (`./bin/plewtus mcp`).
 
 ## Tests Performed
 - `internal/config`: Default configs, environment variable overrides for cache, usage, tiers, API keys, and circuit breakers.
@@ -83,6 +87,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - `internal/usage`: Free tier assignment, client IP extraction (`X-Forwarded-For`, `X-Real-IP`, `RemoteAddr`), token bucket rate limit consumption and refill, daily quota exhaustion and midnight UTC reset, API key authentication (`Authorization: Bearer` and `X-API-Key`), 401 Unauthorized and 429 Too Many Requests errors.
 - `internal/model`: SearchRequest normalization, query validation, freshness/country/language ISO validation, extract mode validation, SearchResponse JSON serialization with `cached` metadata.
 - `internal/server`: Health handler (`/health`, `/healthz`), Search handler contract validation, bad JSON handling, CORS preflight and header exposition (`X-RateLimit-*`, `X-Quota-*`, `Retry-After`), searcher error & timeout handling (`500`, `408`), rate limit headers and 429 enforcement (`TestServer_RateLimitingHeadersAnd429`), daily quota 429 enforcement (`TestServer_DailyQuotaExceeded429`), authentication 401 enforcement (`TestServer_Authentication401`), cache integration test (`TestServer_CacheIntegration`), live server integration test, live extraction integration test, live search filters integration test.
+- `internal/mcp`: Initialize handshake, ping, notifications/initialized, tools/list schema validation, tools/call execution for `search` and `extract`, parameter error handling, and unknown method errors.
 - `internal/provider`: Registry registration, thread safety, provider lookup, query builder tests.
 - `internal/provider/htmlutil`: Node finding, attribute extraction, class matching, text extraction, URL unwrapping for direct, protocol-relative, DDG, Bing, and Yahoo links.
 - `internal/provider/duckduckgo`: Fixtures, challenge detection, live queries.
@@ -91,16 +96,16 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - `internal/provider/all`: Registry initialization with all active providers.
 - `internal/pipeline`: URL normalization, tracking parameter stripping, canonical key matching, multi-engine consensus deduplication, title truncation selection, domain whitelist/blacklist filtering, offset & limit slicing, RRF ranker formula, consensus tie-breaking, custom k smoothing, multi-ranker chains.
 - `internal/extractor`: SSRF defense, URL validation, safe redirect checks, HTML pruning, Markdown conversion, highlights extraction, clean boundary truncation, MIME guard, batch extraction, live web extraction.
-- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, content extraction integration, metadata filters integration, offset pagination, cache hit integration (`TestOrchestrator_CacheIntegration`), circuit breaker fast-failure (`TestOrchestrator_CircuitBreakerFastFail`), circuit breaker fallback (`TestOrchestrator_CircuitBreakerFallback`), live multi-engine queries.
-- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8899/search` verifying:
-  - Cache miss on initial query followed by instant cache hit (`metadata.cached: true`).
-  - Pro tier authentication via `Authorization: Bearer prokey` reflecting 60 req/min limit and 2000 daily quota.
-  - Free tier rate limit enforcement returning HTTP 429 Too Many Requests with `Retry-After` header when limit is exceeded.
-  - Provider circuit breaker fast-failing DuckDuckGo during bot challenge cooldown while Bing and Yahoo returned 10 results smoothly.
+- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, content extraction integration, metadata filters integration, offset pagination, cache hit integration, circuit breaker fast-failure, circuit breaker fallback, live multi-engine queries.
+- `test`:
+  - `TestE2E_FullPipelineLifecycle`: End-to-end simulation covering authentication (401 without key), multi-provider dispatch with tracking parameter stripping, multi-engine consensus deduplication, RRF rank fusion score computation, content extraction, rate limit/quota header exposition, and subsequent cache hit.
+  - `TestE2E_CircuitBreakerAndFallback`: Simulates multiple provider failures tripping circuit breaker to open, fast-failing during cooldown, and executing fallback to healthy registered engine.
+  - `TestOpenAPISpecification_ValidJSON`: Validates that `docs/openapi.json` is well-formed OpenAPI 3.1.0 schema with `/search` and `/health` paths.
+- `cmd/plewtus` & `cmd/plewtus-mcp`:
+  - Built binaries: `./bin/plewtus` and `./bin/plewtus-mcp`.
+  - Verified live MCP stdio handshake (`initialize` and `tools/list`).
+  - Executed live `tools/call` for `search` against DuckDuckGo, Bing, and Yahoo with multi-engine consensus output formatted cleanly over stdio.
 
 ## Next Step
-Proceed to **Phase 10 — Final integration and documentation**:
-1. End-to-end integration and system tests verifying the complete search, fusion, extraction, caching, and usage flow.
-2. Complete documentation: API usage, environment variable configuration, provider architecture.
-3. OpenAPI specification generation.
-4. Model Context Protocol (MCP) server for direct AI agent consumption.
+**All 10 project phases completed and verified.**
+The Plewtus metasearch backend is fully functional, thoroughly tested, and documented. Recommended next user steps: commit Phase 10 changes and review documentation.

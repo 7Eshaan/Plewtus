@@ -1,0 +1,429 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Plewtus Metasearch API",
+    "version": "0.1.0",
+    "description": "Plewtus is an AI-agent search API backend that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture. Results are normalized, deduplicated, and ranked via Reciprocal Rank Fusion (RRF), with optional AI-friendly webpage extraction (clean text, highlights, Markdown).",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Local development server"
+    }
+  ],
+  "paths": {
+    "/search": {
+      "post": {
+        "summary": "Execute federated search",
+        "description": "Dispatches concurrent search queries across upstream search engines, normalizes and deduplicates results, computes Reciprocal Rank Fusion (RRF) scores, and optionally extracts webpage content for AI agents.",
+        "operationId": "search",
+        "security": [
+          { "BearerAuth": [] },
+          { "ApiKeyAuth": [] },
+          {}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful search execution with unified results and metadata.",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "schema": { "type": "integer" },
+                "description": "Maximum requests allowed per minute in active tier."
+              },
+              "X-RateLimit-Remaining": {
+                "schema": { "type": "integer" },
+                "description": "Remaining requests in current rate limit window."
+              },
+              "X-RateLimit-Reset": {
+                "schema": { "type": "integer" },
+                "description": "Seconds until rate limit bucket refills."
+              },
+              "X-Quota-Limit": {
+                "schema": { "type": "integer" },
+                "description": "Daily request quota limit."
+              },
+              "X-Quota-Remaining": {
+                "schema": { "type": "integer" },
+                "description": "Remaining requests for current UTC day."
+              },
+              "X-Quota-Reset": {
+                "schema": { "type": "integer" },
+                "description": "Seconds until daily quota resets at 00:00:00 UTC."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request (malformed JSON or validation error).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized (missing or invalid API key when auth is required).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "Request Timeout or context cancellation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests (rate limit or daily quota exceeded).",
+            "headers": {
+              "Retry-After": {
+                "schema": { "type": "integer" },
+                "description": "Seconds to wait before retrying request."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns server status, version, and uptime.",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Server is healthy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Health check alias",
+        "description": "Kubernetes-style health probe alias for /health.",
+        "operationId": "getHealthz",
+        "responses": {
+          "200": {
+            "description": "Server is healthy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Supply API key as Bearer token in Authorization header."
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Supply API key via X-API-Key header."
+      }
+    },
+    "schemas": {
+      "SearchRequest": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query string.",
+            "example": "golang concurrency patterns"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Maximum number of ranked results to return."
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Pagination offset for slicing global ranked results."
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["duckduckgo", "bing", "yahoo"]
+            },
+            "description": "Optional list of search engines to query."
+          },
+          "freshness": {
+            "type": "string",
+            "enum": ["day", "week", "month", "year"],
+            "description": "Optional discovery recency filter."
+          },
+          "include_domains": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Restrict search results strictly to these domains."
+          },
+          "exclude_domains": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Exclude any search results originating from these domains."
+          },
+          "country": {
+            "type": "string",
+            "description": "2-letter ISO 3166-1 country code."
+          },
+          "language": {
+            "type": "string",
+            "description": "2-letter ISO 639-1 language code."
+          },
+          "extract": {
+            "$ref": "#/components/schemas/ExtractOptions"
+          }
+        }
+      },
+      "ExtractOptions": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether to fetch and extract webpage content.",
+            "default": false
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["highlights", "markdown", "text", "metadata"],
+            "default": "highlights",
+            "description": "Content extraction format."
+          },
+          "max_pages": {
+            "type": "integer",
+            "default": 3,
+            "minimum": 1,
+            "maximum": 10
+          },
+          "max_chars_per_page": {
+            "type": "integer",
+            "default": 4000,
+            "minimum": 500,
+            "maximum": 20000
+          }
+        }
+      },
+      "SearchResponse": {
+        "type": "object",
+        "required": ["query", "results", "metadata"],
+        "properties": {
+          "query": { "type": "string" },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            }
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/SearchMetadata"
+          }
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "required": ["id", "title", "url", "snippet", "rank", "score", "engines"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "snippet": { "type": "string" },
+          "rank": { "type": "integer" },
+          "score": { "type": "number", "format": "double" },
+          "engines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EngineSource"
+            }
+          },
+          "published_date": { "type": "string" },
+          "content": {
+            "$ref": "#/components/schemas/ExtractedContent"
+          }
+        }
+      },
+      "EngineSource": {
+        "type": "object",
+        "required": ["name", "position"],
+        "properties": {
+          "name": { "type": "string" },
+          "position": { "type": "integer" }
+        }
+      },
+      "ExtractedContent": {
+        "type": "object",
+        "properties": {
+          "markdown": { "type": "string" },
+          "text": { "type": "string" },
+          "highlights": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "author": { "type": "string" },
+          "description": { "type": "string" },
+          "extracted_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "SearchMetadata": {
+        "type": "object",
+        "required": ["total_results", "took_ms", "providers", "stats", "timestamp"],
+        "properties": {
+          "total_results": { "type": "integer" },
+          "took_ms": { "type": "integer" },
+          "providers": {
+            "$ref": "#/components/schemas/ProviderMetadata"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/SearchStats"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/AppliedFilters"
+          },
+          "cached": { "type": "boolean" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ProviderMetadata": {
+        "type": "object",
+        "required": ["queried", "successful", "failed"],
+        "properties": {
+          "queried": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "successful": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderError"
+            }
+          }
+        }
+      },
+      "ProviderError": {
+        "type": "object",
+        "required": ["engine", "error"],
+        "properties": {
+          "engine": { "type": "string" },
+          "error": { "type": "string" }
+        }
+      },
+      "SearchStats": {
+        "type": "object",
+        "required": ["raw_count", "deduped_count"],
+        "properties": {
+          "raw_count": { "type": "integer" },
+          "deduped_count": { "type": "integer" }
+        }
+      },
+      "AppliedFilters": {
+        "type": "object",
+        "properties": {
+          "freshness": { "type": "string" },
+          "include_domains": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "exclude_domains": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "country": { "type": "string" },
+          "language": { "type": "string" },
+          "offset": { "type": "integer" },
+          "limit": { "type": "integer" }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": ["status", "version", "uptime_seconds", "timestamp"],
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "version": { "type": "string", "example": "0.1.0" },
+          "uptime_seconds": { "type": "number", "format": "double" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error", "message", "code"],
+        "properties": {
+          "error": { "type": "string" },
+          "message": { "type": "string" },
+          "code": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

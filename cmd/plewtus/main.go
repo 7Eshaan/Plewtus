@@ -11,6 +11,8 @@ import (
 
 	"plewtus/internal/cache"
 	"plewtus/internal/config"
+	"plewtus/internal/extractor"
+	"plewtus/internal/mcp"
 	"plewtus/internal/orchestrator"
 	"plewtus/internal/provider/all"
 	"plewtus/internal/reliability"
@@ -21,7 +23,13 @@ import (
 func main() {
 	cfg := config.Load()
 
-	// Initialize structured logger
+	// Check if invoked as MCP stdio server
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		runMCP(cfg)
+		return
+	}
+
+	// Initialize structured logger for HTTP server
 	var level slog.Level
 	switch strings.ToLower(cfg.LogLevel) {
 	case "debug":
@@ -112,4 +120,43 @@ func main() {
 	}
 
 	logger.Info("server exited cleanly")
+}
+
+func runMCP(cfg *config.Config) {
+	// Send logs to stderr so stdout is reserved for JSON-RPC messages
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	providerRegistry := all.NewRegistry(cfg.DefaultTimeout, cfg.UserAgent)
+	ext := extractor.New(extractor.ExtractorOptions{
+		Timeout:   cfg.DefaultTimeout,
+		UserAgent: cfg.UserAgent,
+		Logger:    logger,
+	})
+
+	searchOrchestrator := orchestrator.New(providerRegistry, cfg.DefaultTimeout, cfg.UserAgent, logger)
+	searchOrchestrator.WithExtractor(ext)
+
+	if cfg.CacheEnabled {
+		searchCache := cache.New(cache.Options{
+			TTL:        cfg.CacheTTL,
+			MaxEntries: cfg.CacheMaxEntries,
+		})
+		searchOrchestrator.WithCache(searchCache)
+	}
+
+	circuitBreakers := reliability.NewManager(reliability.BreakerOptions{
+		FailureThreshold: cfg.CircuitBreakerThreshold,
+		Cooldown:         cfg.CircuitBreakerCooldown,
+	})
+	searchOrchestrator.WithBreakers(circuitBreakers)
+
+	srv := mcp.NewServer(searchOrchestrator, ext, os.Stdin, os.Stdout, logger)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := srv.Serve(ctx); err != nil && err != context.Canceled {
+		logger.Error("mcp server error", slog.Any("error", err))
+		os.Exit(1)
+	}
 }
