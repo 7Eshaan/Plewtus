@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"net/url"
 	"sort"
 	"strings"
 
@@ -19,12 +20,34 @@ type mergedResult struct {
 	firstSeen     int
 }
 
+// DeduplicateOptions configures the result aggregation, filtering, ranking, and pagination.
+type DeduplicateOptions struct {
+	Limit          int
+	Offset         int
+	IncludeDomains []string
+	ExcludeDomains []string
+	Ranker         Ranker
+}
+
 // Deduplicate takes raw provider responses from multiple search engines,
 // canonicalizes and deduplicates URLs, merges engine positions, titles,
 // and snippets, applies ranking (defaulting to RRFRanker if no custom ranker is passed),
 // and returns the unified list of ranked results along with the total count
 // of unique results before limit truncation.
 func Deduplicate(responses []*model.ProviderResponse, limit int, rankers ...Ranker) (results []model.SearchResult, dedupedCount int) {
+	var ranker Ranker
+	if len(rankers) > 0 {
+		ranker = rankers[0]
+	}
+	return DeduplicateWithOptions(responses, DeduplicateOptions{
+		Limit:  limit,
+		Ranker: ranker,
+	})
+}
+
+// DeduplicateWithOptions performs deduplication, domain inclusion/exclusion filtering,
+// RRF ranking, and offset/limit pagination over raw provider responses.
+func DeduplicateWithOptions(responses []*model.ProviderResponse, opts DeduplicateOptions) (results []model.SearchResult, dedupedCount int) {
 	if len(responses) == 0 {
 		return []model.SearchResult{}, 0
 	}
@@ -49,6 +72,11 @@ func Deduplicate(responses []*model.ProviderResponse, limit int, rankers ...Rank
 			if err != nil {
 				cleanURL = strings.TrimSpace(raw.URL)
 				key = strings.ToLower(cleanURL)
+			}
+
+			// Domain filtering: verify against include and exclude constraints
+			if !matchesDomainFilters(cleanURL, opts.IncludeDomains, opts.ExcludeDomains) {
+				continue
 			}
 
 			existing, found := seen[key]
@@ -144,18 +172,67 @@ func Deduplicate(responses []*model.ProviderResponse, limit int, rankers ...Rank
 
 	// Apply Ranker (defaults to RRFRanker with k=60)
 	var ranker Ranker = DefaultRanker
-	if len(rankers) > 0 && rankers[0] != nil {
-		ranker = rankers[0]
+	if opts.Ranker != nil {
+		ranker = opts.Ranker
 	}
 
 	ranked := ranker.Rank(unranked)
 
-	// Apply limit truncation
-	if limit > 0 && len(ranked) > limit {
-		ranked = ranked[:limit]
+	// Apply pagination (offset & limit)
+	if opts.Offset > 0 {
+		if opts.Offset < len(ranked) {
+			ranked = ranked[opts.Offset:]
+		} else {
+			ranked = []model.SearchResult{}
+		}
+	}
+
+	if opts.Limit > 0 && len(ranked) > opts.Limit {
+		ranked = ranked[:opts.Limit]
 	}
 
 	return ranked, dedupedCount
+}
+
+func matchesDomainFilters(rawURL string, includeDomains, excludeDomains []string) bool {
+	if len(includeDomains) == 0 && len(excludeDomains) == 0 {
+		return true
+	}
+
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Hostname() == "" {
+		return false
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	host = strings.TrimSuffix(host, ".")
+
+	// 1. Exclude check: reject if host matches or is a subdomain of any excluded domain
+	for _, exc := range excludeDomains {
+		exc = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(exc)), "www.")
+		exc = strings.TrimPrefix(exc, ".")
+		if exc != "" && (host == exc || strings.HasSuffix(host, "."+exc)) {
+			return false
+		}
+	}
+
+	// 2. Include check: if specified, host must match or be a subdomain of at least one included domain
+	if len(includeDomains) > 0 {
+		matched := false
+		for _, inc := range includeDomains {
+			inc = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(inc)), "www.")
+			inc = strings.TrimPrefix(inc, ".")
+			if inc != "" && (host == inc || strings.HasSuffix(host, "."+inc)) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+
+	return true
 }
 
 func selectBetterTitle(curr, candidate string) string {

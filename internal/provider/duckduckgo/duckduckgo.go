@@ -41,7 +41,7 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	start := time.Now()
 
 	// 1. Build query string with domain filters if specified
-	query := buildQuery(req)
+	query := provider.BuildSearchQuery(req)
 
 	// 2. Build form parameters
 	form := url.Values{}
@@ -128,19 +128,7 @@ func (p *Provider) queryEndpoint(
 }
 
 
-func buildQuery(req model.ProviderRequest) string {
-	var parts []string
-	if trimmed := strings.TrimSpace(req.Query); trimmed != "" {
-		parts = append(parts, trimmed)
-	}
-	for _, inc := range req.IncludeDomains {
-		parts = append(parts, "site:"+inc)
-	}
-	for _, exc := range req.ExcludeDomains {
-		parts = append(parts, "-site:"+exc)
-	}
-	return strings.Join(parts, " ")
-}
+
 
 func mapFreshness(freshness string) string {
 	switch strings.ToLower(strings.TrimSpace(freshness)) {

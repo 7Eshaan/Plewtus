@@ -533,3 +533,98 @@ func TestOrchestrator_ContentExtractionIntegration(t *testing.T) {
 	}
 }
 
+func TestOrchestrator_FiltersInMetadata(t *testing.T) {
+	reg := provider.NewRegistry()
+	reg.Register(&mockProvider{
+		name: "test_engine",
+		results: []model.RawSearchResult{
+			{Title: "Page 1", URL: "https://go.dev/1", Position: 1},
+			{Title: "Page 2", URL: "https://other.com/2", Position: 2},
+		},
+	})
+
+	orch := New(reg, 1*time.Second, "test-agent", testLogger())
+
+	resp, err := orch.Search(context.Background(), &model.SearchRequest{
+		Query:          "test query",
+		Freshness:      "month",
+		Country:        "us",
+		Language:       "en",
+		IncludeDomains: []string{"go.dev"},
+		Offset:         0,
+		Limit:          5,
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected search error: %v", err)
+	}
+
+	if resp.Metadata.Filters == nil {
+		t.Fatalf("expected metadata.filters to be populated, got nil")
+	}
+
+	f := resp.Metadata.Filters
+	if f.Freshness != "month" {
+		t.Errorf("expected freshness 'month', got %q", f.Freshness)
+	}
+	if f.Country != "us" {
+		t.Errorf("expected country 'us', got %q", f.Country)
+	}
+	if f.Language != "en" {
+		t.Errorf("expected language 'en', got %q", f.Language)
+	}
+	if len(f.IncludeDomains) != 1 || f.IncludeDomains[0] != "go.dev" {
+		t.Errorf("expected include_domains ['go.dev'], got %v", f.IncludeDomains)
+	}
+
+	// Result from other.com must be filtered out
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected 1 result from go.dev, got %d", len(resp.Results))
+	}
+	if resp.Results[0].URL != "https://go.dev/1" {
+		t.Errorf("expected go.dev URL, got %s", resp.Results[0].URL)
+	}
+}
+
+func TestOrchestrator_OffsetPagination(t *testing.T) {
+	reg := provider.NewRegistry()
+	reg.Register(&mockProvider{
+		name: "test_engine",
+		results: []model.RawSearchResult{
+			{Title: "Item 1", URL: "https://example.com/1", Position: 1},
+			{Title: "Item 2", URL: "https://example.com/2", Position: 2},
+			{Title: "Item 3", URL: "https://example.com/3", Position: 3},
+			{Title: "Item 4", URL: "https://example.com/4", Position: 4},
+		},
+	})
+
+	orch := New(reg, 1*time.Second, "test-agent", testLogger())
+
+	// Page 1: Offset 0, Limit 2
+	respPage1, err := orch.Search(context.Background(), &model.SearchRequest{
+		Query:  "test",
+		Offset: 0,
+		Limit:  2,
+	})
+	if err != nil {
+		t.Fatalf("page 1 failed: %v", err)
+	}
+	if len(respPage1.Results) != 2 || respPage1.Results[0].Title != "Item 1" || respPage1.Results[1].Title != "Item 2" {
+		t.Errorf("unexpected page 1 results: %+v", respPage1.Results)
+	}
+
+	// Page 2: Offset 2, Limit 2
+	respPage2, err := orch.Search(context.Background(), &model.SearchRequest{
+		Query:  "test",
+		Offset: 2,
+		Limit:  2,
+	})
+	if err != nil {
+		t.Fatalf("page 2 failed: %v", err)
+	}
+	if len(respPage2.Results) != 2 || respPage2.Results[0].Title != "Item 3" || respPage2.Results[1].Title != "Item 4" {
+		t.Errorf("unexpected page 2 results: %+v", respPage2.Results)
+	}
+}
+
+

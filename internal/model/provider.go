@@ -6,6 +6,7 @@ import "time"
 type ProviderRequest struct {
 	Query          string
 	Limit          int
+	Offset         int
 	Freshness      string
 	Country        string
 	Language       string

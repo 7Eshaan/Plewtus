@@ -39,12 +39,19 @@ func (p *Provider) Name() string {
 func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*model.ProviderResponse, error) {
 	start := time.Now()
 
-	query := buildQuery(req)
+	query := provider.BuildSearchQuery(req)
 	params := url.Values{}
 	params.Set("p", query)
 
-	if req.Limit > 0 {
-		params.Set("n", strconv.Itoa(req.Limit))
+	fetchCount := req.Limit
+	if req.Offset > 0 {
+		fetchCount = req.Limit + req.Offset
+	}
+	if fetchCount > 50 {
+		fetchCount = 50
+	}
+	if fetchCount > 0 {
+		params.Set("n", strconv.Itoa(fetchCount))
 	}
 	if req.Language != "" {
 		params.Set("vl", "lang_"+strings.ToLower(req.Language))
@@ -129,20 +136,6 @@ func isRetryable(err error) bool {
 		strings.Contains(msg, "broken pipe")
 }
 
-func buildQuery(req model.ProviderRequest) string {
-	var parts []string
-	if trimmed := strings.TrimSpace(req.Query); trimmed != "" {
-		parts = append(parts, trimmed)
-	}
-	for _, inc := range req.IncludeDomains {
-		parts = append(parts, "site:"+inc)
-	}
-	for _, exc := range req.ExcludeDomains {
-		parts = append(parts, "-site:"+exc)
-	}
-	return strings.Join(parts, " ")
-}
-
 func mapFreshness(freshness string) string {
 	switch strings.ToLower(strings.TrimSpace(freshness)) {
 	case "day":
@@ -151,6 +144,8 @@ func mapFreshness(freshness string) string {
 		return "1w"
 	case "month":
 		return "1m"
+	case "year":
+		return "1y"
 	default:
 		return ""
 	}

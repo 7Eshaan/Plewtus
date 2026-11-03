@@ -44,7 +44,19 @@ type SearchMetadata struct {
 	TookMs       int64            `json:"took_ms"`
 	Providers    ProviderMetadata `json:"providers"`
 	Stats        SearchStats      `json:"stats"`
+	Filters      *AppliedFilters  `json:"filters,omitempty"`
 	Timestamp    string           `json:"timestamp"`
+}
+
+// AppliedFilters echoes any active query constraints applied to the search.
+type AppliedFilters struct {
+	Freshness      string   `json:"freshness,omitempty"`
+	IncludeDomains []string `json:"include_domains,omitempty"`
+	ExcludeDomains []string `json:"exclude_domains,omitempty"`
+	Country        string   `json:"country,omitempty"`
+	Language       string   `json:"language,omitempty"`
+	Offset         int      `json:"offset,omitempty"`
+	Limit          int      `json:"limit,omitempty"`
 }
 
 // ProviderMetadata breaks down provider execution status.

@@ -17,6 +17,7 @@ type ExtractOptions struct {
 type SearchRequest struct {
 	Query          string          `json:"query"`
 	Limit          int             `json:"limit,omitempty"`
+	Offset         int             `json:"offset,omitempty"`
 	Providers      []string        `json:"providers,omitempty"`
 	Freshness      string          `json:"freshness,omitempty"` // "day", "week", "month", "year"
 	IncludeDomains []string        `json:"include_domains,omitempty"`
@@ -34,6 +35,12 @@ func (r *SearchRequest) Normalize(defaultLimit, maxLimit int, defaultProviders [
 		r.Limit = defaultLimit
 	} else if r.Limit > maxLimit {
 		r.Limit = maxLimit
+	}
+
+	if r.Offset < 0 {
+		r.Offset = 0
+	} else if r.Offset > 100 {
+		r.Offset = 100
 	}
 
 	if len(r.Providers) == 0 {
@@ -60,19 +67,23 @@ func (r *SearchRequest) Normalize(defaultLimit, maxLimit int, defaultProviders [
 	r.Language = strings.ToLower(strings.TrimSpace(r.Language))
 
 	var cleanInc []string
+	seenInc := make(map[string]bool)
 	for _, d := range r.IncludeDomains {
-		trimmed := strings.ToLower(strings.TrimSpace(d))
-		if trimmed != "" {
-			cleanInc = append(cleanInc, trimmed)
+		cleaned := cleanDomainString(d)
+		if cleaned != "" && !seenInc[cleaned] {
+			seenInc[cleaned] = true
+			cleanInc = append(cleanInc, cleaned)
 		}
 	}
 	r.IncludeDomains = cleanInc
 
 	var cleanExc []string
+	seenExc := make(map[string]bool)
 	for _, d := range r.ExcludeDomains {
-		trimmed := strings.ToLower(strings.TrimSpace(d))
-		if trimmed != "" {
-			cleanExc = append(cleanExc, trimmed)
+		cleaned := cleanDomainString(d)
+		if cleaned != "" && !seenExc[cleaned] {
+			seenExc[cleaned] = true
+			cleanExc = append(cleanExc, cleaned)
 		}
 	}
 	r.ExcludeDomains = cleanExc
@@ -96,6 +107,22 @@ func (r *SearchRequest) Normalize(defaultLimit, maxLimit int, defaultProviders [
 	}
 }
 
+func cleanDomainString(d string) string {
+	d = strings.ToLower(strings.TrimSpace(d))
+	d = strings.TrimPrefix(d, "http://")
+	d = strings.TrimPrefix(d, "https://")
+	d = strings.TrimPrefix(d, "www.")
+	d = strings.TrimPrefix(d, ".")
+	d = strings.TrimRight(d, "/")
+	if idx := strings.Index(d, "/"); idx != -1 {
+		d = d[:idx]
+	}
+	if idx := strings.Index(d, ":"); idx != -1 {
+		d = d[:idx]
+	}
+	return d
+}
+
 // Validate validates the incoming search request.
 func (r *SearchRequest) Validate() error {
 	if strings.TrimSpace(r.Query) == "" {
@@ -111,6 +138,18 @@ func (r *SearchRequest) Validate() error {
 		}
 	}
 
+	if r.Country != "" {
+		if len(r.Country) != 2 || !isAlphaString(r.Country) {
+			return errors.New("country must be a 2-letter ISO 3166-1 alpha-2 code (e.g. 'us', 'gb', 'de')")
+		}
+	}
+
+	if r.Language != "" {
+		if len(r.Language) != 2 || !isAlphaString(r.Language) {
+			return errors.New("language must be a 2-letter ISO 639-1 code (e.g. 'en', 'de', 'fr')")
+		}
+	}
+
 	if r.Extract != nil && r.Extract.Enabled {
 		switch r.Extract.Mode {
 		case "highlights", "text", "markdown", "metadata":
@@ -121,4 +160,13 @@ func (r *SearchRequest) Validate() error {
 	}
 
 	return nil
+}
+
+func isAlphaString(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+			return false
+		}
+	}
+	return true
 }

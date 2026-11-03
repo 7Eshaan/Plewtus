@@ -24,7 +24,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - [x] **Phase 5: Result normalization and deduplication** — Canonical URL normalization, tracker stripping, result merging, engine discovery preservation. (Verified with pipeline tests, orchestrator tests, and live curl)
 - [x] **Phase 6: Ranking and result fusion** — Reciprocal Rank Fusion (RRF) with standard $k=60$, decoupled Ranker interface, transparent score computation. (Verified with formula tests, consensus tests, and live curl)
 - [x] **Phase 7: AI-friendly content extraction** — SSRF & resource guards (loopback, private, link-local, CGNAT, DNS rebinding, redirect validation, 2MB size limit, HTML MIME check), DOM cleaning, extraction modes (markdown, highlights, text, metadata), developer limits (max_pages, max_chars_per_page), orchestrator integration. (Verified with unit tests, live extraction, live integration, and live curl)
-- [ ] **Phase 8: Search API features** — Query filters, freshness, domain constraints, content options.
+- [x] **Phase 8: Search API features** — Query filters, freshness mapping (day, week, month, year), domain inclusion & exclusion with Boolean OR queries and pipeline post-filtering, ISO country/language settings, offset & limit pagination, transparent metadata.filters reflection. (Verified with unit tests, live integration, and live curl)
 - [ ] **Phase 9: Reliability and usage management** — In-memory caching, rate limiting, quotas, fallback.
 - [ ] **Phase 10: Final integration and documentation** — End-to-end integration, OpenAPI spec, MCP server.
 
@@ -32,7 +32,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 1. **Zero External Dependencies for Base Server:** Used Go standard library `net/http` (with Go 1.22+ pattern routing like `"GET /health"`, `"POST /search"`) and `log/slog` for structured logging. Minimal footprint.
 2. **AI-Agent-First Schema Contract:**
    - Dedicated schema: echoed query, ranked results carrying `id`, `title`, `url`, `snippet`, `rank`, `score`, `engines` (recording discovering engine names and their original ranks), `published_date`, and optional `content`.
-   - Honest metadata: execution time (`took_ms`), provider status (`queried`, `successful`, `failed` with granular error descriptions), and pipeline stats (`raw_count`, `deduped_count`).
+   - Honest metadata: execution time (`took_ms`), provider status (`queried`, `successful`, `failed` with granular error descriptions), pipeline stats (`raw_count`, `deduped_count`), and active `filters`.
 3. **Decoupled Provider Architecture:**
    - `provider.Provider` interface: `Name() string`, `Search(ctx, req) (*model.ProviderResponse, error)`.
    - `provider.Registry`: Thread-safe provider registration and lookup.
@@ -66,12 +66,17 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
    - Resource & MIME Guards: Caps response body reading at 2 MB via `io.LimitReader`. Validates HTML MIME types (`text/html`, `application/xhtml+xml`) and rejects non-HTML binaries/PDFs.
    - DOM Cleaning & Conversion: Prunes noise elements (`<script>`, `<style>`, `<nav>`, `<footer>`, `<aside>`, `class*="ad"`, `class*="cookie"`, etc.), targets primary content (`<main>`, `<article>`), extracts metadata (author, description, date), and converts into clean Markdown, plain text, or query-weighted highlights.
    - Resource Bounding: Strictly honors `max_pages` (fetching only top N results up to the limit) and truncates cleanly at sentence/word boundaries with `max_chars_per_page`. Individual page errors are handled gracefully without aborting the search.
+10. **Query Constraints, Domain Isolation, and Pagination (`internal/pipeline`, `internal/provider`):**
+    - Freshness: Mapped across all three providers (DuckDuckGo: `d/w/m/y`, Bing: `ex1:"ez1"/"ez2"/"ez3"/"ez5"`, Yahoo: `1d/1w/1m/1y`).
+    - Dual-Layer Domain Controls: Multi-domain inclusion grouped via Boolean OR in upstream queries (`(site:a.com OR site:b.com)`), while `pipeline.matchesDomainFilters` enforces 100% strict hostname/subdomain compliance post-scraping.
+    - Federated Metasearch Pagination: Upstream scrapers pull `limit + offset` candidates into the unified RRF fusion, and `DeduplicateWithOptions` slices `[offset : offset+limit]`, ensuring stable global ranking across pages.
+    - Transparent Metadata: Echoes active search constraints in `metadata.filters` (`freshness`, `include_domains`, `exclude_domains`, `country`, `language`, `offset`, `limit`).
 
 ## Tests Performed
 - `internal/config`: Default configs, environment variable overrides.
-- `internal/model`: SearchRequest normalization, query validation, freshness/extract mode validation, SearchResponse JSON serialization.
-- `internal/server`: Health handler (`/health`, `/healthz`), Search handler contract validation, bad JSON handling, CORS preflight checks, searcher error & timeout handling (`500`, `408`), live server integration test, live extraction integration test (`POST /search` with `extract.enabled`).
-- `internal/provider`: Registry registration, thread safety, provider lookup.
+- `internal/model`: SearchRequest normalization (offset bounds, domain cleaning, country/lang casing), query validation, freshness/country/language ISO validation, extract mode validation, SearchResponse JSON serialization.
+- `internal/server`: Health handler (`/health`, `/healthz`), Search handler contract validation, bad JSON handling, CORS preflight checks, searcher error & timeout handling (`500`, `408`), live server integration test, live extraction integration test, live search filters integration test (`TestSearchEndpoint_SearchFiltersIntegration`).
+- `internal/provider`: Registry registration, thread safety, provider lookup, query builder tests (`TestBuildSearchQuery`: plain queries, single domain, OR-grouped multiple domains, domain exclusions).
 - `internal/provider/htmlutil`: Node finding, attribute extraction, class matching, text extraction, URL unwrapping for direct, protocol-relative, DDG, Bing, and Yahoo links.
 - `internal/provider/duckduckgo`: Fixtures, challenge detection, live queries.
 - `internal/provider/bing`: Fixtures, challenge detection, live queries.
@@ -84,6 +89,9 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
   - `TestDeduplicate_EngineConsensusRanking`: Multi-engine consensus ranking (trio > duo > solo).
   - `TestDeduplicate_TitleTruncationSelection`: Automatic selection of non-truncated titles.
   - `TestDeduplicate_LimitEnforcement`: Preserving accurate `dedupedCount` before limit truncation.
+  - `TestDeduplicate_IncludeDomainsFilter`: Strict whitelist domain filtering (including subdomains).
+  - `TestDeduplicate_ExcludeDomainsFilter`: Strict blacklist domain filtering.
+  - `TestDeduplicate_OffsetAndLimit`: Correct paginated slice extraction and out-of-range empty results.
   - `TestRRFRanker_Formula`: Verified exact formula output for \( k=60 \).
   - `TestRRFRanker_MultiEngineConsensusBeatsSingleHighRank`: Confirmed 2-engine #2 consensus outranks single-engine #1.
   - `TestRRFRanker_TieBreaking`: Deterministic stable ordering on identical scores.
@@ -101,16 +109,12 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
   - `TestFetcher_MIMETypeGuard`: Rejection of non-HTML (PDF) responses and acceptance of HTML.
   - `TestExtractor_ExtractBatch`: `max_pages` enforcement, error resilience, and mode formatting.
   - `TestLiveWebpageExtraction`: Live Markdown and highlights extraction against `https://go.dev`.
-- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, content extraction integration (`TestOrchestrator_ContentExtractionIntegration`), live multi-engine queries.
-- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8895/search` verifying RRF results enriched with Markdown, Highlights, and Text content.
+- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, content extraction integration (`TestOrchestrator_ContentExtractionIntegration`), metadata filters integration (`TestOrchestrator_FiltersInMetadata`), offset pagination (`TestOrchestrator_OffsetPagination`), live multi-engine queries.
+- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8896/search` verifying domain inclusion, freshness, pagination (pages 1 and 2), country/language settings, and validation errors (400 Bad Request on invalid country/language/freshness).
 
 ## Next Step
-Proceed to **Phase 8 — Search API features**:
-1. Implement and verify search query filters and options:
-   - Freshness filters across search engines (`day`, `week`, `month`, `year`).
-   - Domain inclusion (`include_domains`) and exclusion (`exclude_domains`) constraints.
-   - Country and language settings (`country`, `language`).
-   - Provider selection validation (`providers`).
-   - Limit controls and pagination semantics.
-2. Extend search response metadata to reflect applied query filters transparently.
-3. Test against both fixtures and live engine queries.
+Proceed to **Phase 9 — Reliability and usage management**:
+1. Implement in-memory cache with TTL (caching normalized query + filters + extract options).
+2. Rate limiting (token bucket / sliding window per API key or client IP).
+3. Request quotas & usage tracking with configurable free usage tier.
+4. Provider fallback & circuit breaking to maintain high reliability and economical engine usage.

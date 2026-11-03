@@ -97,7 +97,8 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 
 			pReq := model.ProviderRequest{
 				Query:          req.Query,
-				Limit:          req.Limit,
+				Limit:          req.Limit + req.Offset,
+				Offset:         req.Offset,
 				Freshness:      req.Freshness,
 				Country:        req.Country,
 				Language:       req.Language,
@@ -191,8 +192,14 @@ collectLoop:
 		failed = []model.ProviderError{}
 	}
 
-	// 5. Canonicalize, deduplicate, and merge results across successful providers
-	uniqueResults, dedupedCount := pipeline.Deduplicate(rawResponses, req.Limit)
+	// 5. Canonicalize, deduplicate, filter domains, and merge results across successful providers
+	dedupOpts := pipeline.DeduplicateOptions{
+		Limit:          req.Limit,
+		Offset:         req.Offset,
+		IncludeDomains: req.IncludeDomains,
+		ExcludeDomains: req.ExcludeDomains,
+	}
+	uniqueResults, dedupedCount := pipeline.DeduplicateWithOptions(rawResponses, dedupOpts)
 
 	// 6. Optional AI-friendly content extraction
 	if req.Extract != nil && req.Extract.Enabled && o.extractor != nil && len(uniqueResults) > 0 {
@@ -209,6 +216,20 @@ collectLoop:
 	resp.Metadata.Providers.Failed = failed
 	resp.Metadata.Stats.RawCount = rawCount
 	resp.Metadata.Stats.DedupedCount = dedupedCount
+
+	// Populate applied filters in metadata if any filters were active
+	if req.Freshness != "" || len(req.IncludeDomains) > 0 || len(req.ExcludeDomains) > 0 ||
+		req.Country != "" || req.Language != "" || req.Offset > 0 {
+		resp.Metadata.Filters = &model.AppliedFilters{
+			Freshness:      req.Freshness,
+			IncludeDomains: req.IncludeDomains,
+			ExcludeDomains: req.ExcludeDomains,
+			Country:        req.Country,
+			Language:       req.Language,
+			Offset:         req.Offset,
+			Limit:          req.Limit,
+		}
+	}
 
 	return resp, nil
 }

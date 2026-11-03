@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -146,6 +147,69 @@ func TestSearchEndpoint_ExtractionIntegration(t *testing.T) {
 		}
 		t.Logf("Extracted markdown on %s (%d chars): %s...",
 			first.URL, len(first.Content.Markdown), first.Content.Markdown[:min(100, len(first.Content.Markdown))])
+	}
+}
+
+func TestSearchEndpoint_SearchFiltersIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping live search filters integration test in short mode")
+	}
+
+	cfg := config.Load()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	registry := all.NewRegistry(5*time.Second, cfg.UserAgent)
+	orch := orchestrator.New(registry, 6*time.Second, cfg.UserAgent, logger)
+	srv := New(cfg, logger, orch)
+
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	payload := model.SearchRequest{
+		Query:          "concurrency",
+		Limit:          3,
+		Providers:      []string{"bing", "yahoo"},
+		Freshness:      "year",
+		IncludeDomains: []string{"https://go.dev"},
+		Country:        "us",
+		Language:       "en",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/search", "application/json", bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("POST /search with filters failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected status 200, got %d: %s", resp.StatusCode, string(body))
+	}
+
+	var searchResp model.SearchResponse
+	if err := json.NewDecoder(resp.Body).Decode(&searchResp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if searchResp.Metadata.Filters == nil {
+		t.Fatalf("expected metadata.filters to be populated")
+	}
+
+	if searchResp.Metadata.Filters.Freshness != "year" {
+		t.Errorf("expected freshness year in metadata, got %q", searchResp.Metadata.Filters.Freshness)
+	}
+	if len(searchResp.Metadata.Filters.IncludeDomains) != 1 || searchResp.Metadata.Filters.IncludeDomains[0] != "go.dev" {
+		t.Errorf("expected include_domains ['go.dev'], got %v", searchResp.Metadata.Filters.IncludeDomains)
+	}
+
+	// Verify all returned results belong to go.dev
+	for i, r := range searchResp.Results {
+		if !strings.Contains(r.URL, "go.dev") {
+			t.Errorf("result %d URL does not match included domain: %s", i, r.URL)
+		}
 	}
 }
 

@@ -223,3 +223,107 @@ func TestDeduplicate_EmptyResponses(t *testing.T) {
 		t.Errorf("expected empty results on empty input")
 	}
 }
+
+func TestDeduplicate_IncludeDomainsFilter(t *testing.T) {
+	responses := []*model.ProviderResponse{
+		{
+			Engine: "engine",
+			Results: []model.RawSearchResult{
+				{Title: "Go Official", URL: "https://go.dev/doc", Position: 1},
+				{Title: "Subdomain", URL: "https://pkg.go.dev/std", Position: 2},
+				{Title: "Other Site", URL: "https://stackoverflow.com/questions", Position: 3},
+				{Title: "GitHub", URL: "https://github.com/golang/go", Position: 4},
+			},
+		},
+	}
+
+	results, count := DeduplicateWithOptions(responses, DeduplicateOptions{
+		Limit:          10,
+		IncludeDomains: []string{"go.dev"},
+	})
+
+	if count != 2 {
+		t.Fatalf("expected 2 results matching go.dev, got %d", count)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	for _, r := range results {
+		if r.URL != "https://go.dev/doc" && r.URL != "https://pkg.go.dev/std" {
+			t.Errorf("unexpected URL outside include_domains: %s", r.URL)
+		}
+	}
+}
+
+func TestDeduplicate_ExcludeDomainsFilter(t *testing.T) {
+	responses := []*model.ProviderResponse{
+		{
+			Engine: "engine",
+			Results: []model.RawSearchResult{
+				{Title: "Go Official", URL: "https://go.dev/doc", Position: 1},
+				{Title: "Spam Site", URL: "https://spam.com/article", Position: 2},
+				{Title: "Sub Spam", URL: "https://ads.spam.com/click", Position: 3},
+				{Title: "Legit Site", URL: "https://example.com/clean", Position: 4},
+			},
+		},
+	}
+
+	results, count := DeduplicateWithOptions(responses, DeduplicateOptions{
+		Limit:          10,
+		ExcludeDomains: []string{"spam.com"},
+	})
+
+	if count != 2 {
+		t.Fatalf("expected 2 results excluding spam.com, got %d", count)
+	}
+
+	for _, r := range results {
+		if r.URL == "https://spam.com/article" || r.URL == "https://ads.spam.com/click" {
+			t.Errorf("found excluded domain URL: %s", r.URL)
+		}
+	}
+}
+
+func TestDeduplicate_OffsetAndLimit(t *testing.T) {
+	responses := []*model.ProviderResponse{
+		{
+			Engine: "engine",
+			Results: []model.RawSearchResult{
+				{Title: "P1", URL: "https://example.com/1", Position: 1},
+				{Title: "P2", URL: "https://example.com/2", Position: 2},
+				{Title: "P3", URL: "https://example.com/3", Position: 3},
+				{Title: "P4", URL: "https://example.com/4", Position: 4},
+				{Title: "P5", URL: "https://example.com/5", Position: 5},
+			},
+		},
+	}
+
+	// Offset 2, Limit 2 -> returns items at index 2 and 3 (P3 and P4)
+	results, count := DeduplicateWithOptions(responses, DeduplicateOptions{
+		Limit:  2,
+		Offset: 2,
+	})
+
+	if count != 5 {
+		t.Errorf("expected total count 5 before pagination, got %d", count)
+	}
+
+	if len(results) != 2 {
+		t.Fatalf("expected 2 paginated results, got %d", len(results))
+	}
+
+	if results[0].Title != "P3" || results[1].Title != "P4" {
+		t.Errorf("expected P3 and P4, got %s and %s", results[0].Title, results[1].Title)
+	}
+
+	// Offset beyond total -> empty slice
+	beyondResults, _ := DeduplicateWithOptions(responses, DeduplicateOptions{
+		Limit:  2,
+		Offset: 10,
+	})
+	if len(beyondResults) != 0 {
+		t.Errorf("expected 0 results when offset exceeds total items, got %d", len(beyondResults))
+	}
+}

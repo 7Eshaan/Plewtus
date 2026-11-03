@@ -7,10 +7,15 @@ import (
 
 func TestSearchRequestNormalization(t *testing.T) {
 	req := SearchRequest{
-		Query:     "  golang scraper  ",
-		Limit:     0,
-		Providers: []string{"DuckDuckGo", " Bing ", "duckduckgo"},
-		Freshness: " WEEK ",
+		Query:          "  golang scraper  ",
+		Limit:          0,
+		Offset:         -5,
+		Providers:      []string{"DuckDuckGo", " Bing ", "duckduckgo"},
+		Freshness:      " WEEK ",
+		IncludeDomains: []string{"https://www.go.dev/", "HTTP://GOLANG.ORG:8080/path"},
+		ExcludeDomains: []string{"https://spam.com/ads"},
+		Country:        " US ",
+		Language:       " EN ",
 	}
 
 	req.Normalize(10, 50, []string{"duckduckgo", "bing", "yahoo"})
@@ -21,6 +26,9 @@ func TestSearchRequestNormalization(t *testing.T) {
 	if req.Limit != 10 {
 		t.Errorf("expected default limit 10, got %d", req.Limit)
 	}
+	if req.Offset != 0 {
+		t.Errorf("expected negative offset normalized to 0, got %d", req.Offset)
+	}
 	if len(req.Providers) != 2 {
 		t.Fatalf("expected 2 unique providers, got %d", len(req.Providers))
 	}
@@ -29,6 +37,18 @@ func TestSearchRequestNormalization(t *testing.T) {
 	}
 	if req.Freshness != "week" {
 		t.Errorf("expected lowercased freshness 'week', got %q", req.Freshness)
+	}
+	if req.Country != "us" {
+		t.Errorf("expected lowercased country 'us', got %q", req.Country)
+	}
+	if req.Language != "en" {
+		t.Errorf("expected lowercased language 'en', got %q", req.Language)
+	}
+	if len(req.IncludeDomains) != 2 || req.IncludeDomains[0] != "go.dev" || req.IncludeDomains[1] != "golang.org" {
+		t.Errorf("expected cleaned include domains ['go.dev', 'golang.org'], got %v", req.IncludeDomains)
+	}
+	if len(req.ExcludeDomains) != 1 || req.ExcludeDomains[0] != "spam.com" {
+		t.Errorf("expected cleaned exclude domains ['spam.com'], got %v", req.ExcludeDomains)
 	}
 }
 
@@ -49,8 +69,38 @@ func TestSearchRequestValidation(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid freshness year",
+			req:     SearchRequest{Query: "golang", Freshness: "year"},
+			wantErr: false,
+		},
+		{
 			name:    "invalid freshness",
 			req:     SearchRequest{Query: "golang", Freshness: "decade"},
+			wantErr: true,
+		},
+		{
+			name:    "valid country",
+			req:     SearchRequest{Query: "golang", Country: "us"},
+			wantErr: false,
+		},
+		{
+			name:    "invalid country 3 letters",
+			req:     SearchRequest{Query: "golang", Country: "usa"},
+			wantErr: true,
+		},
+		{
+			name:    "invalid country digits",
+			req:     SearchRequest{Query: "golang", Country: "12"},
+			wantErr: true,
+		},
+		{
+			name:    "valid language",
+			req:     SearchRequest{Query: "golang", Language: "en"},
+			wantErr: false,
+		},
+		{
+			name:    "invalid language 3 letters",
+			req:     SearchRequest{Query: "golang", Language: "eng"},
 			wantErr: true,
 		},
 		{
