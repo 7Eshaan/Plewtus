@@ -128,7 +128,47 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
   - Executed live `tools/call` for `search` against DuckDuckGo, Bing, and Yahoo with multi-engine consensus output formatted cleanly over stdio.
   - Verified live HTTP server execution and curl to `http://localhost:8890/health` returning 200 OK after repository restructure.
 
+## Frontend
+
+### Research & Version Findings
+- **Node.js:** `v26.13.0` (Homebrew)
+- **npm:** `11.20.0`
+- **Next.js:** `16.4.4` (App Router)
+- **React / React DOM:** `19.3.1` (React 19)
+- **Tailwind CSS:** `4.3.4` with `@tailwindcss/postcss`
+- **openapi-typescript:** `7.13.0`
+- **next-themes:** `0.4.6`
+- **lucide-react:** `1.67.0`
+
+### Key Architectural & API Findings
+1. **Next.js 16/15 Async Request APIs:**
+   - Dynamic request APIs (`headers()`, `cookies()`, route handler/page `params`, `searchParams`) return Promises and must be awaited (`const h = await headers()`).
+   - Route handlers support standard Web Request/Response and `NextRequest`.
+   - Fetching and route handling default to uncached (`no-store`), aligning with dynamic search proxying.
+2. **Tailwind CSS v4 CSS-First Configuration:**
+   - No `tailwind.config.js` or `tailwind.config.ts`. Configuration is embedded directly in `globals.css` with `@import "tailwindcss";`.
+   - Custom variants such as class-based dark mode are defined using `@custom-variant dark (&:where(.dark, .dark *));`.
+   - Theme variables and fonts use `@theme` block in CSS.
+3. **openapi-typescript 7.x:**
+   - Direct generation from `backend/docs/openapi.yaml` via `npx openapi-typescript ../backend/docs/openapi.yaml -o src/types/api.ts`.
+   - Generates strict TypeScript interfaces for all schema components (`SearchRequest`, `SearchResponse`, `SearchResult`, `SearchMetadata`, `ExtractOptions`, etc.).
+4. **Theme Management with next-themes:**
+   - Seamless hydration-safe dark mode with `<html suppressHydrationWarning>` and a client-side `ThemeProvider` with `attribute="class" defaultTheme="dark" enableSystem`.
+5. **Proxy Route Handler Architecture:**
+   - `app/api/search/route.ts` acts as the server-side proxy between the browser and Go backend.
+   - Server-only environment variables: `PLEWTUS_BACKEND_URL` and `PLEWTUS_API_KEY`.
+   - No `NEXT_PUBLIC_` secrets exposed to browser bundles.
+   - Built-in per-IP rate limiting protecting against abuse.
+   - Rejects immediately if server API key is unconfigured without calling the Go backend.
+
+### Frontend Roadmap & Status
+- [x] **Phase 1: Foundation** — Research, scaffold Next.js App Router in `frontend/` (Next.js 16.4.4, React 19.3.0, Tailwind CSS 4.3.4), configure environment (`.env.example`, `.env.local`), generate TypeScript types via `openapi-typescript` (`npm run generate:types`), implement server-side proxy route handler (`app/api/search/route.ts`) with per-IP rate limiting (`src/lib/rate-limiter.ts`), build proof-of-concept page in `app/page.tsx`. Verified end-to-end against live Go backend on port 8890, verified 429 rate limit enforcement, verified 500 rejection without contacting backend when server API key is unconfigured, and verified zero secret leakage in client static bundles.
+- [x] **Phase 2: Theme + hero search** — Vercel-inspired monochrome design system (dark by default with persistent zero-flash light/dark toggle), hero search bar with keyboard shortcut (`/`, `⌘K`) and clear button, honest metadata strip (`took_ms`, engine queried/responding/failed status, deduped vs raw count, cached badge), ranked results list with multi-engine consensus badges and RRF scores, loading shimmer skeletons, empty states with suggested queries, and error state with retry. (Verified with live multi-engine queries on port 8890, automated Phase 2 test suite, and clean build).
+- [x] **Phase 3: Options** — Extraction toggle (`none`, `highlights`, `markdown`), provider chips (independent toggle for DuckDuckGo, Bing, Yahoo), collapsible Advanced dropdown (results limit 1–50, discovery freshness, ISO country/language, domain inclusion/exclusion, extraction tuning), expandable content viewer in result cards with rendered Markdown / raw Markdown tabs, and one-click "Copy as Markdown" with visual feedback. (Verified with live extraction queries, provider filtering, domain whitelisting, and automated Phase 3 test suite on port 8890).
+- [x] **Phase 4: Developer tools** — Tri-tab switcher (`Ranked Results`, `JSON Response`, `API Code`), real API raw JSON response viewer with payload size/latency metrics, copy and download JSON actions, and dynamic code snippet generator supporting cURL, JavaScript (Fetch), and Python (requests) that reflects chosen queries/providers/filters with strict `YOUR_API_KEY` placeholder isolation. (Verified with live JSON payloads on port 8890, automated Phase 4 test suite, and clean build).
+- [x] **Phase 5: Below the demo & Polish** — Architectural "How it works" section (parallel dispatch, canonical URL deduplication, Reciprocal Rank Fusion formula with k=60), native Model Context Protocol (MCP) section (Claude Desktop, Cursor, CLI stdio configuration matching `backend/docs/MCP.md`, tool schemas, copy config action), honest usage limits section stating exact token bucket rates and daily quotas without ever using the word "unlimited", header smooth-scroll navigation links (`#demo`, `#how-it-works`, `#mcp`, `#limits`), footer with engine provenance, complete accessibility pass (ARIA landmarks, tab roles, keyboard navigation), clean `npm run build`, clean `npm run lint` (0 errors), clean `tsc --noEmit`, and full automated verification suite (16/16 checks passing).
+
 ## Next Step
-**Repository restructure complete.**
-The repository is split into `backend/` and `frontend/`. All backend verification checks passed.
-The next step is the **frontend**.
+**All phases (1 through 5) are complete, verified against the real running Go backend, and production-ready.**
+- The frontend Next.js App Router codebase in `frontend/` is fully scaffolded, type-checked, lint-clean, and builds cleanly.
+- Ready for final git commit.

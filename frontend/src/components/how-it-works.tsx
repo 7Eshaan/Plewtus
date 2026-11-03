@@ -1,0 +1,90 @@
+"use client";
+
+import { Cpu, GitMerge, Award, ArrowRight } from "lucide-react";
+
+export function HowItWorks() {
+  return (
+    <section id="how-it-works" className="w-full pt-8 pb-4 flex flex-col gap-6">
+      <div className="flex flex-col gap-1.5 text-center sm:text-left">
+        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-500 uppercase tracking-wider">
+          <span>Architecture &amp; Pipeline</span>
+        </div>
+        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans">
+          How Plewtus Aggregates the Web
+        </h2>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl leading-relaxed">
+          Standard search APIs query a single engine and return raw, ad-heavy results. Plewtus operates as a metasearch aggregator designed specifically for autonomous AI agents.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Step 1: Parallel Dispatch */}
+        <div className="p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-3 shadow-2xs hover:border-zinc-400 dark:hover:border-zinc-700 transition-colors">
+          <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/60 flex items-center justify-center text-zinc-900 dark:text-zinc-100">
+            <Cpu className="w-4 h-4" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500 font-semibold">01</span>
+              <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">
+                Parallel Multi-Engine Dispatch
+              </h3>
+            </div>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              Dispatches concurrent goroutines across DuckDuckGo, Bing, and Yahoo with bounded timeouts and independent circuit breakers. If one provider encounters a challenge or times out, healthy responses are preserved.
+            </p>
+          </div>
+          <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap gap-1.5 text-[10px] font-mono text-zinc-500">
+            <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">DuckDuckGo</span>
+            <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">Bing</span>
+            <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">Yahoo</span>
+          </div>
+        </div>
+
+        {/* Step 2: Canonical URL Deduplication */}
+        <div className="p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-3 shadow-2xs hover:border-zinc-400 dark:hover:border-zinc-700 transition-colors">
+          <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/60 flex items-center justify-center text-zinc-900 dark:text-zinc-100">
+            <GitMerge className="w-4 h-4" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500 font-semibold">02</span>
+              <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">
+                Canonical URL Deduplication
+              </h3>
+            </div>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              Unwraps search redirect wrappers (<code className="text-[11px] font-mono">/ck/a</code>, <code className="text-[11px] font-mono">/RU=</code>, <code className="text-[11px] font-mono">/l/?uddg</code>) and strips tracking tokens (<code className="text-[11px] font-mono">utm_*</code>, <code className="text-[11px] font-mono">gclid</code>, <code className="text-[11px] font-mono">fbclid</code>), merging identical pages into a single consensus entry.
+            </p>
+          </div>
+          <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center gap-1.5 text-[10px] font-mono text-zinc-500">
+            <span>Canonical hash normalization</span>
+            <ArrowRight className="w-3 h-3 text-zinc-400" />
+            <span className="text-emerald-500">Zero duplicate URLs</span>
+          </div>
+        </div>
+
+        {/* Step 3: Reciprocal Rank Fusion */}
+        <div className="p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-3 shadow-2xs hover:border-zinc-400 dark:hover:border-zinc-700 transition-colors">
+          <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/60 flex items-center justify-center text-zinc-900 dark:text-zinc-100">
+            <Award className="w-4 h-4" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500 font-semibold">03</span>
+              <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">
+                Reciprocal Rank Fusion (RRF)
+              </h3>
+            </div>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              Combines independent provider rankings using the standard information retrieval formula with smoothing constant <code className="text-[11px] font-mono">k = 60</code>. Multi-engine consensus earns higher authority scores.
+            </p>
+          </div>
+          <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 font-mono text-[10px] text-zinc-400 dark:text-zinc-500 bg-zinc-50 dark:bg-zinc-900/60 p-2 rounded">
+            score(d) = &Sigma; 1 / (60 + rank_m(d))
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
