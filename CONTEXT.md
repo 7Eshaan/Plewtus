@@ -3,10 +3,30 @@
 ## Overview
 Plewtus is an AI-agent search API backend that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture. It normalizes, deduplicates, and ranks results via Reciprocal Rank Fusion (RRF), with optional AI-friendly webpage extraction (clean text, highlights, Markdown), in-memory response caching, token-bucket rate limiting, configurable free-tier quotas, provider circuit breaking, and native Model Context Protocol (MCP) support.
 
-## Environment
+## Environment & Repository Layout
 - **Go Version:** `go1.27.3 darwin/arm64`
 - **Dependencies:** Standard library + `golang.org/x/net v0.62.0` (official Go sub-repository for HTML parsing).
 - **Git State:** Managed exclusively by user (no automated git write commands).
+- **Repository Layout:**
+  - Root: `CONTEXT.md`, `.gitignore`, `backend/`, `frontend/`
+  - `backend/`: Contains the complete Go backend codebase, module configuration, tests, and documentation. All Go commands (`go build ./...`, `go vet ./...`, `go test ./...`, and server execution) run from inside `backend/`.
+  - `frontend/`: Empty placeholder directory (`frontend/.gitkeep`) ready for frontend development.
+- **Key File Paths:**
+  - Server entrypoint: `backend/cmd/plewtus/main.go`
+  - MCP stdio server entrypoint: `backend/cmd/plewtus-mcp/main.go`
+  - HTTP Server & Handlers: `backend/internal/server/`
+  - Search Orchestrator: `backend/internal/orchestrator/orchestrator.go`
+  - Pipeline (Normalization, Dedup, RRF): `backend/internal/pipeline/`
+  - Search Engine Scrapers: `backend/internal/provider/`
+  - Webpage Extractor: `backend/internal/extractor/`
+  - In-Memory LRU Cache: `backend/internal/cache/`
+  - Usage & Quota Management: `backend/internal/usage/`
+  - Circuit Breakers: `backend/internal/reliability/`
+  - End-to-End Tests: `backend/test/`
+  - Test Fixtures: `backend/testdata/fixtures/`
+  - Documentation & OpenAPI Spec: `backend/docs/` (`openapi.yaml`, `openapi.json`, `API.md`, `CONFIGURATION.md`, `MCP.md`)
+  - Go Module: `backend/go.mod`, `backend/go.sum`
+  - Environment Example: `backend/.env.example`
 
 ## Provider Status Table
 | Engine     | Status      | Quirks / Notes                                                                                                                                                                                                                                                                                                                                                                                                      |
@@ -27,6 +47,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - [x] **Phase 8: Search API features** — Query filters, freshness mapping (day, week, month, year), domain inclusion & exclusion with Boolean OR queries and pipeline post-filtering, ISO country/language settings, offset & limit pagination, transparent metadata.filters reflection. (Verified with unit tests, live integration, and live curl)
 - [x] **Phase 9: Reliability and usage management** — In-memory LRU cache with TTL and deterministic key hashing, token bucket rate limiting (per API key and client IP), daily request quotas with UTC reset, configurable free usage tier, API key authentication, provider circuit breaking (Closed/Open/Half-Open) and fallback to alternative healthy engines. (Verified with unit tests, server integration, and live curl)
 - [x] **Phase 10: Final integration and documentation** — End-to-end full lifecycle integration tests, Model Context Protocol (MCP) stdio server (`internal/mcp`, `cmd/plewtus-mcp`, `plewtus mcp`), complete OpenAPI 3.1.0 specifications (`docs/openapi.yaml`, `docs/openapi.json`), comprehensive documentation (`README.md`, `docs/API.md`, `docs/CONFIGURATION.md`, `docs/MCP.md`, `.env.example`). (Verified with unit tests, E2E tests, and live MCP stdio sessions)
+- [x] **Repository Restructure** — Restructured repository into `backend/` and `frontend/` folders at root. All Go files, tests, documentation, and configuration moved into `backend/`. `frontend/` initialized with `.gitkeep`. (Verified with `go build ./...`, `go vet ./...`, `go test ./...`, and live curl `/health` from within `backend/`)
 
 ## Architectural Decisions
 1. **Zero External Dependencies for Base Server:** Used Go standard library `net/http` (with Go 1.22+ pattern routing like `"GET /health"`, `"POST /search"`) and `log/slog` for structured logging. Minimal footprint.
@@ -78,34 +99,36 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 12. **Native Model Context Protocol (MCP) Support (`internal/mcp`, `cmd/plewtus-mcp`):**
     - Direct AI Agent Integration: Exposes `search` and `extract` tools over standard JSON-RPC 2.0 stdio protocol (`protocolVersion: 2024-11-05`), compatible out-of-the-box with Claude Desktop, Cursor, and custom agent frameworks.
     - Stream Isolation: Enforces strict separation between stdout (JSON-RPC messages only) and stderr (all diagnostic logs), preventing parse errors in agent hosts.
-    - Dual-Binary & Subcommand Invocations: Available as both a dedicated binary (`./bin/plewtus-mcp`) and a CLI subcommand (`./bin/plewtus mcp`).
+    - Dual-Binary & Subcommand Invocations: Available as both a dedicated binary (`backend/bin/plewtus-mcp`) and a CLI subcommand (`backend/bin/plewtus mcp`).
 
 ## Tests Performed
-- `internal/config`: Default configs, environment variable overrides for cache, usage, tiers, API keys, and circuit breakers.
-- `internal/cache`: Key determinism across order permutations, deep copy isolation, TTL expiration, LRU eviction at max capacity, disabled caching on TTL=0, concurrent access.
-- `internal/reliability`: State transitions (Closed -> Open -> Half-Open -> Closed / Open), cooldown expiration, trial probe serialization, concurrency, manager health lookups and reset.
-- `internal/usage`: Free tier assignment, client IP extraction (`X-Forwarded-For`, `X-Real-IP`, `RemoteAddr`), token bucket rate limit consumption and refill, daily quota exhaustion and midnight UTC reset, API key authentication (`Authorization: Bearer` and `X-API-Key`), 401 Unauthorized and 429 Too Many Requests errors.
-- `internal/model`: SearchRequest normalization, query validation, freshness/country/language ISO validation, extract mode validation, SearchResponse JSON serialization with `cached` metadata.
-- `internal/server`: Health handler (`/health`, `/healthz`), Search handler contract validation, bad JSON handling, CORS preflight and header exposition (`X-RateLimit-*`, `X-Quota-*`, `Retry-After`), searcher error & timeout handling (`500`, `408`), rate limit headers and 429 enforcement (`TestServer_RateLimitingHeadersAnd429`), daily quota 429 enforcement (`TestServer_DailyQuotaExceeded429`), authentication 401 enforcement (`TestServer_Authentication401`), cache integration test (`TestServer_CacheIntegration`), live server integration test, live extraction integration test, live search filters integration test.
-- `internal/mcp`: Initialize handshake, ping, notifications/initialized, tools/list schema validation, tools/call execution for `search` and `extract`, parameter error handling, and unknown method errors.
-- `internal/provider`: Registry registration, thread safety, provider lookup, query builder tests.
-- `internal/provider/htmlutil`: Node finding, attribute extraction, class matching, text extraction, URL unwrapping for direct, protocol-relative, DDG, Bing, and Yahoo links.
-- `internal/provider/duckduckgo`: Fixtures, challenge detection, live queries.
-- `internal/provider/bing`: Fixtures, challenge detection, live queries.
-- `internal/provider/yahoo`: Fixtures, challenge detection, live queries with ATS EOF retry.
-- `internal/provider/all`: Registry initialization with all active providers.
-- `internal/pipeline`: URL normalization, tracking parameter stripping, canonical key matching, multi-engine consensus deduplication, title truncation selection, domain whitelist/blacklist filtering, offset & limit slicing, RRF ranker formula, consensus tie-breaking, custom k smoothing, multi-ranker chains.
-- `internal/extractor`: SSRF defense, URL validation, safe redirect checks, HTML pruning, Markdown conversion, highlights extraction, clean boundary truncation, MIME guard, batch extraction, live web extraction.
-- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, content extraction integration, metadata filters integration, offset pagination, cache hit integration, circuit breaker fast-failure, circuit breaker fallback, live multi-engine queries.
-- `test`:
+- `backend/internal/config`: Default configs, environment variable overrides for cache, usage, tiers, API keys, and circuit breakers.
+- `backend/internal/cache`: Key determinism across order permutations, deep copy isolation, TTL expiration, LRU eviction at max capacity, disabled caching on TTL=0, concurrent access.
+- `backend/internal/reliability`: State transitions (Closed -> Open -> Half-Open -> Closed / Open), cooldown expiration, trial probe serialization, concurrency, manager health lookups and reset.
+- `backend/internal/usage`: Free tier assignment, client IP extraction (`X-Forwarded-For`, `X-Real-IP`, `RemoteAddr`), token bucket rate limit consumption and refill, daily quota exhaustion and midnight UTC reset, API key authentication (`Authorization: Bearer` and `X-API-Key`), 401 Unauthorized and 429 Too Many Requests errors.
+- `backend/internal/model`: SearchRequest normalization, query validation, freshness/country/language ISO validation, extract mode validation, SearchResponse JSON serialization with `cached` metadata.
+- `backend/internal/server`: Health handler (`/health`, `/healthz`), Search handler contract validation, bad JSON handling, CORS preflight and header exposition (`X-RateLimit-*`, `X-Quota-*`, `Retry-After`), searcher error & timeout handling (`500`, `408`), rate limit headers and 429 enforcement (`TestServer_RateLimitingHeadersAnd429`), daily quota 429 enforcement (`TestServer_DailyQuotaExceeded429`), authentication 401 enforcement (`TestServer_Authentication401`), cache integration test (`TestServer_CacheIntegration`), live server integration test, live extraction integration test, live search filters integration test.
+- `backend/internal/mcp`: Initialize handshake, ping, notifications/initialized, tools/list schema validation, tools/call execution for `search` and `extract`, parameter error handling, and unknown method errors.
+- `backend/internal/provider`: Registry registration, thread safety, provider lookup, query builder tests.
+- `backend/internal/provider/htmlutil`: Node finding, attribute extraction, class matching, text extraction, URL unwrapping for direct, protocol-relative, DDG, Bing, and Yahoo links.
+- `backend/internal/provider/duckduckgo`: Fixtures, challenge detection, live queries.
+- `backend/internal/provider/bing`: Fixtures, challenge detection, live queries.
+- `backend/internal/provider/yahoo`: Fixtures, challenge detection, live queries with ATS EOF retry.
+- `backend/internal/provider/all`: Registry initialization with all active providers.
+- `backend/internal/pipeline`: URL normalization, tracking parameter stripping, canonical key matching, multi-engine consensus deduplication, title truncation selection, domain whitelist/blacklist filtering, offset & limit slicing, RRF ranker formula, consensus tie-breaking, custom k smoothing, multi-ranker chains.
+- `backend/internal/extractor`: SSRF defense, URL validation, safe redirect checks, HTML pruning, Markdown conversion, highlights extraction, clean boundary truncation, MIME guard, batch extraction, live web extraction.
+- `backend/internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, content extraction integration, metadata filters integration, offset pagination, cache hit integration, circuit breaker fast-failure, circuit breaker fallback, live multi-engine queries.
+- `backend/test`:
   - `TestE2E_FullPipelineLifecycle`: End-to-end simulation covering authentication (401 without key), multi-provider dispatch with tracking parameter stripping, multi-engine consensus deduplication, RRF rank fusion score computation, content extraction, rate limit/quota header exposition, and subsequent cache hit.
   - `TestE2E_CircuitBreakerAndFallback`: Simulates multiple provider failures tripping circuit breaker to open, fast-failing during cooldown, and executing fallback to healthy registered engine.
-  - `TestOpenAPISpecification_ValidJSON`: Validates that `docs/openapi.json` is well-formed OpenAPI 3.1.0 schema with `/search` and `/health` paths.
-- `cmd/plewtus` & `cmd/plewtus-mcp`:
-  - Built binaries: `./bin/plewtus` and `./bin/plewtus-mcp`.
+  - `TestOpenAPISpecification_ValidJSON`: Validates that `backend/docs/openapi.json` is well-formed OpenAPI 3.1.0 schema with `/search` and `/health` paths.
+- `backend/cmd/plewtus` & `backend/cmd/plewtus-mcp`:
+  - Built binaries: `backend/bin/plewtus` and `backend/bin/plewtus-mcp`.
   - Verified live MCP stdio handshake (`initialize` and `tools/list`).
   - Executed live `tools/call` for `search` against DuckDuckGo, Bing, and Yahoo with multi-engine consensus output formatted cleanly over stdio.
+  - Verified live HTTP server execution and curl to `http://localhost:8890/health` returning 200 OK after repository restructure.
 
 ## Next Step
-**All 10 project phases completed and verified.**
-The Plewtus metasearch backend is fully functional, thoroughly tested, and documented. Recommended next user steps: commit Phase 10 changes and review documentation.
+**Repository restructure complete.**
+The repository is split into `backend/` and `frontend/`. All backend verification checks passed.
+The next step is the **frontend**.

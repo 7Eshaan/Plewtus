@@ -75,10 +75,10 @@ Plewtus is free, cost-efficient, and runs with **zero external dependencies** ou
 
 ### 1. Build
 
-Requires Go 1.22+ (tested on `go1.27.3 darwin/arm64`):
+Requires Go 1.22+ (tested on `go1.27.3 darwin/arm64`). From the `backend/` directory:
 
 ```bash
-# Build HTTP server and MCP binary
+cd backend
 go build -o bin/plewtus ./cmd/plewtus
 go build -o bin/plewtus-mcp ./cmd/plewtus-mcp
 ```
@@ -137,7 +137,7 @@ Plewtus can be connected directly to AI agents such as **Claude Desktop** or **C
 {
   "mcpServers": {
     "plewtus": {
-      "command": "/absolute/path/to/PlewtusV1/bin/plewtus",
+      "command": "/absolute/path/to/PlewtusV1/backend/bin/plewtus",
       "args": ["mcp"]
     }
   }

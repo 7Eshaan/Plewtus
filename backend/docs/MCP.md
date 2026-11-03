@@ -37,7 +37,7 @@ Add Plewtus to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "plewtus": {
-      "command": "/absolute/path/to/PlewtusV1/bin/plewtus",
+      "command": "/absolute/path/to/PlewtusV1/backend/bin/plewtus",
       "args": ["mcp"],
       "env": {
         "PLEWTUS_CACHE_ENABLED": "true",
@@ -56,7 +56,7 @@ Add to your MCP settings:
 {
   "mcpServers": {
     "plewtus": {
-      "command": "/absolute/path/to/PlewtusV1/bin/plewtus-mcp"
+      "command": "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
     }
   }
 }
