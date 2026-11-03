@@ -9,10 +9,13 @@ import (
 	"syscall"
 	"time"
 
+	"plewtus/internal/cache"
 	"plewtus/internal/config"
 	"plewtus/internal/orchestrator"
 	"plewtus/internal/provider/all"
+	"plewtus/internal/reliability"
 	"plewtus/internal/server"
+	"plewtus/internal/usage"
 )
 
 func main() {
@@ -45,7 +48,46 @@ func main() {
 	providerRegistry := all.NewRegistry(cfg.DefaultTimeout, cfg.UserAgent)
 	searchOrchestrator := orchestrator.New(providerRegistry, cfg.DefaultTimeout, cfg.UserAgent, logger)
 
-	srv := server.New(cfg, logger, searchOrchestrator)
+	// Configure in-memory search response cache if enabled
+	if cfg.CacheEnabled {
+		searchCache := cache.New(cache.Options{
+			TTL:        cfg.CacheTTL,
+			MaxEntries: cfg.CacheMaxEntries,
+		})
+		searchOrchestrator.WithCache(searchCache)
+		logger.Info("search cache initialized",
+			slog.Duration("ttl", cfg.CacheTTL),
+			slog.Int("max_entries", cfg.CacheMaxEntries),
+		)
+	}
+
+	// Configure provider circuit breakers
+	circuitBreakers := reliability.NewManager(reliability.BreakerOptions{
+		FailureThreshold: cfg.CircuitBreakerThreshold,
+		Cooldown:         cfg.CircuitBreakerCooldown,
+	})
+	searchOrchestrator.WithBreakers(circuitBreakers)
+
+	// Configure usage manager for authentication, rate limiting, and quotas
+	tiers := map[string]usage.Tier{
+		"free": {
+			Name:            "free",
+			RateLimitPerMin: cfg.FreeTierRateLimit,
+			DailyQuota:      cfg.FreeTierDailyQuota,
+		},
+		"pro": {
+			Name:            "pro",
+			RateLimitPerMin: cfg.ProTierRateLimit,
+			DailyQuota:      cfg.ProTierDailyQuota,
+		},
+	}
+	usageMgr := usage.NewManager(usage.Options{
+		AuthRequired: cfg.AuthRequired,
+		Tiers:        tiers,
+		APIKeys:      cfg.APIKeys,
+	})
+
+	srv := server.New(cfg, logger, searchOrchestrator).WithUsageManager(usageMgr)
 
 	// Graceful shutdown handling
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

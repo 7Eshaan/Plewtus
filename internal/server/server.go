@@ -10,6 +10,7 @@ import (
 
 	"plewtus/internal/config"
 	"plewtus/internal/model"
+	"plewtus/internal/usage"
 )
 
 // Searcher defines the interface for orchestrating search requests.
@@ -22,6 +23,7 @@ type Server struct {
 	cfg       *config.Config
 	logger    *slog.Logger
 	searcher  Searcher
+	usageMgr  *usage.Manager
 	startTime time.Time
 	mux       *http.ServeMux
 	server    *http.Server
@@ -29,16 +31,46 @@ type Server struct {
 
 // New creates and configures a new Server instance.
 func New(cfg *config.Config, logger *slog.Logger, searcher Searcher) *Server {
+	tiers := map[string]usage.Tier{
+		"free": {
+			Name:            "free",
+			RateLimitPerMin: cfg.FreeTierRateLimit,
+			DailyQuota:      cfg.FreeTierDailyQuota,
+		},
+		"pro": {
+			Name:            "pro",
+			RateLimitPerMin: cfg.ProTierRateLimit,
+			DailyQuota:      cfg.ProTierDailyQuota,
+		},
+	}
+	usageMgr := usage.NewManager(usage.Options{
+		AuthRequired: cfg.AuthRequired,
+		Tiers:        tiers,
+		APIKeys:      cfg.APIKeys,
+	})
+
 	s := &Server{
 		cfg:       cfg,
 		logger:    logger,
 		searcher:  searcher,
+		usageMgr:  usageMgr,
 		startTime: time.Now(),
 		mux:       http.NewServeMux(),
 	}
 
 	s.setupRoutes()
 	return s
+}
+
+// WithUsageManager allows overriding or configuring the usage manager.
+func (s *Server) WithUsageManager(um *usage.Manager) *Server {
+	s.usageMgr = um
+	return s
+}
+
+// UsageManager returns the server's usage manager.
+func (s *Server) UsageManager() *usage.Manager {
+	return s.usageMgr
 }
 
 // setupRoutes registers all HTTP endpoints.
@@ -71,6 +103,10 @@ func (s *Server) Start() error {
 		slog.String("addr", s.cfg.Addr()),
 		slog.String("env", s.cfg.Env),
 		slog.String("version", s.cfg.Version),
+		slog.Bool("cache_enabled", s.cfg.CacheEnabled),
+		slog.Bool("auth_required", s.cfg.AuthRequired),
+		slog.Int("free_rate_limit", s.cfg.FreeTierRateLimit),
+		slog.Int("free_daily_quota", s.cfg.FreeTierDailyQuota),
 	)
 
 	err := s.server.ListenAndServe()

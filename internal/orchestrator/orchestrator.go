@@ -7,16 +7,20 @@ import (
 	"sort"
 	"time"
 
+	"plewtus/internal/cache"
 	"plewtus/internal/extractor"
 	"plewtus/internal/model"
 	"plewtus/internal/pipeline"
 	"plewtus/internal/provider"
+	"plewtus/internal/reliability"
 )
 
 // Orchestrator coordinates concurrent search queries across multiple providers.
 type Orchestrator struct {
 	registry  *provider.Registry
 	extractor extractor.ContentExtractor
+	cache     cache.SearchCache
+	breakers  *reliability.Manager
 	timeout   time.Duration
 	userAgent string
 	logger    *slog.Logger
@@ -35,9 +39,14 @@ func New(registry *provider.Registry, timeout time.Duration, userAgent string, l
 		UserAgent: userAgent,
 		Logger:    logger,
 	})
+	breakers := reliability.NewManager(reliability.BreakerOptions{
+		FailureThreshold: 3,
+		Cooldown:         30 * time.Second,
+	})
 	return &Orchestrator{
 		registry:  registry,
 		extractor: ext,
+		breakers:  breakers,
 		timeout:   timeout,
 		userAgent: userAgent,
 		logger:    logger,
@@ -47,6 +56,18 @@ func New(registry *provider.Registry, timeout time.Duration, userAgent string, l
 // WithExtractor allows replacing the default extractor with a custom one (useful for testing).
 func (o *Orchestrator) WithExtractor(ext extractor.ContentExtractor) *Orchestrator {
 	o.extractor = ext
+	return o
+}
+
+// WithCache configures an in-memory search response cache.
+func (o *Orchestrator) WithCache(c cache.SearchCache) *Orchestrator {
+	o.cache = c
+	return o
+}
+
+// WithBreakers configures a custom circuit breaker manager.
+func (o *Orchestrator) WithBreakers(b *reliability.Manager) *Orchestrator {
+	o.breakers = b
 	return o
 }
 
@@ -63,18 +84,69 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 		return nil, ctx.Err()
 	}
 
+	// 1. Check in-memory cache if available
+	var cacheKey string
+	if o.cache != nil {
+		cacheKey = o.cache.Key(req)
+		if cachedResp, ok := o.cache.Get(cacheKey); ok {
+			o.logger.Debug("search response served from cache",
+				slog.String("query", req.Query),
+				slog.Int("results", len(cachedResp.Results)),
+			)
+			return cachedResp, nil
+		}
+	}
+
 	start := time.Now()
 
-	// 1. Determine providers to query
-	providers := o.resolveProviders(req.Providers)
+	// 2. Determine requested providers
+	requested := o.resolveProviders(req.Providers)
 
-	// 2. Dispatch queries to each provider concurrently
-	ch := make(chan providerOutcome, len(providers))
+	// 3. Filter providers through circuit breakers and determine active query set
+	var providersToQuery []string
+	var initialFailed []model.ProviderError
 
-	for _, pName := range providers {
+	for _, pName := range requested {
+		if o.breakers != nil {
+			breaker := o.breakers.Get(pName)
+			if err := breaker.Allow(); err != nil {
+				o.logger.Warn("provider circuit breaker open, skipping",
+					slog.String("engine", pName),
+					slog.Any("error", err),
+				)
+				initialFailed = append(initialFailed, model.ProviderError{
+					Engine: pName,
+					Error:  err.Error(),
+				})
+				continue
+			}
+		}
+		providersToQuery = append(providersToQuery, pName)
+	}
+
+	// Provider Fallback: if all requested engines were tripped, attempt a healthy registered engine
+	if len(providersToQuery) == 0 && len(requested) > 0 {
+		for _, candidate := range o.registry.Names() {
+			if o.breakers == nil || o.breakers.IsHealthy(candidate) {
+				providersToQuery = append(providersToQuery, candidate)
+				o.logger.Info("circuit breaker fallback: querying alternative healthy provider",
+					slog.String("fallback_engine", candidate),
+				)
+				break
+			}
+		}
+	}
+
+	// 4. Dispatch queries to active providers concurrently
+	ch := make(chan providerOutcome, len(providersToQuery))
+
+	for _, pName := range providersToQuery {
 		go func(name string) {
 			defer func() {
 				if r := recover(); r != nil {
+					if o.breakers != nil {
+						o.breakers.Get(name).ReportFailure(fmt.Errorf("panic: %v", r))
+					}
 					ch <- providerOutcome{
 						name: name,
 						err:  fmt.Errorf("panic in provider %s: %v", name, r),
@@ -110,6 +182,9 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 
 			resp, err := p.Search(pCtx, pReq)
 			if err != nil {
+				if o.breakers != nil {
+					o.breakers.Get(name).ReportFailure(err)
+				}
 				ch <- providerOutcome{
 					name: name,
 					err:  err,
@@ -117,6 +192,9 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 				return
 			}
 
+			if o.breakers != nil {
+				o.breakers.Get(name).ReportSuccess()
+			}
 			ch <- providerOutcome{
 				name:     name,
 				response: resp,
@@ -124,15 +202,15 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 		}(pName)
 	}
 
-	// 3. Collect outcomes with context cancellation resilience
+	// 5. Collect outcomes with context cancellation resilience
 	var successful []string
-	var failed []model.ProviderError
+	failed := append([]model.ProviderError(nil), initialFailed...)
 	var rawResponses []*model.ProviderResponse
 	rawCount := 0
 	replied := make(map[string]bool)
 
 collectLoop:
-	for i := 0; i < len(providers); i++ {
+	for i := 0; i < len(providersToQuery); i++ {
 		select {
 		case out := <-ch:
 			replied[out.name] = true
@@ -162,7 +240,7 @@ collectLoop:
 			drainResponses(ch, replied, &successful, &failed, &rawResponses, &rawCount)
 
 			// Mark remaining unreplied providers as failed due to context termination
-			for _, pName := range providers {
+			for _, pName := range providersToQuery {
 				if !replied[pName] {
 					failed = append(failed, model.ProviderError{
 						Engine: pName,
@@ -179,7 +257,7 @@ collectLoop:
 		return nil, ctx.Err()
 	}
 
-	// 4. Sort metadata slices for deterministic JSON output
+	// 6. Sort metadata slices for deterministic JSON output
 	sort.Strings(successful)
 	sort.Slice(failed, func(i, j int) bool {
 		return failed[i].Engine < failed[j].Engine
@@ -192,7 +270,7 @@ collectLoop:
 		failed = []model.ProviderError{}
 	}
 
-	// 5. Canonicalize, deduplicate, filter domains, and merge results across successful providers
+	// 7. Canonicalize, deduplicate, filter domains, and merge results across successful providers
 	dedupOpts := pipeline.DeduplicateOptions{
 		Limit:          req.Limit,
 		Offset:         req.Offset,
@@ -201,17 +279,17 @@ collectLoop:
 	}
 	uniqueResults, dedupedCount := pipeline.DeduplicateWithOptions(rawResponses, dedupOpts)
 
-	// 6. Optional AI-friendly content extraction
+	// 8. Optional AI-friendly content extraction
 	if req.Extract != nil && req.Extract.Enabled && o.extractor != nil && len(uniqueResults) > 0 {
 		uniqueResults = o.extractor.ExtractBatch(ctx, uniqueResults, req.Extract)
 	}
 
-	// 7. Build the final unified response
+	// 9. Build the final unified response
 	resp := model.NewSearchResponse(req.Query)
 	resp.Results = uniqueResults
 	resp.Metadata.TotalResults = len(uniqueResults)
 	resp.Metadata.TookMs = time.Since(start).Milliseconds()
-	resp.Metadata.Providers.Queried = providers
+	resp.Metadata.Providers.Queried = requested
 	resp.Metadata.Providers.Successful = successful
 	resp.Metadata.Providers.Failed = failed
 	resp.Metadata.Stats.RawCount = rawCount
@@ -229,6 +307,11 @@ collectLoop:
 			Offset:         req.Offset,
 			Limit:          req.Limit,
 		}
+	}
+
+	// 10. Cache the response for future queries if cache is enabled and we have valid results
+	if o.cache != nil && cacheKey != "" && len(resp.Results) > 0 {
+		o.cache.Set(cacheKey, resp)
 	}
 
 	return resp, nil

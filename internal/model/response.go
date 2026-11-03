@@ -45,6 +45,7 @@ type SearchMetadata struct {
 	Providers    ProviderMetadata `json:"providers"`
 	Stats        SearchStats      `json:"stats"`
 	Filters      *AppliedFilters  `json:"filters,omitempty"`
+	Cached       bool             `json:"cached,omitempty"`
 	Timestamp    string           `json:"timestamp"`
 }
 

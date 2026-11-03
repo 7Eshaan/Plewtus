@@ -1,7 +1,7 @@
 # Plewtus Project Context
 
 ## Overview
-Plewtus is an AI-agent search API backend that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture. It normalizes, deduplicates, and ranks results via Reciprocal Rank Fusion (RRF), with optional AI-friendly webpage extraction (clean text, highlights, Markdown).
+Plewtus is an AI-agent search API backend that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture. It normalizes, deduplicates, and ranks results via Reciprocal Rank Fusion (RRF), with optional AI-friendly webpage extraction (clean text, highlights, Markdown), in-memory response caching, token-bucket rate limiting, configurable free-tier quotas, and provider circuit breaking.
 
 ## Environment
 - **Go Version:** `go1.27.3 darwin/arm64`
@@ -11,7 +11,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 ## Provider Status Table
 | Engine | Status | Quirks / Notes |
 |---|---|---|
-| DuckDuckGo | **Working** | Requires POST with `application/x-www-form-urlencoded` + `Origin`/`Referer` headers. GET triggers bot challenge modal (`HTTP 202`). Primary `/html/` with automatic fallback to `/lite/`. Ads (`.result--ad`, `.badge--ad`, `duckduckgo.com/y.js`) cleanly filtered. Supports `df` (freshness) and `kl` (region). Temporary bot challenges detected cleanly without crash. |
+| DuckDuckGo | **Working** | Requires POST with `application/x-www-form-urlencoded` + `Origin`/`Referer` headers. GET triggers bot challenge modal (`HTTP 202`). Primary `/html/` with automatic fallback to `/lite/`. Ads (`.result--ad`, `.badge--ad`, `duckduckgo.com/y.js`) cleanly filtered. Supports `df` (freshness) and `kl` (region). Protected by per-provider circuit breaker during bot challenge bursts without process disruption. |
 | Bing | **Working** | Plain-HTML SERP via GET `https://www.bing.com/search`. Organic results in `<li class="b_algo">`. Click URLs (`/ck/a?!...&u=a1<base64>`) are automatically base64-unwrapped to clean destination URLs. Date in `.news_dt` extracted when available. Ads in `.b_ad` filtered out. |
 | Yahoo | **Working** | Plain-HTML SERP via GET `https://search.yahoo.com/search`. Requires cookie jar to handle initial 307 redirect (`YBV` cookie). Redirect URLs (`r.search.yahoo.com/.../RU=<encoded_url>/...`) are automatically unwrapped to clean destination URLs. Up to 3 retries with exponential backoff and idle connection resets for transient ATS reverse-proxy EOFs. |
 | Mojeek | **Cut** | Evaluated and rejected. Returns 403 Forbidden with default User-Agent and an Altcha JS-based CAPTCHA challenge (`/js/page_specific/challenge.js`) when spoofing desktop User-Agent. Cut to prevent brittle failures and eliminate dead code. |
@@ -25,14 +25,14 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - [x] **Phase 6: Ranking and result fusion** — Reciprocal Rank Fusion (RRF) with standard $k=60$, decoupled Ranker interface, transparent score computation. (Verified with formula tests, consensus tests, and live curl)
 - [x] **Phase 7: AI-friendly content extraction** — SSRF & resource guards (loopback, private, link-local, CGNAT, DNS rebinding, redirect validation, 2MB size limit, HTML MIME check), DOM cleaning, extraction modes (markdown, highlights, text, metadata), developer limits (max_pages, max_chars_per_page), orchestrator integration. (Verified with unit tests, live extraction, live integration, and live curl)
 - [x] **Phase 8: Search API features** — Query filters, freshness mapping (day, week, month, year), domain inclusion & exclusion with Boolean OR queries and pipeline post-filtering, ISO country/language settings, offset & limit pagination, transparent metadata.filters reflection. (Verified with unit tests, live integration, and live curl)
-- [ ] **Phase 9: Reliability and usage management** — In-memory caching, rate limiting, quotas, fallback.
+- [x] **Phase 9: Reliability and usage management** — In-memory LRU cache with TTL and deterministic key hashing, token bucket rate limiting (per API key and client IP), daily request quotas with UTC reset, configurable free usage tier, API key authentication, provider circuit breaking (Closed/Open/Half-Open) and fallback to alternative healthy engines. (Verified with unit tests, server integration, and live curl)
 - [ ] **Phase 10: Final integration and documentation** — End-to-end integration, OpenAPI spec, MCP server.
 
 ## Architectural Decisions
 1. **Zero External Dependencies for Base Server:** Used Go standard library `net/http` (with Go 1.22+ pattern routing like `"GET /health"`, `"POST /search"`) and `log/slog` for structured logging. Minimal footprint.
 2. **AI-Agent-First Schema Contract:**
    - Dedicated schema: echoed query, ranked results carrying `id`, `title`, `url`, `snippet`, `rank`, `score`, `engines` (recording discovering engine names and their original ranks), `published_date`, and optional `content`.
-   - Honest metadata: execution time (`took_ms`), provider status (`queried`, `successful`, `failed` with granular error descriptions), pipeline stats (`raw_count`, `deduped_count`), and active `filters`.
+   - Honest metadata: execution time (`took_ms`), provider status (`queried`, `successful`, `failed` with granular error descriptions), pipeline stats (`raw_count`, `deduped_count`), active `filters`, and `cached` status.
 3. **Decoupled Provider Architecture:**
    - `provider.Provider` interface: `Name() string`, `Search(ctx, req) (*model.ProviderResponse, error)`.
    - `provider.Registry`: Thread-safe provider registration and lookup.
@@ -71,50 +71,36 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
     - Dual-Layer Domain Controls: Multi-domain inclusion grouped via Boolean OR in upstream queries (`(site:a.com OR site:b.com)`), while `pipeline.matchesDomainFilters` enforces 100% strict hostname/subdomain compliance post-scraping.
     - Federated Metasearch Pagination: Upstream scrapers pull `limit + offset` candidates into the unified RRF fusion, and `DeduplicateWithOptions` slices `[offset : offset+limit]`, ensuring stable global ranking across pages.
     - Transparent Metadata: Echoes active search constraints in `metadata.filters` (`freshness`, `include_domains`, `exclude_domains`, `country`, `language`, `offset`, `limit`).
+11. **Multi-Tier Usage Management, In-Memory Caching & Circuit Breaking (`internal/cache`, `internal/usage`, `internal/reliability`):**
+    - In-Memory LRU Cache: Canonical query + filter + extract key hashing with SHA-256. Deep-cloned cache retrieval with transparent `metadata.cached: true` flag. Configurable TTL and max entry bounds.
+    - Usage Management & Configurable Free Tier: Token bucket rate limiting and UTC daily quota tracking per identity (`api_key:<token>` or anonymous `ip:<addr>`). Standard rate limit and quota response headers (`X-RateLimit-*`, `X-Quota-*`, `Retry-After`). 401 Unauthorized on invalid/missing keys when auth is required, 429 Too Many Requests on rate limit or daily quota exhaustion.
+    - Provider Circuit Breaking & Fallback: Automatic failure tracking per upstream provider with Closed, Open, and Half-Open probe states. Degraded providers fast-fail during cooldown without network latency; orchestrator automatically queries alternative healthy registered engines when primary providers trip.
 
 ## Tests Performed
-- `internal/config`: Default configs, environment variable overrides.
-- `internal/model`: SearchRequest normalization (offset bounds, domain cleaning, country/lang casing), query validation, freshness/country/language ISO validation, extract mode validation, SearchResponse JSON serialization.
-- `internal/server`: Health handler (`/health`, `/healthz`), Search handler contract validation, bad JSON handling, CORS preflight checks, searcher error & timeout handling (`500`, `408`), live server integration test, live extraction integration test, live search filters integration test (`TestSearchEndpoint_SearchFiltersIntegration`).
-- `internal/provider`: Registry registration, thread safety, provider lookup, query builder tests (`TestBuildSearchQuery`: plain queries, single domain, OR-grouped multiple domains, domain exclusions).
+- `internal/config`: Default configs, environment variable overrides for cache, usage, tiers, API keys, and circuit breakers.
+- `internal/cache`: Key determinism across order permutations, deep copy isolation, TTL expiration, LRU eviction at max capacity, disabled caching on TTL=0, concurrent access.
+- `internal/reliability`: State transitions (Closed -> Open -> Half-Open -> Closed / Open), cooldown expiration, trial probe serialization, concurrency, manager health lookups and reset.
+- `internal/usage`: Free tier assignment, client IP extraction (`X-Forwarded-For`, `X-Real-IP`, `RemoteAddr`), token bucket rate limit consumption and refill, daily quota exhaustion and midnight UTC reset, API key authentication (`Authorization: Bearer` and `X-API-Key`), 401 Unauthorized and 429 Too Many Requests errors.
+- `internal/model`: SearchRequest normalization, query validation, freshness/country/language ISO validation, extract mode validation, SearchResponse JSON serialization with `cached` metadata.
+- `internal/server`: Health handler (`/health`, `/healthz`), Search handler contract validation, bad JSON handling, CORS preflight and header exposition (`X-RateLimit-*`, `X-Quota-*`, `Retry-After`), searcher error & timeout handling (`500`, `408`), rate limit headers and 429 enforcement (`TestServer_RateLimitingHeadersAnd429`), daily quota 429 enforcement (`TestServer_DailyQuotaExceeded429`), authentication 401 enforcement (`TestServer_Authentication401`), cache integration test (`TestServer_CacheIntegration`), live server integration test, live extraction integration test, live search filters integration test.
+- `internal/provider`: Registry registration, thread safety, provider lookup, query builder tests.
 - `internal/provider/htmlutil`: Node finding, attribute extraction, class matching, text extraction, URL unwrapping for direct, protocol-relative, DDG, Bing, and Yahoo links.
 - `internal/provider/duckduckgo`: Fixtures, challenge detection, live queries.
 - `internal/provider/bing`: Fixtures, challenge detection, live queries.
 - `internal/provider/yahoo`: Fixtures, challenge detection, live queries with ATS EOF retry.
 - `internal/provider/all`: Registry initialization with all active providers.
-- `internal/pipeline`:
-  - `TestNormalizeURL_TrackingParameters`: Stripping UTM, click IDs, referral tokens, deterministic query sorting.
-  - `TestNormalizeURL_CanonicalMatching`: Canonical key matching across schemes, ports, www prefixes, trailing slashes, fragments, index files.
-  - `TestDeduplicate_IdenticalURLsAcrossEngines`: Deduplicating identical URLs across DuckDuckGo, Bing, and Yahoo into a single result with 3 discovering engine sources.
-  - `TestDeduplicate_EngineConsensusRanking`: Multi-engine consensus ranking (trio > duo > solo).
-  - `TestDeduplicate_TitleTruncationSelection`: Automatic selection of non-truncated titles.
-  - `TestDeduplicate_LimitEnforcement`: Preserving accurate `dedupedCount` before limit truncation.
-  - `TestDeduplicate_IncludeDomainsFilter`: Strict whitelist domain filtering (including subdomains).
-  - `TestDeduplicate_ExcludeDomainsFilter`: Strict blacklist domain filtering.
-  - `TestDeduplicate_OffsetAndLimit`: Correct paginated slice extraction and out-of-range empty results.
-  - `TestRRFRanker_Formula`: Verified exact formula output for \( k=60 \).
-  - `TestRRFRanker_MultiEngineConsensusBeatsSingleHighRank`: Confirmed 2-engine #2 consensus outranks single-engine #1.
-  - `TestRRFRanker_TieBreaking`: Deterministic stable ordering on identical scores.
-  - `TestRRFRanker_CustomK`: Configurable smoothing parameter.
-  - `TestRRFRanker_MultiRankerChain`: Chained RRF ranker with secondary reranker.
-  - `TestRRFRanker_EdgeCases`: Empty inputs, non-positive positions, duplicate engine sources.
-- `internal/extractor`:
-  - `TestIsBlockedIP`: Comprehensive IP verification (loopback, RFC 1918 private, link-local, cloud metadata, CGNAT, IPv6 local, IPv4-mapped IPv6, public IPs).
-  - `TestValidateURL`: Scheme restrictions (http/https only), rejection of file/ftp/data/javascript URIs and local/internal hostnames.
-  - `TestSafeCheckRedirect`: Redirect count capping, blocking redirects to private IPs and non-HTTP protocols.
-  - `TestParseHTML_MetadataAndPruning`: Extraction of title, description, author, publication date, and elimination of ads/scripts/banners/sidebars.
-  - `TestToMarkdown`: Headings, paragraphs, bold, italics, lists, code fences, blockquotes, links, and tables.
-  - `TestExtractHighlights`: Scoring, sentence filtering, and boilerplate exclusion.
-  - `TestTruncateCleanly`: Clean sentence and word boundary truncation.
-  - `TestFetcher_MIMETypeGuard`: Rejection of non-HTML (PDF) responses and acceptance of HTML.
-  - `TestExtractor_ExtractBatch`: `max_pages` enforcement, error resilience, and mode formatting.
-  - `TestLiveWebpageExtraction`: Live Markdown and highlights extraction against `https://go.dev`.
-- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, content extraction integration (`TestOrchestrator_ContentExtractionIntegration`), metadata filters integration (`TestOrchestrator_FiltersInMetadata`), offset pagination (`TestOrchestrator_OffsetPagination`), live multi-engine queries.
-- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8896/search` verifying domain inclusion, freshness, pagination (pages 1 and 2), country/language settings, and validation errors (400 Bad Request on invalid country/language/freshness).
+- `internal/pipeline`: URL normalization, tracking parameter stripping, canonical key matching, multi-engine consensus deduplication, title truncation selection, domain whitelist/blacklist filtering, offset & limit slicing, RRF ranker formula, consensus tie-breaking, custom k smoothing, multi-ranker chains.
+- `internal/extractor`: SSRF defense, URL validation, safe redirect checks, HTML pruning, Markdown conversion, highlights extraction, clean boundary truncation, MIME guard, batch extraction, live web extraction.
+- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, content extraction integration, metadata filters integration, offset pagination, cache hit integration (`TestOrchestrator_CacheIntegration`), circuit breaker fast-failure (`TestOrchestrator_CircuitBreakerFastFail`), circuit breaker fallback (`TestOrchestrator_CircuitBreakerFallback`), live multi-engine queries.
+- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8899/search` verifying:
+  - Cache miss on initial query followed by instant cache hit (`metadata.cached: true`).
+  - Pro tier authentication via `Authorization: Bearer prokey` reflecting 60 req/min limit and 2000 daily quota.
+  - Free tier rate limit enforcement returning HTTP 429 Too Many Requests with `Retry-After` header when limit is exceeded.
+  - Provider circuit breaker fast-failing DuckDuckGo during bot challenge cooldown while Bing and Yahoo returned 10 results smoothly.
 
 ## Next Step
-Proceed to **Phase 9 — Reliability and usage management**:
-1. Implement in-memory cache with TTL (caching normalized query + filters + extract options).
-2. Rate limiting (token bucket / sliding window per API key or client IP).
-3. Request quotas & usage tracking with configurable free usage tier.
-4. Provider fallback & circuit breaking to maintain high reliability and economical engine usage.
+Proceed to **Phase 10 — Final integration and documentation**:
+1. End-to-end integration and system tests verifying the complete search, fusion, extraction, caching, and usage flow.
+2. Complete documentation: API usage, environment variable configuration, provider architecture.
+3. OpenAPI specification generation.
+4. Model Context Protocol (MCP) server for direct AI agent consumption.

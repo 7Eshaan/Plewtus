@@ -9,17 +9,28 @@ import (
 
 // Config holds all configuration options for Plewtus.
 type Config struct {
-	Host             string
-	Port             int
-	Env              string
-	LogLevel         string
-	DefaultProviders []string
-	DefaultTimeout   time.Duration
-	MaxTimeout       time.Duration
-	MaxLimit         int
-	DefaultLimit     int
-	UserAgent        string
-	Version          string
+	Host                    string
+	Port                    int
+	Env                     string
+	LogLevel                string
+	DefaultProviders        []string
+	DefaultTimeout          time.Duration
+	MaxTimeout              time.Duration
+	MaxLimit                int
+	DefaultLimit            int
+	UserAgent               string
+	Version                 string
+	CacheEnabled            bool
+	CacheTTL                time.Duration
+	CacheMaxEntries         int
+	AuthRequired            bool
+	APIKeys                 map[string]string
+	FreeTierRateLimit       int
+	FreeTierDailyQuota      int
+	ProTierRateLimit        int
+	ProTierDailyQuota       int
+	CircuitBreakerThreshold int
+	CircuitBreakerCooldown  time.Duration
 }
 
 // Load loads configuration from environment variables with sane defaults.
@@ -38,7 +49,18 @@ func Load() *Config {
 			"PLEWTUS_USER_AGENT",
 			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
 		),
-		Version: "0.1.0",
+		Version:                 "0.1.0",
+		CacheEnabled:            getEnvAsBool("PLEWTUS_CACHE_ENABLED", true),
+		CacheTTL:                time.Duration(getEnvAsInt("PLEWTUS_CACHE_TTL_SECONDS", 600)) * time.Second,
+		CacheMaxEntries:         getEnvAsInt("PLEWTUS_CACHE_MAX_ENTRIES", 1000),
+		AuthRequired:            getEnvAsBool("PLEWTUS_AUTH_REQUIRED", false),
+		APIKeys:                 getEnvAsKeyMap("PLEWTUS_API_KEYS"),
+		FreeTierRateLimit:       getEnvAsInt("PLEWTUS_FREE_TIER_RATE_LIMIT", 10),
+		FreeTierDailyQuota:      getEnvAsInt("PLEWTUS_FREE_TIER_DAILY_QUOTA", 100),
+		ProTierRateLimit:        getEnvAsInt("PLEWTUS_PRO_TIER_RATE_LIMIT", 60),
+		ProTierDailyQuota:       getEnvAsInt("PLEWTUS_PRO_TIER_DAILY_QUOTA", 2000),
+		CircuitBreakerThreshold: getEnvAsInt("PLEWTUS_CIRCUIT_BREAKER_THRESHOLD", 3),
+		CircuitBreakerCooldown:  getEnvAsDurationMs("PLEWTUS_CIRCUIT_BREAKER_COOLDOWN_MS", 30000),
 	}
 }
 
@@ -66,6 +88,14 @@ func getEnvAsInt(key string, defaultVal int) int {
 	return val
 }
 
+func getEnvAsBool(key string, defaultVal bool) bool {
+	valStr := strings.ToLower(getEnv(key, ""))
+	if valStr == "" {
+		return defaultVal
+	}
+	return valStr == "1" || valStr == "true" || valStr == "yes" || valStr == "on"
+}
+
 func getEnvAsDurationMs(key string, defaultMs int) time.Duration {
 	ms := getEnvAsInt(key, defaultMs)
 	return time.Duration(ms) * time.Millisecond
@@ -88,4 +118,33 @@ func getEnvAsSlice(key string, defaultVal []string) []string {
 		return defaultVal
 	}
 	return result
+}
+
+func getEnvAsKeyMap(key string) map[string]string {
+	valStr := getEnv(key, "")
+	res := make(map[string]string)
+	if valStr == "" {
+		return res
+	}
+
+	parts := strings.Split(valStr, ",")
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		if colon := strings.Index(trimmed, ":"); colon != -1 {
+			k := strings.TrimSpace(trimmed[:colon])
+			tier := strings.ToLower(strings.TrimSpace(trimmed[colon+1:]))
+			if k != "" {
+				if tier == "" {
+					tier = "pro"
+				}
+				res[k] = tier
+			}
+		} else {
+			res[trimmed] = "pro"
+		}
+	}
+	return res
 }
