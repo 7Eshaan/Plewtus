@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"plewtus/internal/extractor"
 	"plewtus/internal/model"
 	"plewtus/internal/pipeline"
 	"plewtus/internal/provider"
@@ -15,6 +16,7 @@ import (
 // Orchestrator coordinates concurrent search queries across multiple providers.
 type Orchestrator struct {
 	registry  *provider.Registry
+	extractor extractor.ContentExtractor
 	timeout   time.Duration
 	userAgent string
 	logger    *slog.Logger
@@ -28,12 +30,24 @@ func New(registry *provider.Registry, timeout time.Duration, userAgent string, l
 	if logger == nil {
 		logger = slog.Default()
 	}
+	ext := extractor.New(extractor.ExtractorOptions{
+		Timeout:   timeout,
+		UserAgent: userAgent,
+		Logger:    logger,
+	})
 	return &Orchestrator{
 		registry:  registry,
+		extractor: ext,
 		timeout:   timeout,
 		userAgent: userAgent,
 		logger:    logger,
 	}
+}
+
+// WithExtractor allows replacing the default extractor with a custom one (useful for testing).
+func (o *Orchestrator) WithExtractor(ext extractor.ContentExtractor) *Orchestrator {
+	o.extractor = ext
+	return o
 }
 
 // providerOutcome captures the response or error from a single provider execution.
@@ -180,7 +194,12 @@ collectLoop:
 	// 5. Canonicalize, deduplicate, and merge results across successful providers
 	uniqueResults, dedupedCount := pipeline.Deduplicate(rawResponses, req.Limit)
 
-	// 6. Build the final unified response
+	// 6. Optional AI-friendly content extraction
+	if req.Extract != nil && req.Extract.Enabled && o.extractor != nil && len(uniqueResults) > 0 {
+		uniqueResults = o.extractor.ExtractBatch(ctx, uniqueResults, req.Extract)
+	}
+
+	// 7. Build the final unified response
 	resp := model.NewSearchResponse(req.Query)
 	resp.Results = uniqueResults
 	resp.Metadata.TotalResults = len(uniqueResults)

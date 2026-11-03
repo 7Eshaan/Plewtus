@@ -113,10 +113,10 @@ func (r *SearchRequest) Validate() error {
 
 	if r.Extract != nil && r.Extract.Enabled {
 		switch r.Extract.Mode {
-		case "highlights", "text", "markdown":
+		case "highlights", "text", "markdown", "metadata":
 			// valid
 		default:
-			return errors.New("extract mode must be one of: 'highlights', 'text', 'markdown'")
+			return errors.New("extract mode must be one of: 'highlights', 'text', 'markdown', 'metadata'")
 		}
 	}
 

@@ -465,3 +465,71 @@ func TestOrchestrator_LiveEngines(t *testing.T) {
 		}
 	}
 }
+
+type mockExtractor struct {
+	calledWithPages int
+}
+
+func (m *mockExtractor) Extract(ctx context.Context, targetURL string, opts *model.ExtractOptions) (*model.ExtractedContent, error) {
+	return &model.ExtractedContent{Text: "mock text"}, nil
+}
+
+func (m *mockExtractor) ExtractBatch(ctx context.Context, results []model.SearchResult, opts *model.ExtractOptions) []model.SearchResult {
+	limit := opts.MaxPages
+	if limit > len(results) {
+		limit = len(results)
+	}
+	m.calledWithPages = limit
+	for i := 0; i < limit; i++ {
+		results[i].Content = &model.ExtractedContent{
+			Text:     "extracted: " + results[i].Title,
+			Markdown: "# " + results[i].Title,
+		}
+	}
+	return results
+}
+
+func TestOrchestrator_ContentExtractionIntegration(t *testing.T) {
+	reg := provider.NewRegistry()
+	reg.Register(&mockProvider{
+		name: "test_engine",
+		results: []model.RawSearchResult{
+			{Title: "Page 1", URL: "https://example.com/1", Position: 1},
+			{Title: "Page 2", URL: "https://example.com/2", Position: 2},
+			{Title: "Page 3", URL: "https://example.com/3", Position: 3},
+		},
+	})
+
+	mockExt := &mockExtractor{}
+	orch := New(reg, 1*time.Second, "test-agent", testLogger()).WithExtractor(mockExt)
+
+	// 1. Extraction enabled with MaxPages = 2
+	resp, err := orch.Search(context.Background(), &model.SearchRequest{
+		Query:     "test",
+		Providers: []string{"test_engine"},
+		Extract: &model.ExtractOptions{
+			Enabled:  true,
+			Mode:     "markdown",
+			MaxPages: 2,
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected search error: %v", err)
+	}
+
+	if mockExt.calledWithPages != 2 {
+		t.Errorf("expected extractor to be called with 2 pages, got %d", mockExt.calledWithPages)
+	}
+
+	if resp.Results[0].Content == nil || resp.Results[0].Content.Markdown != "# Page 1" {
+		t.Errorf("expected extracted markdown on result 0")
+	}
+	if resp.Results[1].Content == nil || resp.Results[1].Content.Markdown != "# Page 2" {
+		t.Errorf("expected extracted markdown on result 1")
+	}
+	if resp.Results[2].Content != nil {
+		t.Errorf("expected nil content on result 2 (exceeds MaxPages)")
+	}
+}
+

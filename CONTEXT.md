@@ -23,7 +23,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - [x] **Phase 4: Parallel search orchestration** — Concurrent dispatch, per-provider timeouts, partial response resilience, server integration. (Verified with unit tests, live integration, and live curl)
 - [x] **Phase 5: Result normalization and deduplication** — Canonical URL normalization, tracker stripping, result merging, engine discovery preservation. (Verified with pipeline tests, orchestrator tests, and live curl)
 - [x] **Phase 6: Ranking and result fusion** — Reciprocal Rank Fusion (RRF) with standard $k=60$, decoupled Ranker interface, transparent score computation. (Verified with formula tests, consensus tests, and live curl)
-- [ ] **Phase 7: AI-friendly content extraction** — Clean text, highlights, Markdown with SSRF & resource guards.
+- [x] **Phase 7: AI-friendly content extraction** — SSRF & resource guards (loopback, private, link-local, CGNAT, DNS rebinding, redirect validation, 2MB size limit, HTML MIME check), DOM cleaning, extraction modes (markdown, highlights, text, metadata), developer limits (max_pages, max_chars_per_page), orchestrator integration. (Verified with unit tests, live extraction, live integration, and live curl)
 - [ ] **Phase 8: Search API features** — Query filters, freshness, domain constraints, content options.
 - [ ] **Phase 9: Reliability and usage management** — In-memory caching, rate limiting, quotas, fallback.
 - [ ] **Phase 10: Final integration and documentation** — End-to-end integration, OpenAPI spec, MCP server.
@@ -61,11 +61,16 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
    - `RRFRanker`: Computes \( \text{score}(d) = \sum_{m \in M} \frac{1}{k + r_m(d)} \) with standard smoothing constant \( k = 60 \). Scores are rounded to 6 decimal places for clean consumption.
    - Scale-invariant: avoids comparing incomparable raw relevance scores from different engines.
    - Deterministic tie-breaking: RRF score descending, engine count descending, best original position ascending, stable discovery order.
+9. **Secure Webpage Extraction & AI Content Synthesis (`internal/extractor`):**
+   - SSRF Defense: Rejects private IPv4 (RFC 1918), IPv6 unique-local, link-local / cloud metadata (`169.254.169.254`), loopback (`127.0.0.0/8`, `::1`), CGNAT (`100.64.0.0/10`), broadcast, and IPv4-mapped IPv6. `SafeDialContext` resolves DNS and dials safe public IPs directly, preventing DNS rebinding. `SafeCheckRedirect` re-validates each redirect hop (max 5).
+   - Resource & MIME Guards: Caps response body reading at 2 MB via `io.LimitReader`. Validates HTML MIME types (`text/html`, `application/xhtml+xml`) and rejects non-HTML binaries/PDFs.
+   - DOM Cleaning & Conversion: Prunes noise elements (`<script>`, `<style>`, `<nav>`, `<footer>`, `<aside>`, `class*="ad"`, `class*="cookie"`, etc.), targets primary content (`<main>`, `<article>`), extracts metadata (author, description, date), and converts into clean Markdown, plain text, or query-weighted highlights.
+   - Resource Bounding: Strictly honors `max_pages` (fetching only top N results up to the limit) and truncates cleanly at sentence/word boundaries with `max_chars_per_page`. Individual page errors are handled gracefully without aborting the search.
 
 ## Tests Performed
 - `internal/config`: Default configs, environment variable overrides.
 - `internal/model`: SearchRequest normalization, query validation, freshness/extract mode validation, SearchResponse JSON serialization.
-- `internal/server`: Health handler (`/health`, `/healthz`), Search handler contract validation, bad JSON handling, CORS preflight checks, searcher error & timeout handling (`500`, `408`), live server integration test.
+- `internal/server`: Health handler (`/health`, `/healthz`), Search handler contract validation, bad JSON handling, CORS preflight checks, searcher error & timeout handling (`500`, `408`), live server integration test, live extraction integration test (`POST /search` with `extract.enabled`).
 - `internal/provider`: Registry registration, thread safety, provider lookup.
 - `internal/provider/htmlutil`: Node finding, attribute extraction, class matching, text extraction, URL unwrapping for direct, protocol-relative, DDG, Bing, and Yahoo links.
 - `internal/provider/duckduckgo`: Fixtures, challenge detection, live queries.
@@ -85,12 +90,27 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
   - `TestRRFRanker_CustomK`: Configurable smoothing parameter.
   - `TestRRFRanker_MultiRankerChain`: Chained RRF ranker with secondary reranker.
   - `TestRRFRanker_EdgeCases`: Empty inputs, non-positive positions, duplicate engine sources.
-- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, live multi-engine queries.
-- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8890/search` returning RRF-ranked results with honest `score` and `engines`.
+- `internal/extractor`:
+  - `TestIsBlockedIP`: Comprehensive IP verification (loopback, RFC 1918 private, link-local, cloud metadata, CGNAT, IPv6 local, IPv4-mapped IPv6, public IPs).
+  - `TestValidateURL`: Scheme restrictions (http/https only), rejection of file/ftp/data/javascript URIs and local/internal hostnames.
+  - `TestSafeCheckRedirect`: Redirect count capping, blocking redirects to private IPs and non-HTTP protocols.
+  - `TestParseHTML_MetadataAndPruning`: Extraction of title, description, author, publication date, and elimination of ads/scripts/banners/sidebars.
+  - `TestToMarkdown`: Headings, paragraphs, bold, italics, lists, code fences, blockquotes, links, and tables.
+  - `TestExtractHighlights`: Scoring, sentence filtering, and boilerplate exclusion.
+  - `TestTruncateCleanly`: Clean sentence and word boundary truncation.
+  - `TestFetcher_MIMETypeGuard`: Rejection of non-HTML (PDF) responses and acceptance of HTML.
+  - `TestExtractor_ExtractBatch`: `max_pages` enforcement, error resilience, and mode formatting.
+  - `TestLiveWebpageExtraction`: Live Markdown and highlights extraction against `https://go.dev`.
+- `internal/orchestrator`: Parallel execution, per-provider timeouts, partial response resilience, unknown provider handling, context cancellation, limit interleaving, deduplication integration, content extraction integration (`TestOrchestrator_ContentExtractionIntegration`), live multi-engine queries.
+- `cmd/plewtus`: Full binary build and live curl test against `http://localhost:8895/search` verifying RRF results enriched with Markdown, Highlights, and Text content.
 
 ## Next Step
-Proceed to **Phase 7 — AI-friendly content extraction**:
-1. Implement webpage content extractor with SSRF & resource guards (reject private/loopback IPs, link-local, oversized responses, non-HTML content, timeout limits).
-2. Modes: metadata extraction, highlights/summaries, and full Markdown conversion.
-3. Configurable limits (`max_pages`, `max_chars_per_page`) to avoid fetching pages unnecessarily.
-4. Integrate extraction into the search pipeline when `extract.enabled: true`.
+Proceed to **Phase 8 — Search API features**:
+1. Implement and verify search query filters and options:
+   - Freshness filters across search engines (`day`, `week`, `month`, `year`).
+   - Domain inclusion (`include_domains`) and exclusion (`exclude_domains`) constraints.
+   - Country and language settings (`country`, `language`).
+   - Provider selection validation (`providers`).
+   - Limit controls and pagination semantics.
+2. Extend search response metadata to reflect applied query filters transparently.
+3. Test against both fixtures and live engine queries.

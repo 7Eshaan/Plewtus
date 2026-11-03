@@ -65,12 +65,23 @@ func TestSearchRequestValidation(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "valid extract mode",
+			name: "valid extract mode markdown",
 			req: SearchRequest{
 				Query: "golang",
 				Extract: &ExtractOptions{
 					Enabled: true,
 					Mode:    "markdown",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid extract mode metadata",
+			req: SearchRequest{
+				Query: "golang",
+				Extract: &ExtractOptions{
+					Enabled: true,
+					Mode:    "metadata",
 				},
 			},
 			wantErr: false,

@@ -33,6 +33,8 @@ type ExtractedContent struct {
 	Text        string   `json:"text,omitempty"`
 	Markdown    string   `json:"markdown,omitempty"`
 	Highlights  []string `json:"highlights,omitempty"`
+	Author      string   `json:"author,omitempty"`
+	Description string   `json:"description,omitempty"`
 	ExtractedAt string   `json:"extracted_at"`
 }
 
