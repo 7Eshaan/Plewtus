@@ -51,12 +51,19 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if fetchCount > 0 {
 		params.Set("count", strconv.Itoa(fetchCount))
 	}
-	if req.Language != "" {
-		params.Set("setlang", strings.ToLower(req.Language))
+	lang := req.Language
+	if lang == "" {
+		lang = "en"
 	}
-	if req.Country != "" {
-		params.Set("cc", strings.ToUpper(req.Country))
+	params.Set("setlang", strings.ToLower(lang))
+
+	country := req.Country
+	if country == "" {
+		// Default to US region when no country is specified to prevent
+		// unauthenticated IP-localized noise from hijacking general search queries.
+		country = "US"
 	}
+	params.Set("cc", strings.ToUpper(country))
 	if filter := mapFreshness(req.Freshness); filter != "" {
 		params.Set("filters", filter)
 	}

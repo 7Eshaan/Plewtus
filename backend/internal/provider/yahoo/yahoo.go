@@ -53,12 +53,18 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if fetchCount > 0 {
 		params.Set("n", strconv.Itoa(fetchCount))
 	}
-	if req.Language != "" {
-		params.Set("vl", "lang_"+strings.ToLower(req.Language))
+	lang := req.Language
+	if lang == "" {
+		lang = "en"
 	}
-	if req.Country != "" {
-		params.Set("vc", strings.ToLower(req.Country))
+	params.Set("vl", "lang_"+strings.ToLower(lang))
+
+	country := req.Country
+	if country == "" {
+		country = "us"
 	}
+	params.Set("vc", strings.ToLower(country))
+
 	if age := mapFreshness(req.Freshness); age != "" {
 		params.Set("age", age)
 	}
@@ -86,6 +92,11 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 
 		resp, err = p.client.Do(ctx, httpReq)
 		if err == nil {
+			if resp.StatusCode >= 500 && attempt < 2 {
+				_ = resp.Body.Close()
+				p.client.CloseIdleConnections()
+				continue
+			}
 			break
 		}
 		if !isRetryable(err) {
