@@ -1,7 +1,6 @@
 "use client";
 
 import { ThemeToggle } from "./theme-toggle";
-import { Sparkles } from "lucide-react";
 
 export function Header() {
   return (
@@ -56,10 +55,6 @@ export function Header() {
 
         {/* Right side controls */}
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 font-mono px-2 py-1 rounded-md border border-zinc-200 dark:border-zinc-800/60 bg-zinc-50 dark:bg-zinc-900/40">
-            <Sparkles className="w-3 h-3 text-emerald-500" />
-            <span>RRF Fusion</span>
-          </div>
           <ThemeToggle />
         </div>
       </div>
