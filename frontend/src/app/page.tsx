@@ -151,39 +151,41 @@ export default function HomePage() {
     <div className="min-h-screen flex flex-col bg-white dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 transition-colors">
       <Header />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-5 sm:py-8 flex flex-col gap-6 sm:gap-8">
-        {/* Compact Hero Section */}
-        <section id="demo" className="flex flex-col items-center text-center gap-2 pt-1 sm:pt-2">
-          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans max-w-xl text-balance">
-            Federated Search for AI Agents
-          </h1>
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-8 sm:py-12 flex flex-col gap-10">
+        {/* Centered Hero & Metasearch Playground Section */}
+        <section id="demo" className="w-full flex flex-col items-center text-center gap-5 pt-2 sm:pt-4">
+          <div className="flex flex-col items-center gap-2.5 max-w-2xl">
+            <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans text-balance">
+              Federated Search for AI Agents
+            </h1>
 
-          <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 max-w-lg text-balance leading-relaxed">
-            Query DuckDuckGo, Bing, and Yahoo simultaneously. Clean canonical URLs,
-            multi-engine consensus, and Reciprocal Rank Fusion.
-          </p>
-        </section>
+            <p className="text-sm sm:text-base text-zinc-500 dark:text-zinc-400 max-w-xl text-balance leading-relaxed">
+              Query DuckDuckGo, Bing, and Yahoo simultaneously. Clean canonical URLs,
+              multi-engine consensus, and Reciprocal Rank Fusion.
+            </p>
+          </div>
 
-        {/* Search Box Preview & Showcase (matches attached reference style) */}
-        <section className="w-full" aria-label="Metasearch playground">
-          <SearchPreview
-            query={query}
-            onQueryChange={setQuery}
-            onSearch={executeSearch}
-            loading={loading}
-            providers={providers}
-            onProvidersChange={setProviders}
-            extractionMode={extractionMode}
-            onExtractionModeChange={setExtractionMode}
-            advancedOptions={advancedOptions}
-            onAdvancedOptionsChange={setAdvancedOptions}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            response={response}
-            error={error}
-            searched={searched}
-            onSelectSuggestion={handleSuggestionSelect}
-          />
+          {/* Centered Metasearch Playground Card */}
+          <div className="w-full max-w-4xl mx-auto pt-2">
+            <SearchPreview
+              query={query}
+              onQueryChange={setQuery}
+              onSearch={executeSearch}
+              loading={loading}
+              providers={providers}
+              onProvidersChange={setProviders}
+              extractionMode={extractionMode}
+              onExtractionModeChange={setExtractionMode}
+              advancedOptions={advancedOptions}
+              onAdvancedOptionsChange={setAdvancedOptions}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              response={response}
+              error={error}
+              searched={searched}
+              onSelectSuggestion={handleSuggestionSelect}
+            />
+          </div>
         </section>
 
         {/* Section Divider */}
