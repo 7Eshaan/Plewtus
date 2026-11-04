@@ -599,7 +599,7 @@ export function SearchPreview({
               )}
 
               {/* Fallback if results are cleared */}
-              {!loading && !response && (
+              {!loading && !error && !response && (
                 <div className="py-8 px-4 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800/80 flex flex-col items-center justify-center text-center gap-2 my-auto">
                   <p className="text-xs font-mono text-zinc-500">
                     Type a query above or click a suggestion to search

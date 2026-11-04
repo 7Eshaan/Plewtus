@@ -38,7 +38,7 @@ export function ErrorState({ error, onRetry }: ErrorStateProps) {
           </p>
           {isBackendUnavailable && (
             <p className="text-[11px] font-mono text-rose-600 dark:text-rose-400 mt-1">
-              Start the Go backend with: PLEWTUS_API_KEYS=pro_live_agent123:pro ./bin/plewtus
+              Start the Go backend with: PLEWTUS_PORT=8890 PLEWTUS_API_KEYS=pro_live_agent123:pro ./bin/plewtus
             </p>
           )}
         </div>
