@@ -85,7 +85,7 @@ export async function POST(req: Request): Promise<NextResponse<SearchResponse | 
   }
 
   // 4. Dispatch request to the Go backend with server-side credentials
-  const backendBaseUrl = process.env.PLEWTUS_BACKEND_URL || "http://localhost:8890";
+  const backendBaseUrl = process.env.PLEWTUS_BACKEND_URL || "http://localhost:8080";
   const targetUrl = `${backendBaseUrl.replace(/\/+$/, "")}/search`;
 
   try {
