@@ -100,6 +100,9 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing bing response: %w", err)
 	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("bing response contained no parseable organic results")
+	}
 
 	return &model.ProviderResponse{
 		Engine:  p.Name(),

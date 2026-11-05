@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -113,21 +114,15 @@ func TestOrchestrator_CircuitBreakerFastFail(t *testing.T) {
 	}
 
 	// 3rd call should fast-fail without calling failingP
-	resp3, err := orch.Search(context.Background(), req)
-	if err != nil {
-		t.Fatalf("expected Search to return partial response, got err: %v", err)
+	_, err := orch.Search(context.Background(), req)
+	if err == nil || !strings.Contains(err.Error(), "all search providers failed") {
+		t.Fatalf("expected explicit all-providers-failed error, got %v", err)
 	}
 
 	if atomic.LoadInt64(&failingP.calls) != 2 {
 		t.Fatalf("expected provider NOT to be called when circuit is open, call count: %d", atomic.LoadInt64(&failingP.calls))
 	}
 
-	if len(resp3.Metadata.Providers.Failed) != 1 {
-		t.Fatalf("expected 1 failed provider recorded, got %d", len(resp3.Metadata.Providers.Failed))
-	}
-	if resp3.Metadata.Providers.Failed[0].Engine != "fail-engine" {
-		t.Fatalf("expected fail-engine recorded in failed, got %s", resp3.Metadata.Providers.Failed[0].Engine)
-	}
 }
 
 func TestOrchestrator_CircuitBreakerFallback(t *testing.T) {

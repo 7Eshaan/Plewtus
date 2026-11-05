@@ -126,6 +126,9 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing yahoo response: %w", err)
 	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("yahoo response contained no parseable organic results")
+	}
 
 	return &model.ProviderResponse{
 		Engine:  p.Name(),

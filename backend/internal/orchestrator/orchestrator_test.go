@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -268,25 +269,12 @@ func TestOrchestrator_AllProvidersFail(t *testing.T) {
 
 	orch := New(reg, 1*time.Second, "test-agent", testLogger())
 
-	resp, err := orch.Search(context.Background(), &model.SearchRequest{
+	_, err := orch.Search(context.Background(), &model.SearchRequest{
 		Query:     "all fail",
 		Providers: []string{"eng1", "eng2"},
 	})
-
-	if err != nil {
-		t.Fatalf("unexpected search error: %v", err)
-	}
-
-	if len(resp.Results) != 0 {
-		t.Errorf("expected 0 results, got %d", len(resp.Results))
-	}
-
-	if resp.Metadata.TotalResults != 0 {
-		t.Errorf("expected TotalResults 0, got %d", resp.Metadata.TotalResults)
-	}
-
-	if len(resp.Metadata.Providers.Failed) != 2 {
-		t.Errorf("expected 2 failed providers, got %v", resp.Metadata.Providers.Failed)
+	if err == nil || !strings.Contains(err.Error(), "all search providers failed") {
+		t.Fatalf("expected explicit all-providers-failed error, got %v", err)
 	}
 }
 

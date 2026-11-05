@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"plewtus/internal/cache"
@@ -29,7 +30,7 @@ type Orchestrator struct {
 // New creates a new Orchestrator instance.
 func New(registry *provider.Registry, timeout time.Duration, userAgent string, logger *slog.Logger) *Orchestrator {
 	if timeout <= 0 {
-		timeout = 3 * time.Second
+		timeout = 6 * time.Second
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -198,6 +199,20 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 				}
 				return
 			}
+			if resp == nil {
+				err := fmt.Errorf("provider %s returned an empty response", name)
+				if o.breakers != nil {
+					o.breakers.Get(name).ReportFailure(err)
+				}
+				ch <- providerOutcome{name: name, err: err}
+				return
+			}
+			if len(resp.Results) == 0 {
+				o.logger.Warn("provider returned no parseable search results",
+					slog.String("engine", name),
+					slog.Duration("took", resp.Took),
+				)
+			}
 
 			if o.breakers != nil {
 				o.breakers.Get(name).ReportSuccess()
@@ -263,6 +278,13 @@ collectLoop:
 	if ctx.Err() != nil && len(successful) == 0 {
 		return nil, ctx.Err()
 	}
+	if len(successful) == 0 && len(failed) > 0 {
+		failures := make([]string, 0, len(failed))
+		for _, providerErr := range failed {
+			failures = append(failures, providerErr.Engine+": "+providerErr.Error)
+		}
+		return nil, fmt.Errorf("all search providers failed: %s", strings.Join(failures, "; "))
+	}
 
 	// 6. Sort metadata slices for deterministic JSON output
 	sort.Strings(successful)
@@ -286,6 +308,12 @@ collectLoop:
 		ExcludeDomains: req.ExcludeDomains,
 	}
 	uniqueResults, dedupedCount := pipeline.DeduplicateWithOptions(rawResponses, dedupOpts)
+	if rawCount > 0 && len(uniqueResults) == 0 {
+		o.logger.Warn("all raw provider results were rejected or filtered",
+			slog.Int("raw_results", rawCount),
+			slog.Bool("domain_filters_active", len(req.IncludeDomains) > 0 || len(req.ExcludeDomains) > 0),
+		)
+	}
 
 	// 8. Optional AI-friendly content extraction
 	if req.Extract != nil && req.Extract.Enabled && o.extractor != nil && len(uniqueResults) > 0 {

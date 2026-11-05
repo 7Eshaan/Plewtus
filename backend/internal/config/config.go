@@ -42,7 +42,7 @@ func Load() *Config {
 		LogLevel:         getEnv("PLEWTUS_LOG_LEVEL", getEnv("LOG_LEVEL", "info")),
 		DefaultProviders: getEnvAsSlice("PLEWTUS_DEFAULT_PROVIDERS", []string{"duckduckgo", "bing", "yahoo"}),
 		TrustedProxies:   getEnvAsSlice("PLEWTUS_TRUSTED_PROXIES", nil),
-		DefaultTimeout:   getEnvAsDurationMs("PLEWTUS_DEFAULT_TIMEOUT_MS", 3000),
+		DefaultTimeout:   getEnvAsDurationMs("PLEWTUS_DEFAULT_TIMEOUT_MS", 6000),
 		MaxLimit:         getEnvAsInt("PLEWTUS_MAX_LIMIT", 50),
 		DefaultLimit:     getEnvAsInt("PLEWTUS_DEFAULT_LIMIT", 10),
 		UserAgent: getEnv(

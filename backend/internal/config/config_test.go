@@ -20,8 +20,8 @@ func TestConfigDefaults(t *testing.T) {
 	if len(cfg.DefaultProviders) != 3 {
 		t.Errorf("expected 3 default providers, got %d", len(cfg.DefaultProviders))
 	}
-	if cfg.DefaultTimeout != 3*time.Second {
-		t.Errorf("expected 3s default timeout, got %v", cfg.DefaultTimeout)
+	if cfg.DefaultTimeout != 6*time.Second {
+		t.Errorf("expected 6s default timeout, got %v", cfg.DefaultTimeout)
 	}
 	if !cfg.CacheEnabled {
 		t.Errorf("expected CacheEnabled default true")

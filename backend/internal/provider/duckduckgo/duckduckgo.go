@@ -91,11 +91,7 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 		return nil, fmt.Errorf("duckduckgo fallback search failed: %w", liteErr)
 	}
 
-	return &model.ProviderResponse{
-		Engine:  p.Name(),
-		Results: []model.RawSearchResult{},
-		Took:    time.Since(start),
-	}, nil
+	return nil, fmt.Errorf("duckduckgo returned no parseable organic results from either endpoint")
 }
 
 func (p *Provider) queryEndpoint(

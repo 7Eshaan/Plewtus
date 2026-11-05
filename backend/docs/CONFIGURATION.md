@@ -13,7 +13,7 @@ Plewtus is configured via environment variables. Sane defaults are provided so t
 | `PLEWTUS_ENV` | `string` | `development` | Environment mode (`development` or `production`). In production, logs format as JSON. |
 | `PLEWTUS_LOG_LEVEL` | `string` | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`). |
 | `PLEWTUS_DEFAULT_PROVIDERS` | `string` | `duckduckgo,bing,yahoo` | Comma-separated list of active providers queried by default. |
-| `PLEWTUS_DEFAULT_TIMEOUT_MS` | `integer` | `3000` | Per-provider scrape timeout in milliseconds (default 3s). |
+| `PLEWTUS_DEFAULT_TIMEOUT_MS` | `integer` | `6000` | Per-provider scrape timeout in milliseconds (default 6s). |
 | `PLEWTUS_TRUSTED_PROXIES` | `string` | `""` | Comma-separated IP addresses/CIDRs allowed to supply `X-Forwarded-For`. When empty, forwarded headers are ignored and the socket peer identifies anonymous callers. |
 | `PLEWTUS_DEFAULT_LIMIT` | `integer` | `10` | Default results count when `limit` is omitted. |
 | `PLEWTUS_MAX_LIMIT` | `integer` | `50` | Maximum allowed results limit in a single request. |
@@ -64,7 +64,7 @@ PLEWTUS_LOG_LEVEL=info
 
 # Providers & Timeouts
 PLEWTUS_DEFAULT_PROVIDERS=duckduckgo,bing,yahoo
-PLEWTUS_DEFAULT_TIMEOUT_MS=3000
+PLEWTUS_DEFAULT_TIMEOUT_MS=6000
 PLEWTUS_TRUSTED_PROXIES=10.0.0.0/8
 PLEWTUS_DEFAULT_LIMIT=10
 PLEWTUS_MAX_LIMIT=50
