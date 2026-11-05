@@ -249,7 +249,7 @@ interface Segment {
   width: number;
 }
 
-export function AsciiHeroField({
+export const AsciiHeroField = React.memo(function AsciiHeroField({
   word = "PLEWTUS METASEARCH ",
   className,
   accentColor = [135 / 255, 0 / 255, 255 / 255], // #8700ff
@@ -836,4 +836,4 @@ export function AsciiHeroField({
       <canvas ref={canvasRef} className="block w-full h-full" />
     </div>
   );
-}
+});

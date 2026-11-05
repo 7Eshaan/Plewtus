@@ -26,6 +26,7 @@ const DEFAULT_QUERIES = [
   "model context protocol stdio",
   "distributed consensus raft",
 ];
+const HERO_ACCENT_COLOR: [number, number, number] = [135 / 255, 0, 1];
 
 export default function HomePage() {
   const [query, setQuery] = useState("");
@@ -159,7 +160,7 @@ export default function HomePage() {
           className="relative w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] flex flex-col items-center justify-center overflow-hidden scroll-mt-14"
         >
           {/* Interactive ASCII Fluid Flow Field Background (shadcn/ui style with #8700ff accent) */}
-          <AsciiHeroField word="PLEWTUS METASEARCH " accentColor={[135 / 255, 0, 255 / 255]} />
+          <AsciiHeroField word="PLEWTUS METASEARCH " accentColor={HERO_ACCENT_COLOR} />
 
           {/* Centered Hero Content Container */}
           <div className="relative z-10 w-full max-w-4xl mx-auto px-4 py-8 sm:py-12 flex flex-col items-center text-center gap-5">
