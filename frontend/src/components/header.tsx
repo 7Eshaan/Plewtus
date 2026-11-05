@@ -41,10 +41,10 @@ export function Header() {
             MCP Stdio
           </a>
           <a
-            href="#limits"
+            href="#quickstart"
             className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors"
           >
-            Limits
+            API Quickstart
           </a>
         </nav>
 

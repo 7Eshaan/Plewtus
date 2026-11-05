@@ -11,7 +11,8 @@ import {
 } from "@/components/advanced-dropdown";
 import { HowItWorks } from "@/components/how-it-works";
 import { McpSection } from "@/components/mcp-section";
-import { UsageLimits } from "@/components/usage-limits";
+import { ApiQuickstart } from "@/components/api-quickstart";
+import { AsciiHeroField } from "@/components/ascii-hero-field";
 import type { components } from "@/types/api";
 
 type SearchRequest = components["schemas"]["SearchRequest"];
@@ -152,46 +153,52 @@ export default function HomePage() {
       <Header />
 
       <main className="flex-1 w-full flex flex-col">
-        {/* Centered Hero & Metasearch Playground Section (First Fold) */}
+        {/* Full Viewport Hero with Interactive Skewed Background Boxes */}
         <section
           id="demo"
-          className="w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] flex flex-col items-center justify-center text-center px-4 py-8 sm:py-12 gap-5 max-w-4xl mx-auto scroll-mt-14"
+          className="relative w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] flex flex-col items-center justify-center overflow-hidden scroll-mt-14"
         >
-          <div className="flex flex-col items-center gap-2.5 max-w-2xl">
-            <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans text-balance">
-              Federated Search for AI Agents
-            </h1>
+          {/* Interactive ASCII Fluid Flow Field Background (shadcn/ui style with #8700ff accent) */}
+          <AsciiHeroField word="PLEWTUS METASEARCH " accentColor={[135 / 255, 0, 255 / 255]} />
 
-            <p className="text-sm sm:text-base text-zinc-500 dark:text-zinc-400 max-w-xl text-balance leading-relaxed">
-              Query DuckDuckGo, Bing, and Yahoo simultaneously. Clean canonical URLs,
-              multi-engine consensus, and Reciprocal Rank Fusion.
-            </p>
-          </div>
+          {/* Centered Hero Content Container */}
+          <div className="relative z-10 w-full max-w-4xl mx-auto px-4 py-8 sm:py-12 flex flex-col items-center text-center gap-5">
+            <div className="flex flex-col items-center gap-2.5 max-w-2xl">
+              <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans text-balance">
+                Federated Search for AI Agents
+              </h1>
 
-          {/* Centered Metasearch Playground Card with subtle #8700ff ambient glow */}
-          <div className="relative w-full max-w-4xl mx-auto pt-2">
-            <div
-              className="absolute -inset-3 bg-gradient-to-r from-[#8700ff]/10 via-[#8700ff]/5 to-[#8700ff]/10 rounded-3xl blur-2xl opacity-70 dark:opacity-40 pointer-events-none -z-10"
-              aria-hidden="true"
-            />
-            <SearchPreview
-              query={query}
-              onQueryChange={setQuery}
-              onSearch={executeSearch}
-              loading={loading}
-              providers={providers}
-              onProvidersChange={setProviders}
-              extractionMode={extractionMode}
-              onExtractionModeChange={setExtractionMode}
-              advancedOptions={advancedOptions}
-              onAdvancedOptionsChange={setAdvancedOptions}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              response={response}
-              error={error}
-              searched={searched}
-              onSelectSuggestion={handleSuggestionSelect}
-            />
+              <p className="text-sm sm:text-base text-zinc-500 dark:text-zinc-400 max-w-xl text-balance leading-relaxed">
+                Query DuckDuckGo, Bing, and Yahoo simultaneously. Clean canonical URLs,
+                multi-engine consensus, and Reciprocal Rank Fusion.
+              </p>
+            </div>
+
+            {/* Centered Metasearch Playground Card with subtle #8700ff ambient glow */}
+            <div className="relative w-full max-w-4xl mx-auto pt-2">
+              <div
+                className="absolute -inset-3 bg-gradient-to-r from-[#8700ff]/10 via-[#8700ff]/5 to-[#8700ff]/10 rounded-3xl blur-2xl opacity-70 dark:opacity-40 pointer-events-none -z-10"
+                aria-hidden="true"
+              />
+              <SearchPreview
+                query={query}
+                onQueryChange={setQuery}
+                onSearch={executeSearch}
+                loading={loading}
+                providers={providers}
+                onProvidersChange={setProviders}
+                extractionMode={extractionMode}
+                onExtractionModeChange={setExtractionMode}
+                advancedOptions={advancedOptions}
+                onAdvancedOptionsChange={setAdvancedOptions}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                response={response}
+                error={error}
+                searched={searched}
+                onSelectSuggestion={handleSuggestionSelect}
+              />
+            </div>
           </div>
         </section>
 
@@ -212,8 +219,8 @@ export default function HomePage() {
           {/* Section Divider */}
           <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80 my-2" />
 
-          {/* Usage & Rate Limits Section */}
-          <UsageLimits />
+          {/* API Quickstart & Code Integration Section */}
+          <ApiQuickstart />
         </div>
       </main>
 
@@ -236,8 +243,8 @@ export default function HomePage() {
             <a href="#mcp" className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors">
               MCP Stdio
             </a>
-            <a href="#limits" className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors">
-              Limits
+            <a href="#quickstart" className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors">
+              API Quickstart
             </a>
           </div>
 

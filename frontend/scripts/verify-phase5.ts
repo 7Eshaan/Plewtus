@@ -49,11 +49,11 @@ async function run() {
   console.log("\n--- 2. Phase 5 Component Files ---");
   const howItWorksPath = resolve(FRONTEND_DIR, "src/components/how-it-works.tsx");
   const mcpSectionPath = resolve(FRONTEND_DIR, "src/components/mcp-section.tsx");
-  const usageLimitsPath = resolve(FRONTEND_DIR, "src/components/usage-limits.tsx");
+  const quickstartPath = resolve(FRONTEND_DIR, "src/components/api-quickstart.tsx");
 
   assert(existsSync(howItWorksPath), "how-it-works.tsx exists");
   assert(existsSync(mcpSectionPath), "mcp-section.tsx exists");
-  assert(existsSync(usageLimitsPath), "usage-limits.tsx exists");
+  assert(existsSync(quickstartPath), "api-quickstart.tsx exists");
 
   // Test 3: MCP Documentation Fidelity
   console.log("\n--- 3. MCP Specification Fidelity ---");
@@ -73,15 +73,12 @@ async function run() {
   assert(howContent.includes("Reciprocal Rank Fusion (RRF)"), "Explains RRF algorithm");
   assert(howContent.includes("k = 60"), "States standard RRF smoothing constant k=60");
 
-  // Test 5: Usage Limits Fidelity
-  console.log("\n--- 5. Usage Limits Fidelity ---");
-  const limitsContent = readFileSync(usageLimitsPath, "utf-8");
-  assert(limitsContent.includes("10 requests / min"), "Free tier rate limit (10 req/min)");
-  assert(limitsContent.includes("100 requests / day"), "Free tier daily quota (100 req/day)");
-  assert(limitsContent.includes("60 requests / min"), "Pro tier rate limit (60 req/min)");
-  assert(limitsContent.includes("2,000 requests / day"), "Pro tier daily quota (2,000 req/day)");
-  assert(limitsContent.includes("X-RateLimit-*"), "Documents rate limit response headers");
-  assert(limitsContent.includes("Token Bucket Algorithm"), "Identifies token bucket algorithm");
+  // Test 5: API Quickstart Fidelity
+  console.log("\n--- 5. API Quickstart Fidelity ---");
+  const quickContent = readFileSync(quickstartPath, "utf-8");
+  assert(quickContent.includes("POST http://localhost:8080/search"), "Contains search endpoint");
+  assert(quickContent.includes("distributed consensus raft"), "Includes sample payload");
+  assert(quickContent.includes("RRF"), "Documents RRF ranking");
 
   // Test 6: ESLint Verification
   console.log("\n--- 6. ESLint Pass ---");
