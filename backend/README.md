@@ -73,6 +73,8 @@ Plewtus is free, cost-efficient, and runs with **zero external dependencies** ou
 
 ## Quick Start
 
+To run both the backend and frontend as containers, follow the root [Docker Compose guide](../README.md#run-the-full-stack-with-docker).
+
 ### 1. Build
 
 Requires Go 1.22+ (tested on `go1.27.3 darwin/arm64`). From the `backend/` directory:

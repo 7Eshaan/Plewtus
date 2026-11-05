@@ -1,0 +1,9 @@
+.git
+node_modules
+.next
+out
+.vercel
+*.tsbuildinfo
+.env
+.env.*
+!.env.example

@@ -1,5 +1,7 @@
 # Plewtus Frontend
 
+To build and run the full application with Docker Compose, follow the root [Docker guide](../README.md#run-the-full-stack-with-docker).
+
 The Next.js App Router application provides an interactive metasearch demo and API/MCP quickstarts. Its `/api/search` route applies a process-local per-IP guard and forwards requests to the Go backend using a server-only API key.
 
 ## Run locally
