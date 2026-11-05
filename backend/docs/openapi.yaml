@@ -182,8 +182,8 @@ components:
           type: integer
           default: 0
           minimum: 0
-          maximum: 100
-          description: Pagination offset for slicing global ranked results.
+          maximum: 49
+          description: Pagination offset. offset + limit must not exceed the 50-result provider window.
         providers:
           type: array
           items:
@@ -240,7 +240,7 @@ components:
         max_chars_per_page:
           type: integer
           default: 4000
-          minimum: 500
+          minimum: 1
           maximum: 20000
           description: Maximum character limit per extracted page.
 

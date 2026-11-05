@@ -2,6 +2,7 @@ package bing
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -10,8 +11,8 @@ import (
 )
 
 func TestBing_LiveQueries(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live network test in short mode")
+	if testing.Short() || os.Getenv("PLEWTUS_LIVE_TESTS") != "1" {
+		t.Skip("set PLEWTUS_LIVE_TESTS=1 to run live Bing test")
 	}
 
 	p := New(8*time.Second, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")

@@ -82,7 +82,7 @@ export interface components {
              */
             limit: number;
             /**
-             * @description Pagination offset for slicing global ranked results.
+             * @description Pagination offset. offset + limit must not exceed the 50-result provider window.
              * @default 0
              */
             offset: number;

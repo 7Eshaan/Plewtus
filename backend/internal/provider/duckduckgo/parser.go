@@ -12,10 +12,7 @@ import (
 	"plewtus/internal/provider/htmlutil"
 )
 
-var (
-	ErrChallengeEncountered = errors.New("duckduckgo challenge/captcha encountered")
-	ErrNoResultsFound       = errors.New("no results found on duckduckgo")
-)
+var ErrChallengeEncountered = errors.New("duckduckgo challenge/captcha encountered")
 
 // ParseHTMLResponse parses DuckDuckGo /html/ endpoint response.
 func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"testing"
 	"time"
 
@@ -15,11 +16,11 @@ import (
 
 // mockProvider implements provider.Provider for testing.
 type mockProvider struct {
-	name     string
-	delay    time.Duration
-	results  []model.RawSearchResult
-	err      error
-	panics   bool
+	name    string
+	delay   time.Duration
+	results []model.RawSearchResult
+	err     error
+	panics  bool
 }
 
 func (m *mockProvider) Name() string {
@@ -426,8 +427,8 @@ func TestOrchestrator_Deduplication(t *testing.T) {
 }
 
 func TestOrchestrator_LiveEngines(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live multi-provider orchestration test in short mode")
+	if testing.Short() || os.Getenv("PLEWTUS_LIVE_TESTS") != "1" {
+		t.Skip("set PLEWTUS_LIVE_TESTS=1 to run live multi-provider orchestration test")
 	}
 
 	reg := all.NewRegistry(5*time.Second, "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
@@ -626,5 +627,3 @@ func TestOrchestrator_OffsetPagination(t *testing.T) {
 		t.Errorf("unexpected page 2 results: %+v", respPage2.Results)
 	}
 }
-
-

@@ -2,10 +2,20 @@ package provider
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 
 	"plewtus/internal/model"
 )
+
+func TestReadBodyRejectsOversizedResponse(t *testing.T) {
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(strings.Repeat("x", (4<<20)+1)))}
+	if _, err := ReadBody(resp); err == nil {
+		t.Fatal("expected oversized search response to be rejected")
+	}
+}
 
 type mockProvider struct {
 	name string

@@ -31,10 +31,10 @@ type JSONRPCRequest struct {
 
 // JSONRPCResponse represents an outgoing JSON-RPC 2.0 message.
 type JSONRPCResponse struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      any             `json:"id,omitempty"`
-	Result  any             `json:"result,omitempty"`
-	Error   *JSONRPCError   `json:"error,omitempty"`
+	JSONRPC string        `json:"jsonrpc"`
+	ID      any           `json:"id,omitempty"`
+	Result  any           `json:"result,omitempty"`
+	Error   *JSONRPCError `json:"error,omitempty"`
 }
 
 // JSONRPCError represents a JSON-RPC error object.
@@ -67,25 +67,31 @@ type ToolCallResult struct {
 
 // Server provides a Model Context Protocol (MCP) stdio server for AI agents.
 type Server struct {
-	searcher  Searcher
-	extractor extractor.ContentExtractor
-	logger    *slog.Logger
-	in        io.Reader
-	out       io.Writer
-	mu        sync.Mutex
+	searcher         Searcher
+	extractor        extractor.ContentExtractor
+	defaultProviders []string
+	logger           *slog.Logger
+	in               io.Reader
+	out              io.Writer
+	mu               sync.Mutex
 }
 
 // NewServer creates a new MCP Server instance.
-func NewServer(searcher Searcher, ext extractor.ContentExtractor, in io.Reader, out io.Writer, logger *slog.Logger) *Server {
+func NewServer(searcher Searcher, ext extractor.ContentExtractor, in io.Reader, out io.Writer, logger *slog.Logger, defaultProviders ...[]string) *Server {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+	providers := []string{"duckduckgo", "bing", "yahoo"}
+	if len(defaultProviders) > 0 && len(defaultProviders[0]) > 0 {
+		providers = append([]string(nil), defaultProviders[0]...)
+	}
 	return &Server{
-		searcher:  searcher,
-		extractor: ext,
-		logger:    logger,
-		in:        in,
-		out:       out,
+		searcher:         searcher,
+		extractor:        ext,
+		defaultProviders: providers,
+		logger:           logger,
+		in:               in,
+		out:              out,
 	}
 }
 
@@ -196,7 +202,9 @@ func (s *Server) toolDefinitions() []map[string]any {
 					},
 					"offset": map[string]any{
 						"type":        "integer",
-						"description": "Pagination offset (default 0).",
+						"minimum":     0,
+						"maximum":     49,
+						"description": "Pagination offset (default 0); offset + limit must not exceed 50.",
 					},
 					"freshness": map[string]any{
 						"type":        "string",
@@ -238,6 +246,7 @@ func (s *Server) toolDefinitions() []map[string]any {
 				"properties": map[string]any{
 					"urls": map[string]any{
 						"type":        "array",
+						"maxItems":    10,
 						"items":       map[string]any{"type": "string"},
 						"description": "List of HTTP/HTTPS URLs to scrape and extract.",
 					},
@@ -248,6 +257,8 @@ func (s *Server) toolDefinitions() []map[string]any {
 					},
 					"max_chars": map[string]any{
 						"type":        "integer",
+						"minimum":     1,
+						"maximum":     20000,
 						"description": "Maximum characters per page (default 4000).",
 					},
 				},
@@ -335,7 +346,7 @@ func (s *Server) executeSearchTool(ctx context.Context, argsRaw json.RawMessage)
 		}
 	}
 
-	req.Normalize(10, 50, []string{"duckduckgo", "bing", "yahoo"})
+	req.Normalize(10, 50, s.defaultProviders)
 	if err := req.Validate(); err != nil {
 		return &ToolCallResult{
 			Content: []ToolContent{{Type: "text", Text: "Validation Error: " + err.Error()}},
@@ -391,14 +402,22 @@ func (s *Server) executeExtractTool(ctx context.Context, argsRaw json.RawMessage
 			IsError: true,
 		}, nil
 	}
+	if len(args.URLs) > 10 {
+		return &ToolCallResult{Content: []ToolContent{{Type: "text", Text: "Error: at most 10 URLs can be extracted per call"}}, IsError: true}, nil
+	}
 
-	mode := args.Mode
+	mode := strings.ToLower(strings.TrimSpace(args.Mode))
 	if mode == "" {
 		mode = "markdown"
+	}
+	if mode != "markdown" && mode != "highlights" && mode != "text" && mode != "metadata" {
+		return &ToolCallResult{Content: []ToolContent{{Type: "text", Text: "Error: mode must be markdown, highlights, text, or metadata"}}, IsError: true}, nil
 	}
 	maxChars := args.MaxChars
 	if maxChars <= 0 {
 		maxChars = 4000
+	} else if maxChars > 20000 {
+		maxChars = 20000
 	}
 
 	opts := &model.ExtractOptions{

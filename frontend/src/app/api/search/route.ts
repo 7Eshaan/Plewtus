@@ -6,6 +6,38 @@ type SearchRequest = components["schemas"]["SearchRequest"];
 type SearchResponse = components["schemas"]["SearchResponse"];
 type ErrorResponse = components["schemas"]["ErrorResponse"];
 
+const MAX_REQUEST_BYTES = 1 << 20;
+
+async function readBoundedBody(req: Request): Promise<unknown> {
+  const declaredLength = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
+    throw new RangeError("request body too large");
+  }
+
+  if (!req.body) return {};
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_REQUEST_BYTES) {
+      await reader.cancel();
+      throw new RangeError("request body too large");
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
 export async function POST(req: Request): Promise<NextResponse<SearchResponse | ErrorResponse>> {
   // 1. Enforce per-IP rate limiting at the route handler level
   const ip = getClientIp(req);
@@ -55,8 +87,14 @@ export async function POST(req: Request): Promise<NextResponse<SearchResponse | 
   // 3. Parse and validate request body
   let body: SearchRequest;
   try {
-    body = await req.json();
-  } catch {
+    body = (await readBoundedBody(req)) as SearchRequest;
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return NextResponse.json<ErrorResponse>(
+        { error: "payload_too_large", message: `Request body exceeds ${MAX_REQUEST_BYTES} bytes.`, code: 413 },
+        { status: 413, headers: rateLimitHeaders }
+      );
+    }
     return NextResponse.json<ErrorResponse>(
       {
         error: "invalid_json",
@@ -97,9 +135,18 @@ export async function POST(req: Request): Promise<NextResponse<SearchResponse | 
       },
       body: JSON.stringify(body),
       cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
     });
 
-    const data = await backendRes.json();
+    let data: unknown;
+    try {
+      data = JSON.parse(await backendRes.text());
+    } catch {
+      return NextResponse.json<ErrorResponse>(
+        { error: "invalid_backend_response", message: "Search backend returned a non-JSON response.", code: 502 },
+        { status: 502, headers: rateLimitHeaders }
+      );
+    }
 
     // Relay backend quota headers if present, alongside our rate limit headers
     const responseHeaders: Record<string, string> = {
@@ -112,8 +159,10 @@ export async function POST(req: Request): Promise<NextResponse<SearchResponse | 
     if (quotaLimit) responseHeaders["X-Quota-Limit"] = quotaLimit;
     if (quotaRemaining) responseHeaders["X-Quota-Remaining"] = quotaRemaining;
     if (quotaReset) responseHeaders["X-Quota-Reset"] = quotaReset;
+    const retryAfter = backendRes.headers.get("Retry-After");
+    if (retryAfter) responseHeaders["Retry-After"] = retryAfter;
 
-    return NextResponse.json(data, {
+    return NextResponse.json<SearchResponse | ErrorResponse>(data as SearchResponse | ErrorResponse, {
       status: backendRes.status,
       headers: responseHeaders,
     });

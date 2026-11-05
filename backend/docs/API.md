@@ -18,7 +18,7 @@ Plewtus supports two modes of access:
 
 1. **Configurable Free Usage Tier (Default):**
    - Unauthenticated requests are allowed by default without requiring an API key.
-   - Rate limits and daily quotas are tracked per client IP (using `X-Forwarded-For`, `X-Real-IP`, or remote network address).
+   - Rate limits and daily quotas are tracked per client IP or API key. The backend uses the socket peer by default and only honors `X-Forwarded-For` when the socket peer matches `PLEWTUS_TRUSTED_PROXIES`.
    - Default: 10 requests per minute, 100 requests per UTC day.
 
 2. **API Key Authentication:**
@@ -70,7 +70,7 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 |---|---|---|---|---|
 | `query` | `string` | **Yes** | — | Search query to execute. |
 | `limit` | `integer` | No | `10` | Max ranked results to return (max `50`). |
-| `offset` | `integer` | No | `0` | Offset for slicing results across paginated requests (max `100`). |
+| `offset` | `integer` | No | `0` | Offset for slicing results. `offset + limit` must be at most `50`, matching the provider fetch window. |
 | `providers` | `[]string` | No | `["duckduckgo", "bing", "yahoo"]` | Subset of search engines to query. |
 | `freshness` | `string` | No | `""` | Discovery recency: `"day"`, `"week"`, `"month"`, or `"year"`. |
 | `include_domains` | `[]string` | No | `[]` | Only return results matching these hostnames/subdomains. |
@@ -87,6 +87,8 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 | `mode` | `string` | `"highlights"` | Format: `"markdown"`, `"highlights"`, `"text"`, or `"metadata"`. |
 | `max_pages` | `integer` | `3` | Maximum number of top results to extract (max `10`). |
 | `max_chars_per_page` | `integer` | `4000` | Maximum character length per extracted page (max `20000`). |
+
+Request bodies are limited to 1 MiB and must contain exactly one JSON value. Search-engine HTML responses are capped at 4 MiB. Usage counters and the frontend proxy limiter are process-local in-memory guards; use a shared gateway/store for limits that must span replicas or survive restarts.
 
 ---
 

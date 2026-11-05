@@ -184,23 +184,30 @@ func TestUsage_ClientIPExtraction(t *testing.T) {
 		},
 	})
 
-	// Case 1: X-Forwarded-For with multiple IPs
+	// Forwarding headers from an untrusted socket peer must not change identity.
 	req1 := httptest.NewRequest(http.MethodPost, "/search", nil)
+	req1.RemoteAddr = "198.51.100.10:1234"
 	req1.Header.Set("X-Forwarded-For", "203.0.113.195, 70.41.3.18, 150.172.238.178")
-	res1, _ := mgr.Check(req1)
-	if res1.Identity.Address != "203.0.113.195" {
-		t.Fatalf("expected first IP '203.0.113.195', got %s", res1.Identity.Address)
+	req1.Header.Set("X-Real-IP", "203.0.113.196")
+	res1, err := mgr.Check(req1)
+	if err != nil || res1.Identity.Address != "198.51.100.10" {
+		t.Fatalf("untrusted forwarding headers changed client identity: result=%+v err=%v", res1, err)
 	}
 
-	// Case 2: X-Real-IP
+	// A configured trusted proxy may provide an X-Forwarded-For chain.
+	trustedMgr := NewManager(Options{
+		Tiers:          map[string]Tier{"free": {Name: "free", RateLimitPerMin: 10, DailyQuota: 100}},
+		TrustedProxies: []string{"10.0.0.0/8"},
+	})
 	req2 := httptest.NewRequest(http.MethodPost, "/search", nil)
-	req2.Header.Set("X-Real-IP", "198.51.100.2")
-	res2, _ := mgr.Check(req2)
-	if res2.Identity.Address != "198.51.100.2" {
-		t.Fatalf("expected '198.51.100.2', got %s", res2.Identity.Address)
+	req2.RemoteAddr = "10.0.0.2:443"
+	req2.Header.Set("X-Forwarded-For", "203.0.113.195, 10.0.0.1")
+	res2, err := trustedMgr.Check(req2)
+	if err != nil || res2.Identity.Address != "203.0.113.195" {
+		t.Fatalf("expected trusted proxy client address 203.0.113.195, result=%+v err=%v", res2, err)
 	}
 
-	// Case 3: RemoteAddr with IPv6 and port
+	// RemoteAddr with IPv6 and port is normalized when no trusted proxy is configured.
 	req3 := httptest.NewRequest(http.MethodPost, "/search", nil)
 	req3.RemoteAddr = "[2001:db8::1]:54321"
 	res3, _ := mgr.Check(req3)

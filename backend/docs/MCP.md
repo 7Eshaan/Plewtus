@@ -72,7 +72,7 @@ Search the web across multiple search engines with automatic consensus deduplica
 **Parameters:**
 - `query` (`string`, **required**): The search query.
 - `limit` (`integer`, optional): Max results to return (default 10, max 50).
-- `offset` (`integer`, optional): Pagination offset (default 0).
+- `offset` (`integer`, optional): Pagination offset (default 0); `offset + limit` cannot exceed 50.
 - `freshness` (`string`, optional): Recency filter (`"day"`, `"week"`, `"month"`, `"year"`).
 - `include_domains` (`array<string>`, optional): Whitelist of hostnames/domains.
 - `exclude_domains` (`array<string>`, optional): Blacklist of hostnames/domains.
@@ -84,9 +84,9 @@ Search the web across multiple search engines with automatic consensus deduplica
 Extract clean text, Markdown, or highlights from one or more target URLs with SSRF protection and resource capping.
 
 **Parameters:**
-- `urls` (`array<string>`, **required**): Array of HTTP/HTTPS URLs to scrape and extract.
+- `urls` (`array<string>`, **required**): Array of HTTP/HTTPS URLs to scrape and extract (maximum 10 per call).
 - `mode` (`string`, optional): Extraction format: `"markdown"`, `"highlights"`, `"text"`, or `"metadata"` (default `"markdown"`).
-- `max_chars` (`integer`, optional): Character limit per extracted page (default 4000).
+- `max_chars` (`integer`, optional): Character limit per extracted page (default 4000, maximum 20000).
 
 ---
 

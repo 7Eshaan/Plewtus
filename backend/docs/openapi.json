@@ -3,7 +3,7 @@
   "info": {
     "title": "Plewtus Metasearch API",
     "version": "0.1.0",
-    "description": "Plewtus is an AI-agent search API backend that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture. Results are normalized, deduplicated, and ranked via Reciprocal Rank Fusion (RRF), with optional AI-friendly webpage extraction (clean text, highlights, Markdown).",
+    "description": "Plewtus is an AI-agent search API backend that aggregates search results across\nmultiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture.\nResults are normalized, deduplicated, and ranked via Reciprocal Rank Fusion (RRF),\nwith optional AI-friendly webpage extraction (clean text, highlights, Markdown).\n",
     "license": {
       "name": "MIT"
     }
@@ -18,11 +18,15 @@
     "/search": {
       "post": {
         "summary": "Execute federated search",
-        "description": "Dispatches concurrent search queries across upstream search engines, normalizes and deduplicates results, computes Reciprocal Rank Fusion (RRF) scores, and optionally extracts webpage content for AI agents.",
+        "description": "Dispatches concurrent search queries across upstream search engines, normalizes\nand deduplicates results, computes Reciprocal Rank Fusion (RRF) scores, and\noptionally extracts webpage content for AI agents.\n",
         "operationId": "search",
         "security": [
-          { "BearerAuth": [] },
-          { "ApiKeyAuth": [] },
+          {
+            "BearerAuth": []
+          },
+          {
+            "ApiKeyAuth": []
+          },
           {}
         ],
         "requestBody": {
@@ -31,6 +35,40 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SearchRequest"
+              },
+              "examples": {
+                "simple": {
+                  "summary": "Simple search query",
+                  "value": {
+                    "query": "golang concurrency patterns",
+                    "limit": 10
+                  }
+                },
+                "filtered": {
+                  "summary": "Filtered search with recency and domain inclusion",
+                  "value": {
+                    "query": "machine learning benchmarks",
+                    "freshness": "month",
+                    "include_domains": [
+                      "arxiv.org",
+                      "paperswithcode.com"
+                    ],
+                    "limit": 5
+                  }
+                },
+                "with_extraction": {
+                  "summary": "Search with AI Markdown extraction",
+                  "value": {
+                    "query": "go standard library net/http",
+                    "limit": 3,
+                    "extract": {
+                      "enabled": true,
+                      "mode": "markdown",
+                      "max_pages": 3,
+                      "max_chars_per_page": 4000
+                    }
+                  }
+                }
               }
             }
           }
@@ -40,27 +78,39 @@
             "description": "Successful search execution with unified results and metadata.",
             "headers": {
               "X-RateLimit-Limit": {
-                "schema": { "type": "integer" },
+                "schema": {
+                  "type": "integer"
+                },
                 "description": "Maximum requests allowed per minute in active tier."
               },
               "X-RateLimit-Remaining": {
-                "schema": { "type": "integer" },
+                "schema": {
+                  "type": "integer"
+                },
                 "description": "Remaining requests in current rate limit window."
               },
               "X-RateLimit-Reset": {
-                "schema": { "type": "integer" },
+                "schema": {
+                  "type": "integer"
+                },
                 "description": "Seconds until rate limit bucket refills."
               },
               "X-Quota-Limit": {
-                "schema": { "type": "integer" },
+                "schema": {
+                  "type": "integer"
+                },
                 "description": "Daily request quota limit."
               },
               "X-Quota-Remaining": {
-                "schema": { "type": "integer" },
+                "schema": {
+                  "type": "integer"
+                },
                 "description": "Remaining requests for current UTC day."
               },
               "X-Quota-Reset": {
-                "schema": { "type": "integer" },
+                "schema": {
+                  "type": "integer"
+                },
                 "description": "Seconds until daily quota resets at 00:00:00 UTC."
               }
             },
@@ -106,7 +156,9 @@
             "description": "Too Many Requests (rate limit or daily quota exceeded).",
             "headers": {
               "Retry-After": {
-                "schema": { "type": "integer" },
+                "schema": {
+                  "type": "integer"
+                },
                 "description": "Seconds to wait before retrying request."
               }
             },
@@ -187,7 +239,9 @@
     "schemas": {
       "SearchRequest": {
         "type": "object",
-        "required": ["query"],
+        "required": [
+          "query"
+        ],
         "properties": {
           "query": {
             "type": "string",
@@ -205,39 +259,63 @@
             "type": "integer",
             "default": 0,
             "minimum": 0,
-            "maximum": 100,
-            "description": "Pagination offset for slicing global ranked results."
+            "maximum": 49,
+            "description": "Pagination offset. offset + limit must not exceed the 50-result provider window."
           },
           "providers": {
             "type": "array",
             "items": {
               "type": "string",
-              "enum": ["duckduckgo", "bing", "yahoo"]
+              "enum": [
+                "duckduckgo",
+                "bing",
+                "yahoo"
+              ]
             },
-            "description": "Optional list of search engines to query."
+            "description": "Optional list of search engines to query. Defaults to all active providers."
           },
           "freshness": {
             "type": "string",
-            "enum": ["day", "week", "month", "year"],
+            "enum": [
+              "day",
+              "week",
+              "month",
+              "year"
+            ],
             "description": "Optional discovery recency filter."
           },
           "include_domains": {
             "type": "array",
-            "items": { "type": "string" },
-            "description": "Restrict search results strictly to these domains."
+            "items": {
+              "type": "string"
+            },
+            "description": "Restrict search results strictly to these domains or subdomains.",
+            "example": [
+              "go.dev",
+              "golang.org"
+            ]
           },
           "exclude_domains": {
             "type": "array",
-            "items": { "type": "string" },
-            "description": "Exclude any search results originating from these domains."
+            "items": {
+              "type": "string"
+            },
+            "description": "Exclude any search results originating from these domains or subdomains.",
+            "example": [
+              "pinterest.com"
+            ]
           },
           "country": {
             "type": "string",
-            "description": "2-letter ISO 3166-1 country code."
+            "pattern": "^[a-zA-Z]{2}$",
+            "description": "2-letter ISO 3166-1 alpha-2 country code.",
+            "example": "us"
           },
           "language": {
             "type": "string",
-            "description": "2-letter ISO 639-1 language code."
+            "pattern": "^[a-zA-Z]{2}$",
+            "description": "2-letter ISO 639-1 language code.",
+            "example": "en"
           },
           "extract": {
             "$ref": "#/components/schemas/ExtractOptions"
@@ -249,12 +327,17 @@
         "properties": {
           "enabled": {
             "type": "boolean",
-            "description": "Whether to fetch and extract webpage content.",
+            "description": "Whether to fetch and extract webpage content for discovered results.",
             "default": false
           },
           "mode": {
             "type": "string",
-            "enum": ["highlights", "markdown", "text", "metadata"],
+            "enum": [
+              "highlights",
+              "markdown",
+              "text",
+              "metadata"
+            ],
             "default": "highlights",
             "description": "Content extraction format."
           },
@@ -262,21 +345,30 @@
             "type": "integer",
             "default": 3,
             "minimum": 1,
-            "maximum": 10
+            "maximum": 10,
+            "description": "Maximum number of top results to extract content from."
           },
           "max_chars_per_page": {
             "type": "integer",
             "default": 4000,
-            "minimum": 500,
-            "maximum": 20000
+            "minimum": 1,
+            "maximum": 20000,
+            "description": "Maximum character limit per extracted page."
           }
         }
       },
       "SearchResponse": {
         "type": "object",
-        "required": ["query", "results", "metadata"],
+        "required": [
+          "query",
+          "results",
+          "metadata"
+        ],
         "properties": {
-          "query": { "type": "string" },
+          "query": {
+            "type": "string",
+            "description": "The echoed normalized search query."
+          },
           "results": {
             "type": "array",
             "items": {
@@ -290,21 +382,57 @@
       },
       "SearchResult": {
         "type": "object",
-        "required": ["id", "title", "url", "snippet", "rank", "score", "engines"],
+        "required": [
+          "id",
+          "title",
+          "url",
+          "snippet",
+          "rank",
+          "score",
+          "engines"
+        ],
         "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "url": { "type": "string" },
-          "snippet": { "type": "string" },
-          "rank": { "type": "integer" },
-          "score": { "type": "number", "format": "double" },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the deduplicated result.",
+            "example": "res_1"
+          },
+          "title": {
+            "type": "string",
+            "description": "Cleaned, non-truncated webpage title."
+          },
+          "url": {
+            "type": "string",
+            "description": "Normalized destination URL with tracking tokens stripped.",
+            "example": "https://go.dev/blog/pipelines"
+          },
+          "snippet": {
+            "type": "string",
+            "description": "Relevant summary snippet."
+          },
+          "rank": {
+            "type": "integer",
+            "description": "Unified ranking position (1-based).",
+            "example": 1
+          },
+          "score": {
+            "type": "number",
+            "format": "double",
+            "description": "Reciprocal Rank Fusion (RRF) score.",
+            "example": 0.04918
+          },
           "engines": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EngineSource"
-            }
+            },
+            "description": "Search engines that independently discovered this result."
           },
-          "published_date": { "type": "string" },
+          "published_date": {
+            "type": "string",
+            "description": "Publication date extracted from SERP or document.",
+            "example": "Mar 13, 2014"
+          },
           "content": {
             "$ref": "#/components/schemas/ExtractedContent"
           }
@@ -312,32 +440,74 @@
       },
       "EngineSource": {
         "type": "object",
-        "required": ["name", "position"],
+        "required": [
+          "name",
+          "position"
+        ],
         "properties": {
-          "name": { "type": "string" },
-          "position": { "type": "integer" }
+          "name": {
+            "type": "string",
+            "description": "Search engine name (duckduckgo, bing, yahoo).",
+            "example": "duckduckgo"
+          },
+          "position": {
+            "type": "integer",
+            "description": "1-based original ranking position on engine SERP.",
+            "example": 1
+          }
         }
       },
       "ExtractedContent": {
         "type": "object",
         "properties": {
-          "markdown": { "type": "string" },
-          "text": { "type": "string" },
+          "markdown": {
+            "type": "string",
+            "description": "Clean Markdown representation of webpage content."
+          },
+          "text": {
+            "type": "string",
+            "description": "Plain text extracted from primary article elements."
+          },
           "highlights": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            },
+            "description": "Salient snippet highlights scored against search query."
           },
-          "author": { "type": "string" },
-          "description": { "type": "string" },
-          "extracted_at": { "type": "string", "format": "date-time" }
+          "author": {
+            "type": "string",
+            "description": "Extracted author from HTML meta tags."
+          },
+          "description": {
+            "type": "string",
+            "description": "Meta description tag value."
+          },
+          "extracted_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC timestamp when extraction was performed."
+          }
         }
       },
       "SearchMetadata": {
         "type": "object",
-        "required": ["total_results", "took_ms", "providers", "stats", "timestamp"],
+        "required": [
+          "total_results",
+          "took_ms",
+          "providers",
+          "stats",
+          "timestamp"
+        ],
         "properties": {
-          "total_results": { "type": "integer" },
-          "took_ms": { "type": "integer" },
+          "total_results": {
+            "type": "integer",
+            "description": "Number of results returned in this response."
+          },
+          "took_ms": {
+            "type": "integer",
+            "description": "Total request execution time in milliseconds."
+          },
           "providers": {
             "$ref": "#/components/schemas/ProviderMetadata"
           },
@@ -347,81 +517,165 @@
           "filters": {
             "$ref": "#/components/schemas/AppliedFilters"
           },
-          "cached": { "type": "boolean" },
-          "timestamp": { "type": "string", "format": "date-time" }
+          "cached": {
+            "type": "boolean",
+            "description": "Indicates whether this response was served directly from in-memory cache."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC3339 UTC timestamp."
+          }
         }
       },
       "ProviderMetadata": {
         "type": "object",
-        "required": ["queried", "successful", "failed"],
+        "required": [
+          "queried",
+          "successful",
+          "failed"
+        ],
         "properties": {
           "queried": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            },
+            "description": "Engine names dispatched."
           },
           "successful": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            },
+            "description": "Engine names that successfully returned results."
           },
           "failed": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ProviderError"
-            }
+            },
+            "description": "Engines that failed, timed out, or encountered open circuit breakers."
           }
         }
       },
       "ProviderError": {
         "type": "object",
-        "required": ["engine", "error"],
+        "required": [
+          "engine",
+          "error"
+        ],
         "properties": {
-          "engine": { "type": "string" },
-          "error": { "type": "string" }
+          "engine": {
+            "type": "string",
+            "description": "Failing search engine name."
+          },
+          "error": {
+            "type": "string",
+            "description": "Granular description of failure or circuit breaker state."
+          }
         }
       },
       "SearchStats": {
         "type": "object",
-        "required": ["raw_count", "deduped_count"],
+        "required": [
+          "raw_count",
+          "deduped_count"
+        ],
         "properties": {
-          "raw_count": { "type": "integer" },
-          "deduped_count": { "type": "integer" }
+          "raw_count": {
+            "type": "integer",
+            "description": "Total raw results retrieved across all engines before deduplication."
+          },
+          "deduped_count": {
+            "type": "integer",
+            "description": "Total unique results identified after canonical URL normalization."
+          }
         }
       },
       "AppliedFilters": {
         "type": "object",
         "properties": {
-          "freshness": { "type": "string" },
+          "freshness": {
+            "type": "string"
+          },
           "include_domains": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
           "exclude_domains": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           },
-          "country": { "type": "string" },
-          "language": { "type": "string" },
-          "offset": { "type": "integer" },
-          "limit": { "type": "integer" }
+          "country": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          }
         }
       },
       "HealthResponse": {
         "type": "object",
-        "required": ["status", "version", "uptime_seconds", "timestamp"],
+        "required": [
+          "status",
+          "version",
+          "uptime_seconds",
+          "timestamp"
+        ],
         "properties": {
-          "status": { "type": "string", "example": "ok" },
-          "version": { "type": "string", "example": "0.1.0" },
-          "uptime_seconds": { "type": "number", "format": "double" },
-          "timestamp": { "type": "string", "format": "date-time" }
+          "status": {
+            "type": "string",
+            "example": "ok"
+          },
+          "version": {
+            "type": "string",
+            "example": "0.1.0"
+          },
+          "uptime_seconds": {
+            "type": "number",
+            "format": "double",
+            "example": 125.4
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
         }
       },
       "ErrorResponse": {
         "type": "object",
-        "required": ["error", "message", "code"],
+        "required": [
+          "error",
+          "message",
+          "code"
+        ],
         "properties": {
-          "error": { "type": "string" },
-          "message": { "type": "string" },
-          "code": { "type": "integer" }
+          "error": {
+            "type": "string",
+            "description": "Short machine-readable error token.",
+            "example": "rate_limit_exceeded"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable error explanation.",
+            "example": "Rate limit exceeded: limit 10 req/min for tier 'free' (retry in 12s)"
+          },
+          "code": {
+            "type": "integer",
+            "description": "HTTP status code.",
+            "example": 429
+          }
         }
       }
     }

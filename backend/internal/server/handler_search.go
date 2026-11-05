@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -71,11 +72,21 @@ func (s *Server) handleSearch() http.HandlerFunc {
 
 		// 2. Decode and validate request payload
 		var req model.SearchRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		const maxSearchRequestBytes = 1 << 20
+		r.Body = http.MaxBytesReader(w, r.Body, maxSearchRequestBytes)
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&req); err != nil {
 			WriteJSON(w, http.StatusBadRequest, model.ErrorResponse{
 				Error:   "invalid_json",
 				Message: "Malformed JSON payload: " + err.Error(),
 				Code:    http.StatusBadRequest,
+			})
+			return
+		}
+		var trailing any
+		if err := decoder.Decode(&trailing); err != io.EOF {
+			WriteJSON(w, http.StatusBadRequest, model.ErrorResponse{
+				Error: "invalid_json", Message: "Request body must contain exactly one JSON value.", Code: http.StatusBadRequest,
 			})
 			return
 		}

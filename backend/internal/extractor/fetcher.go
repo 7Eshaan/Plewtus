@@ -18,7 +18,6 @@ type Fetcher struct {
 	client       *http.Client
 	userAgent    string
 	maxBodyBytes int64
-	timeout      time.Duration
 }
 
 // FetcherOptions configures the Fetcher.
@@ -79,7 +78,6 @@ func NewFetcher(opts FetcherOptions) *Fetcher {
 		client:       client,
 		userAgent:    ua,
 		maxBodyBytes: maxBytes,
-		timeout:      timeout,
 	}
 }
 

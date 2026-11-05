@@ -12,10 +12,7 @@ import (
 	"plewtus/internal/provider/htmlutil"
 )
 
-var (
-	ErrChallengeEncountered = errors.New("bing challenge/captcha encountered")
-	ErrBlocked              = errors.New("bing request blocked")
-)
+var ErrChallengeEncountered = errors.New("bing challenge/captcha encountered")
 
 // ParseHTMLResponse parses Bing SERP HTML response.
 func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) {

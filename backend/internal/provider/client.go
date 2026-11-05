@@ -70,5 +70,13 @@ func (c *HTTPClient) CloseIdleConnections() {
 // ReadBody reads and closes the response body.
 func ReadBody(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
-	return io.ReadAll(resp.Body)
+	const maxSearchBodyBytes = 4 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxSearchBodyBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxSearchBodyBytes {
+		return nil, fmt.Errorf("search response body exceeds %d bytes", maxSearchBodyBytes)
+	}
+	return body, nil
 }

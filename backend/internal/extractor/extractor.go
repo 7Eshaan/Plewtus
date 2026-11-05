@@ -98,9 +98,10 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 	}
 
 	content := &model.ExtractedContent{
-		Author:      parsed.Metadata.Author,
-		Description: parsed.Metadata.Description,
-		ExtractedAt: time.Now().UTC().Format(time.RFC3339),
+		Author:        parsed.Metadata.Author,
+		Description:   parsed.Metadata.Description,
+		ExtractedAt:   time.Now().UTC().Format(time.RFC3339),
+		PublishedDate: parsed.Metadata.PublishedDate,
 	}
 
 	mode := opts.Mode
@@ -127,7 +128,7 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 		fallthrough
 	default:
 		fullText := ToText(parsed.MainNode, 10000)
-		highlights := ExtractHighlights(fullText, "", 4)
+		highlights := ExtractHighlights(fullText, opts.Query, 4)
 		content.Highlights = highlights
 		if len(highlights) > 0 {
 			content.Text = truncateCleanly(fullText, maxChars)
@@ -182,6 +183,9 @@ func (e *Extractor) ExtractBatch(ctx context.Context, results []model.SearchResu
 			}
 
 			results[idx].Content = content
+			if results[idx].PublishedDate == "" {
+				results[idx].PublishedDate = content.PublishedDate
+			}
 		}()
 	}
 

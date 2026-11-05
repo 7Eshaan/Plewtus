@@ -505,22 +505,33 @@ func isBoilerplateSentence(s string) bool {
 }
 
 func truncateCleanly(s string, maxChars int) string {
-	if len(s) <= maxChars {
+	if maxChars <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxChars {
 		return s
 	}
 
-	target := s[:maxChars]
+	target := string(runes[:maxChars])
 	// Try to find the last sentence terminator before maxChars
 	lastPeriod := strings.LastIndexAny(target, ".!?\n")
 	if lastPeriod >= maxChars/2 {
-		return strings.TrimSpace(s[:lastPeriod+1])
+		return strings.TrimSpace(target[:lastPeriod+1])
 	}
 
 	// Fallback to last whitespace
 	lastSpace := strings.LastIndexFunc(target, unicode.IsSpace)
 	if lastSpace > 0 {
-		return strings.TrimSpace(s[:lastSpace]) + " …"
+		prefix := strings.TrimSpace(target[:lastSpace])
+		if len([]rune(prefix))+2 <= maxChars {
+			return prefix + " …"
+		}
+		return string([]rune(prefix)[:maxChars-1]) + "…"
 	}
 
-	return strings.TrimSpace(target) + " …"
+	if maxChars == 1 {
+		return "…"
+	}
+	return strings.TrimSpace(string([]rune(target)[:maxChars-1])) + "…"
 }

@@ -125,11 +125,11 @@ const SAMPLE_RESPONSE = `{
   "query": "distributed consensus raft",
   "results": [
     {
-      "id": "res_8f91a2bc",
+      "id": "res_1",
       "rank": 1,
-      "score": 0.0328,
+      "score": 0.04918,
       "title": "In Search of an Understandable Consensus Algorithm",
-      "url": "https://raft.github.io/raft.pdf",
+      "url": "https://raft.github.io/",
       "snippet": "Raft is a consensus algorithm for managing a replicated log...",
       "engines": [
         { "name": "duckduckgo", "position": 1 },
@@ -138,21 +138,26 @@ const SAMPLE_RESPONSE = `{
       ],
       "published_date": "2024-03-15",
       "content": {
-        "mode": "markdown",
-        "markdown": "# In Search of an Understandable Consensus Algorithm\\n\\nRaft is a consensus algorithm..."
+        "markdown": "# Raft\\n\\nRaft is a consensus algorithm...",
+        "text": "Raft is a consensus algorithm...",
+        "extracted_at": "2026-11-05T09:00:00Z"
       }
     }
   ],
   "metadata": {
+    "total_results": 1,
     "took_ms": 142,
     "providers": {
       "queried": ["duckduckgo", "bing", "yahoo"],
       "successful": ["duckduckgo", "bing", "yahoo"],
       "failed": []
     },
-    "raw_count": 30,
-    "deduped_count": 18,
-    "cached": false
+    "stats": {
+      "raw_count": 3,
+      "deduped_count": 1
+    },
+    "cached": false,
+    "timestamp": "2026-11-05T09:00:00Z"
   }
 }`;
 

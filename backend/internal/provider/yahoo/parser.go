@@ -14,7 +14,6 @@ import (
 
 var (
 	ErrChallengeEncountered = errors.New("yahoo challenge/captcha encountered")
-	ErrBlocked              = errors.New("yahoo request blocked")
 )
 
 // ParseHTMLResponse parses Yahoo SERP HTML response.

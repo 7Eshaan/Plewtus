@@ -14,8 +14,8 @@ type Config struct {
 	Env                     string
 	LogLevel                string
 	DefaultProviders        []string
+	TrustedProxies          []string
 	DefaultTimeout          time.Duration
-	MaxTimeout              time.Duration
 	MaxLimit                int
 	DefaultLimit            int
 	UserAgent               string
@@ -41,8 +41,8 @@ func Load() *Config {
 		Env:              getEnv("PLEWTUS_ENV", getEnv("ENV", "development")),
 		LogLevel:         getEnv("PLEWTUS_LOG_LEVEL", getEnv("LOG_LEVEL", "info")),
 		DefaultProviders: getEnvAsSlice("PLEWTUS_DEFAULT_PROVIDERS", []string{"duckduckgo", "bing", "yahoo"}),
+		TrustedProxies:   getEnvAsSlice("PLEWTUS_TRUSTED_PROXIES", nil),
 		DefaultTimeout:   getEnvAsDurationMs("PLEWTUS_DEFAULT_TIMEOUT_MS", 3000),
-		MaxTimeout:       getEnvAsDurationMs("PLEWTUS_MAX_TIMEOUT_MS", 10000),
 		MaxLimit:         getEnvAsInt("PLEWTUS_MAX_LIMIT", 50),
 		DefaultLimit:     getEnvAsInt("PLEWTUS_DEFAULT_LIMIT", 10),
 		UserAgent: getEnv(

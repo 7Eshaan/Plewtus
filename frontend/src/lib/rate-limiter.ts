@@ -5,6 +5,8 @@ export interface RateLimitResult {
   reset: number; // seconds until oldest entry expires or window resets
 }
 
+const MAX_TRACKED_IPS = 5000;
+
 class InMemoryRateLimiter {
   private requests: Map<string, number[]> = new Map();
   private readonly windowMs: number;
@@ -25,12 +27,18 @@ class InMemoryRateLimiter {
 
     let timestamps = this.requests.get(ip);
     if (!timestamps) {
+      // Keep high-cardinality forwarded headers from growing process memory forever.
+      if (this.requests.size >= MAX_TRACKED_IPS) {
+        const oldestKey = this.requests.keys().next().value;
+        if (oldestKey !== undefined) this.requests.delete(oldestKey);
+      }
       timestamps = [];
       this.requests.set(ip, timestamps);
     }
 
     // Retain only requests within the sliding window
     timestamps = timestamps.filter((t) => t > windowStart);
+    this.requests.delete(ip);
     this.requests.set(ip, timestamps);
 
     if (timestamps.length >= effectiveLimit) {
@@ -92,12 +100,14 @@ export function resetRateLimits(): void {
 export function getClientIp(req: Request): string {
   const forwardedFor = req.headers.get("x-forwarded-for");
   if (forwardedFor) {
-    const first = forwardedFor.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  const realIp = req.headers.get("x-real-ip");
-  if (realIp && realIp.trim()) {
-    return realIp.trim();
+    // Common reverse proxies append the address they observed to the end of
+    // X-Forwarded-For. Taking the leftmost value lets callers spoof the key.
+    const chain = forwardedFor.split(",");
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const candidate = chain[i]?.trim();
+      if (candidate && isNodeIP(candidate)) return candidate;
+    }
   }
   return "127.0.0.1";
 }
+import { isIP as isNodeIP } from "node:net";

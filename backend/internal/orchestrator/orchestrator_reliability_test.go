@@ -168,4 +168,10 @@ func TestOrchestrator_CircuitBreakerFallback(t *testing.T) {
 	if resp.Results[0].Engines[0].Name != "backup" {
 		t.Fatalf("expected backup provider in result engines, got %s", resp.Results[0].Engines[0].Name)
 	}
+	if len(resp.Metadata.Providers.Queried) != 1 || resp.Metadata.Providers.Queried[0] != "backup" {
+		t.Fatalf("queried metadata should name the dispatched fallback only, got %v", resp.Metadata.Providers.Queried)
+	}
+	if len(resp.Metadata.Providers.Failed) != 1 || resp.Metadata.Providers.Failed[0].Engine != "broken" {
+		t.Fatalf("breaker-skipped requested provider should be recorded as failed, got %+v", resp.Metadata.Providers.Failed)
+	}
 }

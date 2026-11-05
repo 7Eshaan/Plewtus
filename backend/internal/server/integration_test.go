@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -18,8 +19,8 @@ import (
 )
 
 func TestSearchEndpoint_LiveIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live end-to-end server integration test in short mode")
+	if testing.Short() || os.Getenv("PLEWTUS_LIVE_TESTS") != "1" {
+		t.Skip("set PLEWTUS_LIVE_TESTS=1 to run live server search test")
 	}
 
 	cfg := config.Load()
@@ -86,8 +87,8 @@ func TestSearchEndpoint_LiveIntegration(t *testing.T) {
 }
 
 func TestSearchEndpoint_ExtractionIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live extraction integration test in short mode")
+	if testing.Short() || os.Getenv("PLEWTUS_LIVE_TESTS") != "1" {
+		t.Skip("set PLEWTUS_LIVE_TESTS=1 to run live server extraction test")
 	}
 
 	cfg := config.Load()
@@ -151,8 +152,8 @@ func TestSearchEndpoint_ExtractionIntegration(t *testing.T) {
 }
 
 func TestSearchEndpoint_SearchFiltersIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live search filters integration test in short mode")
+	if testing.Short() || os.Getenv("PLEWTUS_LIVE_TESTS") != "1" {
+		t.Skip("set PLEWTUS_LIVE_TESTS=1 to run live server filter test")
 	}
 
 	cfg := config.Load()

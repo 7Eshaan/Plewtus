@@ -96,6 +96,7 @@ for (const item of data.results) {
 
       case "python":
         return `# Execute Plewtus search with python-requests
+import json
 import requests
 
 url = "http://localhost:8080/search"
@@ -103,7 +104,7 @@ headers = {
     "Content-Type": "application/json",
     "Authorization": "Bearer ${PLACEHOLDER_KEY}",
 }
-payload = ${jsonPayloadString.replace(/true/g, "True").replace(/false/g, "False").replace(/null/g, "None")}
+payload = json.loads(${JSON.stringify(JSON.stringify(payload))})
 
 response = requests.post(url, headers=headers, json=payload)
 data = response.json()

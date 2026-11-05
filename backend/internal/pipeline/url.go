@@ -10,40 +10,40 @@ import (
 // trackingParams contains common tracking, analytics, and affiliate query parameter names to strip.
 var trackingParams = map[string]bool{
 	// Google Analytics & UTM
-	"utm_source":        true,
-	"utm_medium":        true,
-	"utm_campaign":      true,
-	"utm_term":          true,
-	"utm_content":       true,
-	"utm_id":            true,
-	"utm_name":          true,
-	"utm_reader":        true,
-	"utm_viz_id":        true,
-	"utm_pubreferrer":   true,
-	"utm_swu":           true,
-	"utm_source_alias":  true,
+	"utm_source":       true,
+	"utm_medium":       true,
+	"utm_campaign":     true,
+	"utm_term":         true,
+	"utm_content":      true,
+	"utm_id":           true,
+	"utm_name":         true,
+	"utm_reader":       true,
+	"utm_viz_id":       true,
+	"utm_pubreferrer":  true,
+	"utm_swu":          true,
+	"utm_source_alias": true,
 
 	// Google Ads / Click IDs
-	"gclid":             true,
-	"gclsrc":            true,
-	"dclid":             true,
-	"gad_source":        true,
-	"gbraid":            true,
-	"wbraid":            true,
+	"gclid":      true,
+	"gclsrc":     true,
+	"dclid":      true,
+	"gad_source": true,
+	"gbraid":     true,
+	"wbraid":     true,
 
 	// Facebook / Meta
-	"fbclid":            true,
-	"fb_action_ids":     true,
-	"fb_action_types":   true,
-	"fb_source":         true,
-	"fref":              true,
+	"fbclid":          true,
+	"fb_action_ids":   true,
+	"fb_action_types": true,
+	"fb_source":       true,
+	"fref":            true,
 
 	// Twitter / X
-	"twclid":            true,
+	"twclid": true,
 
 	// Microsoft / Bing
-	"msclkid":           true,
-	"cvid":              true,
+	"msclkid": true,
+	"cvid":    true,
 
 	// Yahoo
 	"guccounter":        true,
@@ -51,29 +51,29 @@ var trackingParams = map[string]bool{
 	"guce_referrer_sig": true,
 
 	// Hubspot / Marketo
-	"_hsenc":            true,
-	"_hsmi":             true,
-	"hsctatracking":     true,
-	"mkt_tok":           true,
+	"_hsenc":        true,
+	"_hsmi":         true,
+	"hsctatracking": true,
+	"mkt_tok":       true,
 
 	// Mailchimp
-	"mc_cid":            true,
-	"mc_eid":            true,
+	"mc_cid": true,
+	"mc_eid": true,
 
 	// Yandex
-	"yclid":             true,
-	"ymclid":            true,
+	"yclid":  true,
+	"ymclid": true,
 
 	// TikTok & Instagram
-	"ttclid":            true,
-	"igshid":            true,
+	"ttclid": true,
+	"igshid": true,
 
 	// Generic referral & click tracking
-	"ref":               true,
-	"ref_":              true,
-	"referrer":          true,
-	"spm":               true,
-	"_openstat":         true,
+	"ref":       true,
+	"ref_":      true,
+	"referrer":  true,
+	"spm":       true,
+	"_openstat": true,
 }
 
 var defaultIndexFiles = []string{
@@ -174,11 +174,11 @@ func NormalizeURL(rawURL string) (cleanURL string, canonicalKey string, err erro
 		canonPath = "/" + canonPath
 	}
 
+	// Hosts are case-insensitive, but URL paths and query values may not be.
 	canonicalKey = canonHost + canonPath
 	if parsed.RawQuery != "" {
 		canonicalKey += "?" + parsed.RawQuery
 	}
-	canonicalKey = strings.ToLower(canonicalKey)
 
 	return cleanURL, canonicalKey, nil
 }

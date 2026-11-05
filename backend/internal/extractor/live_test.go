@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -9,8 +10,8 @@ import (
 )
 
 func TestLiveWebpageExtraction(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping live webpage extraction test in short mode")
+	if testing.Short() || os.Getenv("PLEWTUS_LIVE_TESTS") != "1" {
+		t.Skip("set PLEWTUS_LIVE_TESTS=1 to run live webpage extraction test")
 	}
 
 	ext := New(ExtractorOptions{

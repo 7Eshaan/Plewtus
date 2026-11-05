@@ -6,10 +6,10 @@ import (
 
 func TestNormalizeURL_TrackingParameters(t *testing.T) {
 	tests := []struct {
-		name         string
-		input        string
-		expectedURL  string
-		expectedKey  string
+		name        string
+		input       string
+		expectedURL string
+		expectedKey string
 	}{
 		{
 			name:        "UTM parameters removed",
@@ -115,5 +115,23 @@ func TestNormalizeURL_InvalidOrEmpty(t *testing.T) {
 	_, _, err = NormalizeURL("   ")
 	if err == nil {
 		t.Errorf("expected error for whitespace URL")
+	}
+}
+
+func TestNormalizeURL_PreservesCaseSensitivePathAndQuery(t *testing.T) {
+	_, pathUpper, err := NormalizeURL("https://Example.com/Docs/API?ID=ABC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, pathLower, err := NormalizeURL("https://example.com/docs/api?ID=ABC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, queryLower, err := NormalizeURL("https://example.com/Docs/API?ID=abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pathUpper == pathLower || pathUpper == queryLower {
+		t.Fatalf("case-sensitive path/query variants were merged: %q %q %q", pathUpper, pathLower, queryLower)
 	}
 }

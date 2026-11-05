@@ -8,9 +8,10 @@ import (
 // ExtractOptions specifies options for webpage extraction.
 type ExtractOptions struct {
 	Enabled         bool   `json:"enabled"`
-	Mode            string `json:"mode,omitempty"`               // "highlights", "text", "markdown"
+	Mode            string `json:"mode,omitempty"`               // "highlights", "text", "markdown", "metadata"
 	MaxPages        int    `json:"max_pages,omitempty"`          // default 3, max 10
 	MaxCharsPerPage int    `json:"max_chars_per_page,omitempty"` // default 4000
+	Query           string `json:"-"`                            // Internal relevance hint for highlights
 }
 
 // SearchRequest represents the public search API request body.
@@ -39,8 +40,6 @@ func (r *SearchRequest) Normalize(defaultLimit, maxLimit int, defaultProviders [
 
 	if r.Offset < 0 {
 		r.Offset = 0
-	} else if r.Offset > 100 {
-		r.Offset = 100
 	}
 
 	if len(r.Providers) == 0 {
@@ -127,6 +126,9 @@ func cleanDomainString(d string) string {
 func (r *SearchRequest) Validate() error {
 	if strings.TrimSpace(r.Query) == "" {
 		return errors.New("query parameter is required and cannot be empty")
+	}
+	if r.Offset+r.Limit > 50 {
+		return errors.New("offset + limit cannot exceed the 50-result provider window; reduce either value")
 	}
 
 	if r.Freshness != "" {

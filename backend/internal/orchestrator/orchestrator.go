@@ -84,11 +84,15 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 		return nil, ctx.Err()
 	}
 
+	start := time.Now()
+
 	// 1. Check in-memory cache if available
 	var cacheKey string
 	if o.cache != nil {
 		cacheKey = o.cache.Key(req)
 		if cachedResp, ok := o.cache.Get(cacheKey); ok {
+			cachedResp.Metadata.TookMs = time.Since(start).Milliseconds()
+			cachedResp.Metadata.Timestamp = time.Now().UTC().Format(time.RFC3339)
 			o.logger.Debug("search response served from cache",
 				slog.String("query", req.Query),
 				slog.Int("results", len(cachedResp.Results)),
@@ -96,8 +100,6 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 			return cachedResp, nil
 		}
 	}
-
-	start := time.Now()
 
 	// 2. Determine requested providers
 	requested := o.resolveProviders(req.Providers)
@@ -125,10 +127,15 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 	}
 
 	// Provider Fallback: if all requested engines were tripped, attempt a healthy registered engine
+	queried := append([]string(nil), providersToQuery...)
 	if len(providersToQuery) == 0 && len(requested) > 0 {
 		for _, candidate := range o.registry.Names() {
-			if o.breakers == nil || o.breakers.IsHealthy(candidate) {
+			if containsProvider(requested, candidate) {
+				continue
+			}
+			if o.breakers == nil || o.breakers.Get(candidate).Allow() == nil {
 				providersToQuery = append(providersToQuery, candidate)
+				queried = append(queried, candidate)
 				o.logger.Info("circuit breaker fallback: querying alternative healthy provider",
 					slog.String("fallback_engine", candidate),
 				)
@@ -170,7 +177,7 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 			pReq := model.ProviderRequest{
 				Query:          req.Query,
 				Limit:          req.Limit + req.Offset,
-				Offset:         req.Offset,
+				Offset:         0,
 				Freshness:      req.Freshness,
 				Country:        req.Country,
 				Language:       req.Language,
@@ -281,7 +288,9 @@ collectLoop:
 
 	// 8. Optional AI-friendly content extraction
 	if req.Extract != nil && req.Extract.Enabled && o.extractor != nil && len(uniqueResults) > 0 {
-		uniqueResults = o.extractor.ExtractBatch(ctx, uniqueResults, req.Extract)
+		extractOpts := *req.Extract
+		extractOpts.Query = req.Query
+		uniqueResults = o.extractor.ExtractBatch(ctx, uniqueResults, &extractOpts)
 	}
 
 	// 9. Build the final unified response
@@ -289,7 +298,7 @@ collectLoop:
 	resp.Results = uniqueResults
 	resp.Metadata.TotalResults = len(uniqueResults)
 	resp.Metadata.TookMs = time.Since(start).Milliseconds()
-	resp.Metadata.Providers.Queried = requested
+	resp.Metadata.Providers.Queried = queried
 	resp.Metadata.Providers.Successful = successful
 	resp.Metadata.Providers.Failed = failed
 	resp.Metadata.Stats.RawCount = rawCount
@@ -315,6 +324,15 @@ collectLoop:
 	}
 
 	return resp, nil
+}
+
+func containsProvider(providers []string, name string) bool {
+	for _, provider := range providers {
+		if provider == name {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveProviders extracts a sanitized, unique list of providers to query.

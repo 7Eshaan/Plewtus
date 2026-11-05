@@ -44,9 +44,10 @@ func New(cfg *config.Config, logger *slog.Logger, searcher Searcher) *Server {
 		},
 	}
 	usageMgr := usage.NewManager(usage.Options{
-		AuthRequired: cfg.AuthRequired,
-		Tiers:        tiers,
-		APIKeys:      cfg.APIKeys,
+		AuthRequired:   cfg.AuthRequired,
+		Tiers:          tiers,
+		APIKeys:        cfg.APIKeys,
+		TrustedProxies: cfg.TrustedProxies,
 	})
 
 	s := &Server{

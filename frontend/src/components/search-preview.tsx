@@ -646,6 +646,3 @@ export function SearchPreview({
     </div>
   );
 }
-
-// Re-export SearchBar alias for compatibility
-export { SearchPreview as SearchBar };

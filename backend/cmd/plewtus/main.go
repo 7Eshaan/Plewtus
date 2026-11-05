@@ -90,9 +90,10 @@ func main() {
 		},
 	}
 	usageMgr := usage.NewManager(usage.Options{
-		AuthRequired: cfg.AuthRequired,
-		Tiers:        tiers,
-		APIKeys:      cfg.APIKeys,
+		AuthRequired:   cfg.AuthRequired,
+		Tiers:          tiers,
+		APIKeys:        cfg.APIKeys,
+		TrustedProxies: cfg.TrustedProxies,
 	})
 
 	srv := server.New(cfg, logger, searchOrchestrator).WithUsageManager(usageMgr)
@@ -150,7 +151,7 @@ func runMCP(cfg *config.Config) {
 	})
 	searchOrchestrator.WithBreakers(circuitBreakers)
 
-	srv := mcp.NewServer(searchOrchestrator, ext, os.Stdin, os.Stdout, logger)
+	srv := mcp.NewServer(searchOrchestrator, ext, os.Stdin, os.Stdout, logger, cfg.DefaultProviders)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

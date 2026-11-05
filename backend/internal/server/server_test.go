@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"plewtus/internal/config"
@@ -230,6 +231,38 @@ func TestSearchEndpoint_MalformedJSON(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected status 400 for malformed json, got %d", resp.StatusCode)
+	}
+}
+
+func TestSearchEndpoint_RejectsTrailingJSONValues(t *testing.T) {
+	srv := newTestServer()
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	body := `{"query":"first"} {"query":"second"}`
+	resp, err := http.Post(ts.URL+"/search", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected trailing JSON to be rejected with 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestSearchEndpoint_RejectsOversizedBody(t *testing.T) {
+	srv := newTestServer()
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	body := `{"query":"` + strings.Repeat("x", (1<<20)+1) + `"}`
+	resp, err := http.Post(ts.URL+"/search", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected oversized body to be rejected with 400, got %d", resp.StatusCode)
 	}
 }
 

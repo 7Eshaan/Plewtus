@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"plewtus/internal/model"
 )
@@ -222,6 +223,16 @@ func TestTruncateCleanly(t *testing.T) {
 	}
 	if len(wordTrunc) > 25 {
 		t.Errorf("truncated string too long: %q", wordTrunc)
+	}
+}
+
+func TestTruncateCleanlyHandlesUnicodeAndCapsOutput(t *testing.T) {
+	got := truncateCleanly("éclair 🧭 and other unicode words beyond this point", 12)
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncation returned invalid UTF-8: %q", got)
+	}
+	if runeCount := len([]rune(got)); runeCount > 12 {
+		t.Fatalf("expected at most 12 characters including ellipsis, got %d: %q", runeCount, got)
 	}
 }
 

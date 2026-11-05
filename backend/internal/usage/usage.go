@@ -6,6 +6,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -36,21 +37,22 @@ type Identity struct {
 
 // CheckResult contains rate limit and quota status to attach to HTTP headers.
 type CheckResult struct {
-	Identity            Identity
-	RateLimitLimit      int
-	RateLimitRemaining  int
-	RateLimitResetSec   int
-	QuotaLimit          int
-	QuotaRemaining      int
-	QuotaResetSec       int
-	RetryAfterSec       int
+	Identity           Identity
+	RateLimitLimit     int
+	RateLimitRemaining int
+	RateLimitResetSec  int
+	QuotaLimit         int
+	QuotaRemaining     int
+	QuotaResetSec      int
+	RetryAfterSec      int
 }
 
 // Options configures the UsageManager.
 type Options struct {
-	AuthRequired bool            // If true, requests without a valid API key are rejected (401)
-	Tiers        map[string]Tier // Limits per tier
-	APIKeys      map[string]string // map[apiKey]tierName
+	AuthRequired   bool              // If true, requests without a valid API key are rejected (401)
+	Tiers          map[string]Tier   // Limits per tier
+	APIKeys        map[string]string // map[apiKey]tierName
+	TrustedProxies []string          // CIDRs or IP addresses allowed to supply forwarding headers
 }
 
 // tokenBucket tracks token bucket rate limiting for a single client.
@@ -79,14 +81,21 @@ type Stats struct {
 
 // Manager coordinates API key authentication, rate limiting, and quotas.
 type Manager struct {
-	mu           sync.Mutex
-	authRequired bool
-	tiers        map[string]Tier
-	apiKeys      map[string]string // apiKey -> tierName
-	buckets      map[string]*tokenBucket
-	quotas       map[string]*quotaRecord
-	stats        Stats
+	mu             sync.Mutex
+	authRequired   bool
+	tiers          map[string]Tier
+	apiKeys        map[string]string // apiKey -> tierName
+	trustedProxies []netip.Prefix
+	buckets        map[string]*tokenBucket
+	quotas         map[string]*quotaRecord
+	stats          Stats
+	lastCleanup    time.Time
 }
+
+const (
+	maxTrackedClients = 50000
+	usageRecordTTL    = 24 * time.Hour
+)
 
 // NewManager creates a new usage manager.
 func NewManager(opts Options) *Manager {
@@ -113,13 +122,26 @@ func NewManager(opts Options) *Manager {
 	for k, v := range opts.APIKeys {
 		apiKeys[k] = v
 	}
+	var trustedProxies []netip.Prefix
+	for _, raw := range opts.TrustedProxies {
+		raw = strings.TrimSpace(raw)
+		if prefix, err := netip.ParsePrefix(raw); err == nil {
+			trustedProxies = append(trustedProxies, prefix.Masked())
+			continue
+		}
+		if addr, err := netip.ParseAddr(raw); err == nil {
+			trustedProxies = append(trustedProxies, netip.PrefixFrom(addr, addr.BitLen()))
+		}
+	}
 
 	return &Manager{
-		authRequired: opts.AuthRequired,
-		tiers:        tiers,
-		apiKeys:      apiKeys,
-		buckets:      make(map[string]*tokenBucket),
-		quotas:       make(map[string]*quotaRecord),
+		authRequired:   opts.AuthRequired,
+		tiers:          tiers,
+		apiKeys:        apiKeys,
+		trustedProxies: trustedProxies,
+		buckets:        make(map[string]*tokenBucket),
+		quotas:         make(map[string]*quotaRecord),
+		lastCleanup:    time.Now(),
 	}
 }
 
@@ -136,6 +158,7 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 	defer m.mu.Unlock()
 
 	now := time.Now().UTC()
+	m.cleanupStaleRecords(now)
 	m.stats.TotalRequests++
 
 	// 1. Resolve Identity
@@ -153,19 +176,27 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 			Type:    "api_key",
 			Tier:    tierName,
 			RawKey:  rawKey,
-			Address: extractClientIP(r),
+			Address: m.extractClientIP(r),
 		}
 	} else {
 		if m.authRequired {
 			m.stats.UnauthorizedCount++
 			return nil, ErrAuthRequired
 		}
-		ip := extractClientIP(r)
+		ip := m.extractClientIP(r)
 		ident = Identity{
 			Key:     "ip:" + ip,
 			Type:    "ip",
 			Tier:    "free",
 			Address: ip,
+		}
+	}
+
+	// Bound memory use if a host serves more unique anonymous addresses than
+	// this in-memory manager can track. Overflow clients share one free-tier bucket.
+	if ident.Type == "ip" {
+		if _, tracked := m.buckets[ident.Key]; !tracked && len(m.buckets) >= maxTrackedClients {
+			ident.Key = "ip:overflow"
 		}
 	}
 
@@ -177,7 +208,7 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 
 	// 2. Daily Quota Check
 	today := now.Format("2006-01-02")
-	secondsUntilMidnight := int(now.Truncate(24*time.Hour).Add(24*time.Hour).Sub(now).Seconds())
+	secondsUntilMidnight := int(now.Truncate(24 * time.Hour).Add(24 * time.Hour).Sub(now).Seconds())
 
 	qRecord, qExists := m.quotas[ident.Key]
 	if !qExists || qRecord.day != today {
@@ -193,12 +224,12 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 	if quotaLimit > 0 && qRecord.count >= quotaLimit {
 		m.stats.QuotaExceededCount++
 		res := &CheckResult{
-			Identity:          ident,
-			RateLimitLimit:    tier.RateLimitPerMin,
-			QuotaLimit:        quotaLimit,
-			QuotaRemaining:    0,
-			QuotaResetSec:     secondsUntilMidnight,
-			RetryAfterSec:     secondsUntilMidnight,
+			Identity:       ident,
+			RateLimitLimit: tier.RateLimitPerMin,
+			QuotaLimit:     quotaLimit,
+			QuotaRemaining: 0,
+			QuotaResetSec:  secondsUntilMidnight,
+			RetryAfterSec:  secondsUntilMidnight,
 		}
 		return res, fmt.Errorf("%w for tier %q (limit: %d/day, resets in %ds)",
 			ErrQuotaExceeded, tier.Name, quotaLimit, secondsUntilMidnight)
@@ -286,6 +317,21 @@ func (m *Manager) Reset() {
 	m.buckets = make(map[string]*tokenBucket)
 	m.quotas = make(map[string]*quotaRecord)
 	m.stats = Stats{}
+	m.lastCleanup = time.Now()
+}
+
+func (m *Manager) cleanupStaleRecords(now time.Time) {
+	if now.Sub(m.lastCleanup) < time.Minute {
+		return
+	}
+	m.lastCleanup = now
+	cutoff := now.Add(-usageRecordTTL)
+	for key, bucket := range m.buckets {
+		if bucket.lastRefill.Before(cutoff) {
+			delete(m.buckets, key)
+			delete(m.quotas, key)
+		}
+	}
 }
 
 // extractAPIKey pulls an API key from Authorization header or X-API-Key header.
@@ -307,23 +353,36 @@ func extractAPIKey(r *http.Request) string {
 }
 
 // extractClientIP extracts client IP address from proxy headers or RemoteAddr.
-func extractClientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		clientIP := strings.TrimSpace(parts[0])
-		if clientIP != "" {
-			return clientIP
+func (m *Manager) extractClientIP(r *http.Request) string {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteHost = strings.TrimSpace(r.RemoteAddr)
+	}
+	remoteAddr, err := netip.ParseAddr(remoteHost)
+	if err != nil || !m.isTrustedProxy(remoteAddr) {
+		return remoteHost
+	}
+
+	// Walk the forwarded chain from the trusted server-facing proxy toward the
+	// client. Ignore trusted proxy hops and stop at the first untrusted address.
+	parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		candidate, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+		if err != nil {
+			continue
+		}
+		if !m.isTrustedProxy(candidate) {
+			return candidate.String()
 		}
 	}
+	return remoteAddr.String()
+}
 
-	if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
-		return xrip
+func (m *Manager) isTrustedProxy(addr netip.Addr) bool {
+	for _, prefix := range m.trustedProxies {
+		if prefix.Contains(addr) {
+			return true
+		}
 	}
-
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil && host != "" {
-		return host
-	}
-
-	return strings.TrimSpace(r.RemoteAddr)
+	return false
 }

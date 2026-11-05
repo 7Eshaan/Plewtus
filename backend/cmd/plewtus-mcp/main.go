@@ -62,7 +62,7 @@ func main() {
 	searchOrchestrator.WithBreakers(breakers)
 
 	// Create and start MCP stdio server
-	srv := mcp.NewServer(searchOrchestrator, ext, os.Stdin, os.Stdout, logger)
+	srv := mcp.NewServer(searchOrchestrator, ext, os.Stdin, os.Stdout, logger, cfg.DefaultProviders)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
