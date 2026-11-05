@@ -32,7 +32,7 @@ func (c *countProvider) Search(ctx context.Context, req model.ProviderRequest) (
 			{
 				Title:   "Go Docs",
 				URL:     "https://go.dev/doc",
-				Snippet: "Documentation for Go",
+				Snippet: "Documentation for Go " + req.Query,
 			},
 		},
 	}, nil

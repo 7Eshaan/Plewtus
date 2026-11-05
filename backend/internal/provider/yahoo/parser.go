@@ -41,6 +41,9 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 		if !htmlutil.HasClass(n, "algo") {
 			return false
 		}
+		if !htmlutil.HasAncestorID(n, "web") {
+			return false
+		}
 		// Skip ads
 		if htmlutil.HasAnyClass(n, "ad", "ads", "algo-ad") {
 			return false

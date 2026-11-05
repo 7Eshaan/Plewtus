@@ -45,6 +45,20 @@ func TestParseBingFixture(t *testing.T) {
 	}
 }
 
+func TestParseHTMLResponseIgnoresResultsOutsideOrganicContainer(t *testing.T) {
+	html := `<html><body>
+		<li class="b_algo"><h2><a href="https://spam.example">Sidebar Result</a></h2></li>
+		<ol id="b_results"><li class="b_algo"><h2><a href="https://rust-lang.org">Rust</a></h2></li></ol>
+	</body></html>`
+	results, err := ParseHTMLResponse(strings.NewReader(html), 10)
+	if err != nil {
+		t.Fatalf("ParseHTMLResponse failed: %v", err)
+	}
+	if len(results) != 1 || results[0].Title != "Rust" {
+		t.Fatalf("expected only the organic result, got %+v", results)
+	}
+}
+
 func TestParseBingChallenge(t *testing.T) {
 	challengeHTML := `<html><body>Our systems have detected unusual traffic from your computer network.</body></html>`
 	_, err := ParseHTMLResponse(strings.NewReader(challengeHTML), 10)

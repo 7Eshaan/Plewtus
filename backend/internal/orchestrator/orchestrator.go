@@ -279,6 +279,7 @@ collectLoop:
 
 	// 7. Canonicalize, deduplicate, filter domains, and merge results across successful providers
 	dedupOpts := pipeline.DeduplicateOptions{
+		Query:          req.Query,
 		Limit:          req.Limit,
 		Offset:         req.Offset,
 		IncludeDomains: req.IncludeDomains,

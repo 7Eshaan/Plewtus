@@ -35,9 +35,13 @@ func (p *e2eProvider) Search(ctx context.Context, req model.ProviderRequest) (*m
 	if p.err != nil {
 		return nil, p.err
 	}
+	results := append([]model.RawSearchResult(nil), p.results...)
+	for i := range results {
+		results[i].Snippet += " " + req.Query
+	}
 	return &model.ProviderResponse{
 		Engine:  p.name,
-		Results: p.results,
+		Results: results,
 		Took:    10 * time.Millisecond,
 	}, nil
 }

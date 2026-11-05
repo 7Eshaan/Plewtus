@@ -44,9 +44,13 @@ func (m *mockProvider) Search(ctx context.Context, req model.ProviderRequest) (*
 		return nil, m.err
 	}
 
+	results := append([]model.RawSearchResult(nil), m.results...)
+	for i := range results {
+		results[i].Snippet += " " + req.Query
+	}
 	return &model.ProviderResponse{
 		Engine:  m.name,
-		Results: m.results,
+		Results: results,
 		Took:    m.delay,
 	}, nil
 }

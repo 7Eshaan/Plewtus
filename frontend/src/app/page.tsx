@@ -48,6 +48,16 @@ export default function HomePage() {
 
   const initialSearchDoneRef = useRef(false);
 
+  const handleQueryChange = useCallback((nextQuery: string) => {
+    setQuery(nextQuery);
+    setResponse((current) =>
+      current?.query.trim().toLowerCase() === nextQuery.trim().toLowerCase()
+        ? current
+        : null
+    );
+    setError(null);
+  }, []);
+
   const executeSearch = useCallback(
     async (searchQuery?: string) => {
       const q = (searchQuery ?? query).trim();
@@ -183,7 +193,7 @@ export default function HomePage() {
               />
               <SearchPreview
                 query={query}
-                onQueryChange={setQuery}
+                onQueryChange={handleQueryChange}
                 onSearch={executeSearch}
                 loading={loading}
                 providers={providers}

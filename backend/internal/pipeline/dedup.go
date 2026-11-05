@@ -18,10 +18,12 @@ type mergedResult struct {
 	bestPosition  int
 	engineCount   int
 	firstSeen     int
+	relevance     float64
 }
 
 // DeduplicateOptions configures the result aggregation, filtering, ranking, and pagination.
 type DeduplicateOptions struct {
+	Query          string
 	Limit          int
 	Offset         int
 	IncludeDomains []string
@@ -67,6 +69,10 @@ func DeduplicateWithOptions(responses []*model.ProviderResponse, opts Deduplicat
 			if strings.TrimSpace(raw.URL) == "" {
 				continue
 			}
+			relevance, relevant := QueryRelevance(opts.Query, raw.Title, raw.Snippet)
+			if !relevant {
+				continue
+			}
 
 			cleanURL, key, err := NormalizeURL(raw.URL)
 			if err != nil {
@@ -96,6 +102,7 @@ func DeduplicateWithOptions(responses []*model.ProviderResponse, opts Deduplicat
 					bestPosition: raw.Position,
 					engineCount:  1,
 					firstSeen:    len(list),
+					relevance:    relevance,
 				}
 				seen[key] = item
 				list = append(list, item)
@@ -134,6 +141,9 @@ func DeduplicateWithOptions(responses []*model.ProviderResponse, opts Deduplicat
 
 				// 5. Select most complete snippet
 				existing.snippet = selectBetterSnippet(existing.snippet, raw.Snippet)
+				if relevance > existing.relevance {
+					existing.relevance = relevance
+				}
 
 				// 6. Prefer secure HTTPS URL over insecure HTTP
 				if strings.HasPrefix(cleanURL, "https://") && strings.HasPrefix(existing.url, "http://") {
@@ -165,6 +175,7 @@ func DeduplicateWithOptions(responses []*model.ProviderResponse, opts Deduplicat
 			Title:         item.title,
 			URL:           item.url,
 			Snippet:       item.snippet,
+			Relevance:     item.relevance,
 			Engines:       item.engines,
 			PublishedDate: item.publishedDate,
 		}

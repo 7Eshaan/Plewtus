@@ -64,6 +64,25 @@ func TestHTMLUtilFunctions(t *testing.T) {
 	}
 }
 
+func TestHasAncestorID(t *testing.T) {
+	doc, err := html.Parse(strings.NewReader(`<div id="organic"><li class="result"></li></div><div><li class="result"></li></div>`))
+	if err != nil {
+		t.Fatalf("parse test HTML: %v", err)
+	}
+	results := FindAll(doc, func(n *html.Node) bool {
+		return n.Type == html.ElementNode && n.Data == "li"
+	})
+	if len(results) != 2 {
+		t.Fatalf("expected two list items, got %d", len(results))
+	}
+	if !HasAncestorID(results[0], "organic") {
+		t.Fatal("expected first result to be inside organic container")
+	}
+	if HasAncestorID(results[1], "organic") {
+		t.Fatal("expected second result to be outside organic container")
+	}
+}
+
 func TestUnwrapURL_SearchEngines(t *testing.T) {
 	tests := []struct {
 		name     string

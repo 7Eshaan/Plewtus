@@ -88,6 +88,18 @@ func HasAnyClass(n *html.Node, classNames ...string) bool {
 	return false
 }
 
+// HasAncestorID reports whether a node is nested beneath an element with the
+// requested id. Providers use this to keep extraction inside the organic
+// results container instead of matching similarly-classed page modules.
+func HasAncestorID(n *html.Node, id string) bool {
+	for ancestor := n.Parent; ancestor != nil; ancestor = ancestor.Parent {
+		if ancestorID, ok := GetAttr(ancestor, "id"); ok && ancestorID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // TextContent recursively extracts and concatenates all text under a node,
 // normalizing whitespace.
 func TextContent(n *html.Node) string {

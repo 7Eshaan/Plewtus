@@ -17,6 +17,7 @@ type SearchResult struct {
 	Snippet       string            `json:"snippet"`
 	Rank          int               `json:"rank"`
 	Score         float64           `json:"score"`
+	Relevance     float64           `json:"-"` // Internal lexical relevance used only to break RRF ties.
 	Engines       []EngineSource    `json:"engines"`
 	PublishedDate string            `json:"published_date,omitempty"`
 	Content       *ExtractedContent `json:"content,omitempty"`

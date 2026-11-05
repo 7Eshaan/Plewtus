@@ -36,6 +36,9 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 		if n.Type != html.ElementNode || n.Data != "div" {
 			return false
 		}
+		if !htmlutil.HasAncestorID(n, "links") {
+			return false
+		}
 		if !htmlutil.HasClass(n, "result") {
 			return false
 		}

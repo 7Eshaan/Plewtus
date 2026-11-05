@@ -85,6 +85,7 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 	type scoredItem struct {
 		result       model.SearchResult
 		rawScore     float64
+		relevance    float64
 		bestPosition int
 		engineCount  int
 		originalIdx  int
@@ -107,6 +108,7 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 		scored[i] = scoredItem{
 			result:       res,
 			rawScore:     rawScore,
+			relevance:    res.Relevance,
 			bestPosition: bestPos,
 			engineCount:  len(res.Engines),
 			originalIdx:  i,
@@ -121,6 +123,9 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 	sort.Slice(scored, func(i, j int) bool {
 		if math.Abs(scored[i].rawScore-scored[j].rawScore) > 1e-12 {
 			return scored[i].rawScore > scored[j].rawScore
+		}
+		if math.Abs(scored[i].relevance-scored[j].relevance) > 1e-12 {
+			return scored[i].relevance > scored[j].relevance
 		}
 		if scored[i].engineCount != scored[j].engineCount {
 			return scored[i].engineCount > scored[j].engineCount

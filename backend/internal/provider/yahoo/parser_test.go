@@ -45,6 +45,20 @@ func TestParseYahooFixture(t *testing.T) {
 	}
 }
 
+func TestParseHTMLResponseIgnoresResultsOutsideOrganicContainer(t *testing.T) {
+	html := `<html><body>
+		<div class="algo"><h3><a href="https://spam.example">Sidebar Result</a></h3></div>
+		<div id="web"><div class="algo"><h3><a href="https://rust-lang.org">Rust</a></h3></div></div>
+	</body></html>`
+	results, err := ParseHTMLResponse(strings.NewReader(html), 10)
+	if err != nil {
+		t.Fatalf("ParseHTMLResponse failed: %v", err)
+	}
+	if len(results) != 1 || results[0].Title != "Rust" {
+		t.Fatalf("expected only the organic result, got %+v", results)
+	}
+}
+
 func TestParseYahooChallenge(t *testing.T) {
 	challengeHTML := `<html><body>Robot Check: please verify you are human</body></html>`
 	_, err := ParseHTMLResponse(strings.NewReader(challengeHTML), 10)

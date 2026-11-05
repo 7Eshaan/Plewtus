@@ -54,8 +54,17 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 		form.Set("kl", kl)
 	}
 
-	// 3. Try primary endpoint (html.duckduckgo.com/html/)
-	results, err := p.queryEndpoint(ctx, HTMLURL, "https://html.duckduckgo.com", form, req.Limit, ParseHTMLResponse)
+	// 3. Try primary endpoint (html.duckduckgo.com/html/) with only part of
+	// the provider budget. Otherwise a hung primary request consumes the entire
+	// context deadline and the lite fallback is invoked with an already-expired
+	// context, making fallback impossible.
+	primaryBudget := req.Timeout / 2
+	if primaryBudget <= 0 {
+		primaryBudget = 1500 * time.Millisecond
+	}
+	primaryCtx, cancelPrimary := context.WithTimeout(ctx, primaryBudget)
+	results, err := p.queryEndpoint(primaryCtx, HTMLURL, "https://html.duckduckgo.com", form, req.Limit, ParseHTMLResponse)
+	cancelPrimary()
 	if err == nil && len(results) > 0 {
 		return &model.ProviderResponse{
 			Engine:  p.Name(),
@@ -126,9 +135,6 @@ func (p *Provider) queryEndpoint(
 
 	return parseFunc(bytes.NewReader(bodyBytes), limit)
 }
-
-
-
 
 func mapFreshness(freshness string) string {
 	switch strings.ToLower(strings.TrimSpace(freshness)) {

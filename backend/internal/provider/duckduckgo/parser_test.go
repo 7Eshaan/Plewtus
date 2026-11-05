@@ -43,6 +43,20 @@ func TestParseHTMLFixture(t *testing.T) {
 	}
 }
 
+func TestParseHTMLResponseIgnoresResultsOutsideOrganicContainer(t *testing.T) {
+	html := `<html><body>
+		<div class="result"><a class="result__a" href="https://spam.example">Sidebar Result</a></div>
+		<div id="links"><div class="result"><a class="result__a" href="https://rust-lang.org">Rust</a></div></div>
+	</body></html>`
+	results, err := ParseHTMLResponse(strings.NewReader(html), 10)
+	if err != nil {
+		t.Fatalf("ParseHTMLResponse failed: %v", err)
+	}
+	if len(results) != 1 || results[0].Title != "Rust" {
+		t.Fatalf("expected only the organic result, got %+v", results)
+	}
+}
+
 func TestParseLiteFixture(t *testing.T) {
 	data, err := os.ReadFile("../../../testdata/fixtures/duckduckgo_lite.html")
 	if err != nil {
