@@ -64,7 +64,7 @@ export function ResultCard({ result }: ResultCardProps) {
       <div className="flex items-center justify-between gap-2.5 text-xs">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <div className="w-5 h-5 rounded-md bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/60 flex items-center justify-center flex-shrink-0 shadow-2xs overflow-hidden">
-            <Favicon domain={displayDomain} title={result.title} />
+            <Favicon key={displayDomain} domain={displayDomain} title={result.title} />
           </div>
           <h3 className="text-xs sm:text-sm font-semibold text-zinc-950 dark:text-zinc-100 truncate leading-snug">
             <a

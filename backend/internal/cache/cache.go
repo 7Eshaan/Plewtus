@@ -217,50 +217,5 @@ func (c *MemoryCache) removeOldest() {
 
 // cloneSearchResponse creates a deep copy of a SearchResponse.
 func cloneSearchResponse(src *model.SearchResponse) *model.SearchResponse {
-	if src == nil {
-		return nil
-	}
-
-	dst := &model.SearchResponse{
-		Query:    src.Query,
-		Results:  make([]model.SearchResult, len(src.Results)),
-		Metadata: src.Metadata,
-	}
-
-	// Deep copy results slice and engine sources
-	for i, r := range src.Results {
-		dst.Results[i] = r
-		if len(r.Engines) > 0 {
-			dst.Results[i].Engines = make([]model.EngineSource, len(r.Engines))
-			copy(dst.Results[i].Engines, r.Engines)
-		}
-		if r.Content != nil {
-			cnt := *r.Content
-			if len(r.Content.Highlights) > 0 {
-				cnt.Highlights = make([]string, len(r.Content.Highlights))
-				copy(cnt.Highlights, r.Content.Highlights)
-			}
-			dst.Results[i].Content = &cnt
-		}
-	}
-
-	// Deep copy metadata slices
-	dst.Metadata.Providers.Queried = append([]string(nil), src.Metadata.Providers.Queried...)
-	dst.Metadata.Providers.Successful = append([]string(nil), src.Metadata.Providers.Successful...)
-	dst.Metadata.Providers.Failed = append([]model.ProviderError(nil), src.Metadata.Providers.Failed...)
-	if src.Metadata.Providers.TimingMs != nil {
-		dst.Metadata.Providers.TimingMs = make(map[string]int64, len(src.Metadata.Providers.TimingMs))
-		for name, tookMs := range src.Metadata.Providers.TimingMs {
-			dst.Metadata.Providers.TimingMs[name] = tookMs
-		}
-	}
-
-	if src.Metadata.Filters != nil {
-		flt := *src.Metadata.Filters
-		flt.IncludeDomains = append([]string(nil), src.Metadata.Filters.IncludeDomains...)
-		flt.ExcludeDomains = append([]string(nil), src.Metadata.Filters.ExcludeDomains...)
-		dst.Metadata.Filters = &flt
-	}
-
-	return dst
+	return src.Clone()
 }

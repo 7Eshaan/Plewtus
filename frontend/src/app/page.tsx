@@ -3,12 +3,12 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { Header } from "@/components/header";
 import { SearchPreview } from "@/components/search-preview";
-import { type ProviderName } from "@/components/provider-chips";
-import { type ExtractionMode } from "@/components/extraction-toggle";
 import {
+  type ProviderName,
+  type ExtractionMode,
   type AdvancedOptions,
   DEFAULT_ADVANCED_OPTIONS,
-} from "@/components/advanced-dropdown";
+} from "@/types/search";
 import { HowItWorks } from "@/components/how-it-works";
 import { McpSection } from "@/components/mcp-section";
 import { ApiQuickstart } from "@/components/api-quickstart";

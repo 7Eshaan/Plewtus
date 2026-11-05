@@ -96,8 +96,11 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (re
 	if req == nil {
 		return nil, fmt.Errorf("search request cannot be nil")
 	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if o.cache == nil {
-		return o.search(ctx, req)
+		return o.search(ctx, req, "")
 	}
 
 	cacheKey := o.cache.Key(req)
@@ -108,61 +111,64 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (re
 	}
 
 	o.flightMu.Lock()
-	if flight, exists := o.flights[cacheKey]; exists {
-		o.flightMu.Unlock()
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-flight.done:
-			return flight.response, flight.err
-		}
+	flight, exists := o.flights[cacheKey]
+	if !exists {
+		flight = &searchFlight{done: make(chan struct{})}
+		o.flights[cacheKey] = flight
+
+		// Execute the search flight in a goroutine bounded by the provider timeout,
+		// detached from individual caller cancellation so an aborted client doesn't kill
+		// inflight work for other concurrent callers.
+		go func() {
+			var resp *model.SearchResponse
+			var searchErr error
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					searchErr = fmt.Errorf("search orchestration panic: %v", recovered)
+					o.logger.Error("search orchestration panic recovered", slog.Any("error", recovered))
+				}
+				o.flightMu.Lock()
+				flight.response = resp
+				flight.err = searchErr
+				delete(o.flights, cacheKey)
+				close(flight.done)
+				o.flightMu.Unlock()
+			}()
+
+			flightCtx, cancel := context.WithTimeout(context.Background(), o.timeout)
+			defer cancel()
+			resp, searchErr = o.search(flightCtx, req, cacheKey)
+		}()
 	}
-	flight := &searchFlight{done: make(chan struct{})}
-	o.flights[cacheKey] = flight
 	o.flightMu.Unlock()
 
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			response = nil
-			err = fmt.Errorf("search orchestration panic: %v", recovered)
-			o.logger.Error("search orchestration panic recovered", slog.Any("error", recovered))
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-flight.done:
+		if flight.err != nil {
+			return nil, flight.err
 		}
-		o.flightMu.Lock()
-		flight.response = response
-		flight.err = err
-		delete(o.flights, cacheKey)
-		close(flight.done)
-		o.flightMu.Unlock()
-	}()
-	return o.search(ctx, req)
+		cloned := flight.response.Clone()
+		if cloned != nil {
+			cloned.Metadata.TookMs = time.Since(start).Milliseconds()
+			cloned.Metadata.Timestamp = time.Now().UTC().Format(time.RFC3339)
+		}
+		return cloned, nil
+	}
 }
 
-func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest) (*model.SearchResponse, error) {
+func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cacheKey string) (*model.SearchResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
 
 	start := time.Now()
 
-	// 1. Check in-memory cache if available
-	var cacheKey string
-	if o.cache != nil {
-		cacheKey = o.cache.Key(req)
-		if cachedResp, ok := o.cache.Get(cacheKey); ok {
-			cachedResp.Metadata.TookMs = time.Since(start).Milliseconds()
-			cachedResp.Metadata.Timestamp = time.Now().UTC().Format(time.RFC3339)
-			o.logger.Debug("search response served from cache",
-				slog.String("query", req.Query),
-				slog.Int("results", len(cachedResp.Results)),
-			)
-			return cachedResp, nil
-		}
-	}
-
-	// 2. Determine requested providers
+	// 1. Determine requested providers
 	requested := o.resolveProviders(req.Providers)
 
-	// 3. Filter providers through circuit breakers and determine active query set
+	// 2. Filter providers through circuit breakers and determine active query set
 	var providersToQuery []string
 	var initialFailed []model.ProviderError
 	breakerGenerations := make(map[string]uint64, len(requested))

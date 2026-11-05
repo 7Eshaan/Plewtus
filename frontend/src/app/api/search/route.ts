@@ -6,6 +6,8 @@ type SearchRequest = components["schemas"]["SearchRequest"];
 type SearchResponse = components["schemas"]["SearchResponse"];
 type ErrorResponse = components["schemas"]["ErrorResponse"];
 
+export const maxDuration = 45;
+
 const MAX_REQUEST_BYTES = 1 << 20;
 
 async function readBoundedBody(req: Request): Promise<unknown> {
@@ -135,7 +137,7 @@ export async function POST(req: Request): Promise<NextResponse<SearchResponse | 
       },
       body: JSON.stringify(body),
       cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(45_000),
     });
 
     let data: unknown;

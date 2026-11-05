@@ -14,12 +14,12 @@ import {
   ChevronDown,
   RotateCcw,
 } from "lucide-react";
-import { type ProviderName } from "./provider-chips";
-import { type ExtractionMode } from "./extraction-toggle";
 import {
+  type ProviderName,
+  type ExtractionMode,
   type AdvancedOptions,
   DEFAULT_ADVANCED_OPTIONS,
-} from "./advanced-dropdown";
+} from "@/types/search";
 import { ResultCard } from "./result-card";
 import { ResultSkeleton } from "./result-skeleton";
 import { EmptyState } from "./empty-state";

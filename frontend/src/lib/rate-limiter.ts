@@ -1,3 +1,5 @@
+import { isIP as isNodeIP } from "node:net";
+
 export interface RateLimitResult {
   success: boolean;
   limit: number;
@@ -98,16 +100,17 @@ export function resetRateLimits(): void {
 }
 
 export function getClientIp(req: Request): string {
+  const vercelIp = req.headers.get("x-vercel-forwarded-for");
+  if (vercelIp) {
+    const clientIp = vercelIp.split(",")[0]?.trim();
+    if (clientIp && isNodeIP(clientIp)) return clientIp;
+  }
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp && isNodeIP(realIp.trim())) return realIp.trim();
   const forwardedFor = req.headers.get("x-forwarded-for");
   if (forwardedFor) {
-    // Common reverse proxies append the address they observed to the end of
-    // X-Forwarded-For. Taking the leftmost value lets callers spoof the key.
-    const chain = forwardedFor.split(",");
-    for (let i = chain.length - 1; i >= 0; i--) {
-      const candidate = chain[i]?.trim();
-      if (candidate && isNodeIP(candidate)) return candidate;
-    }
+    const clientIp = forwardedFor.split(",")[0]?.trim();
+    if (clientIp && isNodeIP(clientIp)) return clientIp;
   }
   return "127.0.0.1";
 }
-import { isIP as isNodeIP } from "node:net";

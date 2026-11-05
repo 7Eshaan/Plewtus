@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { Terminal, Copy, Check, Info } from "lucide-react";
-import type { ProviderName } from "./provider-chips";
-import type { ExtractionMode } from "./extraction-toggle";
-import type { AdvancedOptions } from "./advanced-dropdown";
+import type {
+  ProviderName,
+  ExtractionMode,
+  AdvancedOptions,
+} from "@/types/search";
 
 interface CodeSnippetsProps {
   query: string;

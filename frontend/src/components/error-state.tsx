@@ -37,8 +37,8 @@ export function ErrorState({ error, onRetry }: ErrorStateProps) {
             {error.message}
           </p>
           {isBackendUnavailable && (
-            <p className="text-[11px] font-mono text-rose-600 dark:text-rose-400 mt-1">
-              Start the Go backend with: PLEWTUS_PORT=8890 PLEWTUS_API_KEYS=pro_live_agent123:pro ./bin/plewtus
+            <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+              If the backend is hosted on a free-tier service (such as Render), it may take 30–50 seconds to spin up from sleep. Please wait a moment and retry.
             </p>
           )}
         </div>
