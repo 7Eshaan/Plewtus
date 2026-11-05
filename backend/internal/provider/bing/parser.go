@@ -32,11 +32,11 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 	}
 
 	// In Bing, organic results are enclosed in <li class="b_algo">
-	algoNodes := htmlutil.FindAll(doc, func(n *html.Node) bool {
+	algoNodes := htmlutil.FindAllInAncestorScope(doc, "b_results", func(n *html.Node) bool {
 		if n.Type != html.ElementNode || n.Data != "li" {
 			return false
 		}
-		return htmlutil.HasClass(n, "b_algo") && htmlutil.HasAncestorID(n, "b_results")
+		return htmlutil.HasClass(n, "b_algo")
 	})
 
 	var results []model.RawSearchResult

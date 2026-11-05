@@ -34,14 +34,11 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 	}
 
 	// In Yahoo, organic results have class "algo" or "algo-sr"
-	algoNodes := htmlutil.FindAll(doc, func(n *html.Node) bool {
+	algoNodes := htmlutil.FindAllInAncestorScope(doc, "web", func(n *html.Node) bool {
 		if n.Type != html.ElementNode || n.Data != "div" {
 			return false
 		}
 		if !htmlutil.HasClass(n, "algo") {
-			return false
-		}
-		if !htmlutil.HasAncestorID(n, "web") {
 			return false
 		}
 		// Skip ads

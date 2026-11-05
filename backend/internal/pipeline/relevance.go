@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"math"
 	"strings"
 	"unicode"
 )
@@ -13,10 +12,12 @@ var relevanceStopWords = map[string]struct{}{
 	"which": {}, "who": {}, "why": {}, "with": {},
 }
 
-// QueryRelevance estimates whether a result has meaningful lexical overlap with
-// the query. It is a conservative guard against unrelated or polluted SERPs,
-// not a semantic search model. A result must match at least half of the
-// significant query terms (and at least two terms for multi-term queries).
+// QueryRelevance estimates whether a result has lexical overlap with the query.
+// It requires one matching term for a single-term query and two for a
+// multi-term query. This avoids demanding a high coverage ratio from longer
+// natural-language queries while rejecting results that match only a broad
+// single word. It is a guard against polluted SERPs, not a semantic search
+// model.
 func QueryRelevance(query, title, snippet string) (score float64, relevant bool) {
 	queryTerms := meaningfulTokens(query)
 	if len(queryTerms) == 0 {
@@ -35,13 +36,9 @@ func QueryRelevance(query, title, snippet string) (score float64, relevant bool)
 			}
 		}
 	}
-
-	minimumMatches := int(math.Ceil(float64(len(queryTerms)) * 0.5))
-	if len(queryTerms) > 1 && minimumMatches < 2 {
+	minimumMatches := 1
+	if len(queryTerms) > 1 {
 		minimumMatches = 2
-	}
-	if minimumMatches > len(queryTerms) {
-		minimumMatches = len(queryTerms)
 	}
 
 	coverage := float64(matched) / float64(len(queryTerms))

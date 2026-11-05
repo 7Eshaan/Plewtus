@@ -83,6 +83,19 @@ func TestHasAncestorID(t *testing.T) {
 	}
 }
 
+func TestFindAllInAncestorScopeFallsBackWhenContainerIsMissing(t *testing.T) {
+	doc, err := html.Parse(strings.NewReader(`<ul><li class="result">Fallback result</li></ul>`))
+	if err != nil {
+		t.Fatalf("parse test HTML: %v", err)
+	}
+	results := FindAllInAncestorScope(doc, "links", func(n *html.Node) bool {
+		return n.Type == html.ElementNode && n.Data == "li" && HasClass(n, "result")
+	})
+	if len(results) != 1 || TextContent(results[0]) != "Fallback result" {
+		t.Fatalf("expected selector fallback to find the result, got %+v", results)
+	}
+}
+
 func TestUnwrapURL_SearchEngines(t *testing.T) {
 	tests := []struct {
 		name     string

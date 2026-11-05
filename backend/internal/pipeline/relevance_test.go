@@ -45,6 +45,17 @@ func TestQueryRelevanceAcceptsRelevantResults(t *testing.T) {
 	}
 }
 
+func TestQueryRelevanceAllowsPartialOverlapForParaphrasedResults(t *testing.T) {
+	score, relevant := QueryRelevance(
+		"rust language adoption curve",
+		"Rust Adoption Is Growing Fast",
+		"A look at the programming language's growing ecosystem.",
+	)
+	if !relevant || score <= 0 {
+		t.Fatalf("expected a relevant partial-overlap result to pass, got relevant=%v score=%.2f", relevant, score)
+	}
+}
+
 func TestDeduplicateWithOptionsFiltersBeforeRRF(t *testing.T) {
 	responses := []*model.ProviderResponse{
 		{

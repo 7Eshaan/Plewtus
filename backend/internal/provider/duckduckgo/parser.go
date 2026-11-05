@@ -32,11 +32,8 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 	}
 
 	// In /html/, each organic result is in div.result.web-result or div.result
-	resultNodes := htmlutil.FindAll(doc, func(n *html.Node) bool {
+	resultNodes := htmlutil.FindAllInAncestorScope(doc, "links", func(n *html.Node) bool {
 		if n.Type != html.ElementNode || n.Data != "div" {
-			return false
-		}
-		if !htmlutil.HasAncestorID(n, "links") {
 			return false
 		}
 		if !htmlutil.HasClass(n, "result") {
