@@ -11,8 +11,8 @@ import (
 const (
 	// DefaultRRFK is the standard smoothing parameter established by Cormack, Clarke, and Buettcher (SIGIR 2009).
 	DefaultRRFK            = 60.0
-	ConsensusRankingWeight = 0.4
-	RelevanceRankingWeight = 0.6
+	ConsensusRankingWeight = 0.20
+	RelevanceRankingWeight = 0.80
 )
 
 // Ranker defines the interface for ranking and fusing search results.
@@ -142,14 +142,26 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 		}
 	}
 
-	// Sort by hybrid query-fit/consensus score, then preserve deterministic
-	// secondary ordering. Score remains the pure RRF value for API compatibility.
+	// Sort by relevance in descending order (most relevant at top, less relevant towards bottom):
+	// - Results matching query keywords stay on top in descending order of relevance.
+	// - Ties in relevance are broken by hybrid RRF consensus, engine count, and SERP positions.
+	// - Zero-relevance results sink to the very bottom.
 	sort.Slice(scored, func(i, j int) bool {
+		// 1. Results with positive relevance strictly outrank zero-relevance results
+		iRelevant := scored[i].relevance > 0.01
+		jRelevant := scored[j].relevance > 0.01
+		if iRelevant != jRelevant {
+			return iRelevant
+		}
+
+		// 2. Strict descending relevance: higher relevance always ranks on top
+		if math.Abs(scored[i].relevance-scored[j].relevance) > 1e-4 {
+			return scored[i].relevance > scored[j].relevance
+		}
+
+		// 3. For results with identical relevance, hybrid consensus and engine positions decide
 		if math.Abs(scored[i].rankScore-scored[j].rankScore) > 1e-12 {
 			return scored[i].rankScore > scored[j].rankScore
-		}
-		if math.Abs(scored[i].relevance-scored[j].relevance) > 1e-12 {
-			return scored[i].relevance > scored[j].relevance
 		}
 		if scored[i].engineCount != scored[j].engineCount {
 			return scored[i].engineCount > scored[j].engineCount

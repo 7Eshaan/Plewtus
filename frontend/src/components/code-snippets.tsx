@@ -30,7 +30,7 @@ export function CodeSnippets({
   const q = query.trim() || "golang concurrency patterns";
   const payload: Record<string, unknown> = { query: q };
 
-  if (advancedOptions.limit !== 10) {
+  if (advancedOptions.limit !== 50) {
     payload.limit = advancedOptions.limit;
   }
   if (providers.length < 3) {

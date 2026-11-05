@@ -393,25 +393,6 @@ export function SearchPreview({
 
                   <div className="flex flex-col gap-0.5">
                     <label className="text-[10px] font-mono text-zinc-500">
-                      Results Limit (1–50): {advancedOptions.limit}
-                    </label>
-                    <input
-                      type="range"
-                      min={1}
-                      max={50}
-                      value={advancedOptions.limit}
-                      onChange={(e) =>
-                        onAdvancedOptionsChange({
-                          ...advancedOptions,
-                          limit: parseInt(e.target.value, 10),
-                        })
-                      }
-                      className="w-full accent-[#8700ff] h-1.5 cursor-pointer"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-0.5">
-                    <label className="text-[10px] font-mono text-zinc-500">
                       Country ISO (e.g. us, de)
                     </label>
                     <input

@@ -88,7 +88,6 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 			relevance, relevant := QueryRelevance(opts.Query, raw.Title, raw.Snippet)
 			if !relevant {
 				stats.RelevanceRejected++
-				continue
 			}
 
 			cleanURL, key, err := NormalizeURL(raw.URL)
@@ -162,9 +161,12 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 				candidateSnippet := cleanSnippet(raw.Snippet)
 				existing.title = selectQueryAwareTitle(opts.Query, existing.title, candidateTitle)
 				existing.snippet = selectQueryAwareSnippet(opts.Query, existing.snippet, candidateSnippet)
-				existing.relevance, _ = QueryRelevance(opts.Query, existing.title, existing.snippet)
+				candRel, _ := QueryRelevance(opts.Query, existing.title, existing.snippet)
+				if candRel > existing.relevance {
+					existing.relevance = candRel
+				}
 
-				// 6. Prefer secure HTTPS URL over insecure HTTP
+				// 5. Prefer secure HTTPS URL over insecure HTTP
 				if strings.HasPrefix(cleanURL, "https://") && strings.HasPrefix(existing.url, "http://") {
 					existing.url = cleanURL
 				}
@@ -173,87 +175,6 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 	}
 
 	dedupedCount = len(list)
-	// Fallback: If strict relevance rejected 100% of candidate results,
-	// search engines nonetheless returned organic results for the query.
-	// Fall back to admitting candidates that passed domain and URL validity checks,
-	// scoring them so the user receives results instead of an empty screen.
-	if dedupedCount == 0 && stats.RelevanceRejected > 0 {
-		for _, resp := range sortedResponses {
-			for _, raw := range resp.Results {
-				if strings.TrimSpace(raw.URL) == "" {
-					continue
-				}
-				cleanURL, key, err := NormalizeURL(raw.URL)
-				if err != nil {
-					continue
-				}
-				if !matchesDomainFilters(cleanURL, opts.IncludeDomains, opts.ExcludeDomains) {
-					continue
-				}
-
-				relevance, _ := QueryRelevance(opts.Query, raw.Title, raw.Snippet)
-				if relevance <= 0 {
-					relevance = 0.1
-				}
-
-				existing, found := seen[key]
-				if !found {
-					item := &mergedResult{
-						canonicalKey:  key,
-						url:           cleanURL,
-						title:         strings.TrimSpace(raw.Title),
-						snippet:       cleanSnippet(raw.Snippet),
-						publishedDate: strings.TrimSpace(raw.PublishedDate),
-						engines: []model.EngineSource{
-							{
-								Name:     resp.Engine,
-								Position: raw.Position,
-							},
-						},
-						bestPosition: raw.Position,
-						engineCount:  1,
-						firstSeen:    len(list),
-						relevance:    relevance,
-					}
-					seen[key] = item
-					list = append(list, item)
-				} else {
-					engineRecorded := false
-					for idx, eng := range existing.engines {
-						if eng.Name == resp.Engine {
-							engineRecorded = true
-							if raw.Position < eng.Position {
-								existing.engines[idx].Position = raw.Position
-							}
-							break
-						}
-					}
-					if !engineRecorded {
-						existing.engines = append(existing.engines, model.EngineSource{
-							Name:     resp.Engine,
-							Position: raw.Position,
-						})
-						existing.engineCount++
-					}
-					if raw.Position < existing.bestPosition {
-						existing.bestPosition = raw.Position
-					}
-					if existing.publishedDate == "" && strings.TrimSpace(raw.PublishedDate) != "" {
-						existing.publishedDate = strings.TrimSpace(raw.PublishedDate)
-					}
-					candidateTitle := strings.TrimSpace(raw.Title)
-					candidateSnippet := cleanSnippet(raw.Snippet)
-					existing.title = selectQueryAwareTitle(opts.Query, existing.title, candidateTitle)
-					existing.snippet = selectQueryAwareSnippet(opts.Query, existing.snippet, candidateSnippet)
-					if strings.HasPrefix(cleanURL, "https://") && strings.HasPrefix(existing.url, "http://") {
-						existing.url = cleanURL
-					}
-				}
-			}
-		}
-		dedupedCount = len(list)
-	}
-
 	if dedupedCount == 0 {
 		return []model.SearchResult{}, 0, stats
 	}

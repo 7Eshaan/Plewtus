@@ -44,7 +44,7 @@ func Load() *Config {
 		TrustedProxies:   getEnvAsSlice("PLEWTUS_TRUSTED_PROXIES", nil),
 		DefaultTimeout:   getEnvAsDurationMs("PLEWTUS_DEFAULT_TIMEOUT_MS", 6000),
 		MaxLimit:         getEnvAsInt("PLEWTUS_MAX_LIMIT", 50),
-		DefaultLimit:     getEnvAsInt("PLEWTUS_DEFAULT_LIMIT", 10),
+		DefaultLimit:     getEnvAsInt("PLEWTUS_DEFAULT_LIMIT", 50),
 		UserAgent: getEnv(
 			"PLEWTUS_USER_AGENT",
 			"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",

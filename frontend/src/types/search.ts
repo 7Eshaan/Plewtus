@@ -14,7 +14,7 @@ export interface AdvancedOptions {
 }
 
 export const DEFAULT_ADVANCED_OPTIONS: AdvancedOptions = {
-  limit: 10,
+  limit: 50,
   freshness: "",
   country: "",
   language: "",
