@@ -4,9 +4,9 @@ import { Gauge, KeyRound, Shield, Clock } from "lucide-react";
 
 export function UsageLimits() {
   return (
-    <section id="limits" className="w-full pt-8 pb-4 flex flex-col gap-6">
+    <section id="limits" className="w-full pt-8 pb-4 flex flex-col gap-6 scroll-mt-16">
       <div className="flex flex-col gap-1.5 text-center sm:text-left">
-        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-500 uppercase tracking-wider">
+        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-[#8700ff] dark:text-[#a84dff] uppercase tracking-wider font-semibold">
           <span>Usage Quotas &amp; Rate Limits</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans">
@@ -64,10 +64,10 @@ export function UsageLimits() {
         </div>
 
         {/* Tier 2: Developer Pro Tier */}
-        <div className="p-5 sm:p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-4 shadow-2xs">
+        <div className="p-5 sm:p-6 rounded-xl border border-[#8700ff]/30 dark:border-[#8700ff]/40 bg-white dark:bg-[#121215] flex flex-col gap-4 shadow-2xs relative hover:border-[#8700ff]/50 transition-colors">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-[#8700ff] text-white flex items-center justify-center shadow-xs shadow-[#8700ff]/20">
                 <KeyRound className="w-4 h-4" />
               </div>
               <div>
@@ -79,7 +79,7 @@ export function UsageLimits() {
                 </span>
               </div>
             </div>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700/60 font-medium">
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#8700ff]/10 text-[#8700ff] dark:text-[#a84dff] border border-[#8700ff]/25 font-semibold">
               API Key
             </span>
           </div>

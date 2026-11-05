@@ -4,9 +4,9 @@ import { Cpu, GitMerge, Award, ArrowRight } from "lucide-react";
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="w-full pt-8 pb-4 flex flex-col gap-6">
+    <section id="how-it-works" className="w-full pt-8 pb-4 flex flex-col gap-6 scroll-mt-16">
       <div className="flex flex-col gap-1.5 text-center sm:text-left">
-        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-500 uppercase tracking-wider">
+        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-[#8700ff] dark:text-[#a84dff] uppercase tracking-wider font-semibold">
           <span>Architecture &amp; Pipeline</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans">
@@ -65,13 +65,13 @@ export function HowItWorks() {
         </div>
 
         {/* Step 3: Reciprocal Rank Fusion */}
-        <div className="p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-3 shadow-2xs hover:border-zinc-400 dark:hover:border-zinc-700 transition-colors">
-          <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/60 flex items-center justify-center text-zinc-900 dark:text-zinc-100">
+        <div className="p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-3 shadow-2xs hover:border-[#8700ff]/40 dark:hover:border-[#8700ff]/40 transition-colors">
+          <div className="w-8 h-8 rounded-lg bg-[#8700ff]/10 dark:bg-[#8700ff]/20 border border-[#8700ff]/30 flex items-center justify-center text-[#8700ff] dark:text-[#a84dff]">
             <Award className="w-4 h-4" />
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-zinc-400 dark:text-zinc-500 font-semibold">03</span>
+              <span className="font-mono text-xs text-[#8700ff] dark:text-[#a84dff] font-semibold">03</span>
               <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">
                 Reciprocal Rank Fusion (RRF)
               </h3>
@@ -80,7 +80,7 @@ export function HowItWorks() {
               Combines independent provider rankings using the standard information retrieval formula with smoothing constant <code className="text-[11px] font-mono">k = 60</code>. Multi-engine consensus earns higher authority scores.
             </p>
           </div>
-          <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 font-mono text-[10px] text-zinc-400 dark:text-zinc-500 bg-zinc-50 dark:bg-zinc-900/60 p-2 rounded">
+          <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 font-mono text-[10px] text-[#8700ff] dark:text-[#a84dff] bg-[#8700ff]/5 dark:bg-[#8700ff]/10 border border-[#8700ff]/15 p-2 rounded">
             score(d) = &Sigma; 1 / (60 + rank_m(d))
           </div>
         </div>

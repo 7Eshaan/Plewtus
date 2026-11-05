@@ -122,7 +122,7 @@ export function SearchPreview({
       {/* 1. TOP SEARCH INPUT BAR (matches Exa.ai spacing & layout) */}
       <form
         onSubmit={handleFormSubmit}
-        className="px-4 py-3 sm:py-3.5 flex items-center gap-3 bg-white dark:bg-[#111114] border-b border-zinc-200 dark:border-zinc-800/80"
+        className="px-4 py-3 sm:py-3.5 flex items-center gap-3 bg-white dark:bg-[#111114] border-b border-zinc-200 dark:border-zinc-800/80 focus-within:border-[#8700ff]/50 transition-colors"
         role="search"
         aria-label="Metasearch input"
       >
@@ -158,7 +158,7 @@ export function SearchPreview({
           <button
             type="submit"
             disabled={loading || !query.trim()}
-            className="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 active:scale-95 text-white shadow-xs transition-all flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+            className="w-8 h-8 rounded-lg bg-[#8700ff] hover:bg-[#9924ff] active:scale-95 text-white shadow-xs shadow-[#8700ff]/25 transition-all flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#8700ff]"
             title="Execute search"
             aria-label="Submit search"
           >
@@ -406,7 +406,7 @@ export function SearchPreview({
                           limit: parseInt(e.target.value, 10),
                         })
                       }
-                      className="w-full accent-blue-600 h-1.5"
+                      className="w-full accent-[#8700ff] h-1.5 cursor-pointer"
                     />
                   </div>
 
@@ -486,7 +486,7 @@ export function SearchPreview({
               onClick={() => onTabChange("code")}
               className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
                 activeTab === "code"
-                  ? "bg-white dark:bg-zinc-800 border-zinc-400 dark:border-zinc-600 text-zinc-950 dark:text-zinc-50 shadow-xs"
+                  ? "bg-white dark:bg-zinc-800 border-[#8700ff]/60 text-[#8700ff] dark:text-[#a84dff] shadow-xs"
                   : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-200"
               }`}
               title="View API Code Snippets"
@@ -525,7 +525,7 @@ export function SearchPreview({
                   <ListOrdered className="w-3.5 h-3.5" />
                   <span>Results</span>
                   {response && response.results.length > 0 && (
-                    <span className="text-[10px] font-bold px-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300">
+                    <span className="text-[10px] font-bold px-1.5 rounded-full bg-[#8700ff]/10 text-[#8700ff] dark:text-[#a84dff] border border-[#8700ff]/20">
                       {response.results.length}
                     </span>
                   )}
@@ -566,7 +566,7 @@ export function SearchPreview({
             {/* Subtle loading spinner if searching */}
             {loading && (
               <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#8700ff]" />
                 <span className="hidden sm:inline">Searching...</span>
               </div>
             )}
@@ -611,7 +611,7 @@ export function SearchPreview({
                           key={sug}
                           type="button"
                           onClick={() => onSelectSuggestion(sug)}
-                          className="text-xs font-mono px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white transition-all cursor-pointer shadow-2xs"
+                          className="text-xs font-mono px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:border-[#8700ff]/40 hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-all cursor-pointer shadow-2xs"
                         >
                           {sug}
                         </button>

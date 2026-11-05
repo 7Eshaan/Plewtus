@@ -59,7 +59,7 @@ export function ResultCard({ result }: ResultCardProps) {
   }
 
   return (
-    <article className="group relative p-3 sm:p-3.5 rounded-xl border border-zinc-200/90 dark:border-zinc-800/90 bg-white dark:bg-[#121215] hover:border-zinc-300 dark:hover:border-zinc-700 transition-all flex flex-col gap-1.5 shadow-2xs">
+    <article className="group relative p-3 sm:p-3.5 rounded-xl border border-zinc-200/90 dark:border-zinc-800/90 bg-white dark:bg-[#121215] hover:border-[#8700ff]/30 dark:hover:border-[#8700ff]/30 transition-all flex flex-col gap-1.5 shadow-2xs">
       {/* Top Header: Icon + Title + Hostname */}
       <div className="flex items-center justify-between gap-2.5 text-xs">
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -71,7 +71,7 @@ export function ResultCard({ result }: ResultCardProps) {
               href={result.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:underline hover:text-blue-600 dark:hover:text-blue-400 transition-colors focus:outline-none"
+              className="hover:underline hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors focus:outline-none"
             >
               {result.title}
             </a>
@@ -135,7 +135,7 @@ export function ResultCard({ result }: ResultCardProps) {
             </span>
           )}
           <span
-            className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium"
+            className="px-1.5 py-0.5 rounded text-[10px] bg-[#8700ff]/10 text-[#8700ff] dark:text-[#a84dff] border border-[#8700ff]/20 font-medium"
             title={`Reciprocal Rank Fusion score: ${result.score}`}
           >
             RRF {result.score.toFixed(4)}

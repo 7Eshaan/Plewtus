@@ -9,45 +9,40 @@ export function Header() {
         {/* Brand */}
         <a
           href="#demo"
-          className="flex items-center gap-3 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600 rounded-md"
+          className="flex items-center gap-2.5 focus:outline-none focus:ring-1 focus:ring-[#8700ff]/50 rounded-md group"
           aria-label="Plewtus Metasearch Home"
         >
-          <div className="w-7 h-7 rounded-md bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 flex items-center justify-center font-mono font-bold text-sm select-none shadow-xs">
+          <div className="w-7 h-7 rounded-md bg-[#8700ff] text-white flex items-center justify-center font-mono font-bold text-sm select-none shadow-xs shadow-[#8700ff]/25 group-hover:scale-105 transition-transform">
             P
           </div>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm tracking-tight text-zinc-950 dark:text-zinc-50">
-              Plewtus
-            </span>
-            <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400">
-              Metasearch
-            </span>
-          </div>
+          <span className="font-semibold text-sm tracking-tight text-zinc-950 dark:text-zinc-50 group-hover:text-[#8700ff] dark:group-hover:text-[#a84dff] transition-colors">
+            Plewtus
+          </span>
         </a>
 
         {/* Center navigation links */}
         <nav className="hidden md:flex items-center gap-6 text-xs font-mono text-zinc-600 dark:text-zinc-400" aria-label="Page sections">
           <a
             href="#demo"
-            className="hover:text-zinc-950 dark:hover:text-zinc-100 transition-colors"
+            className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors"
           >
             Search Demo
           </a>
           <a
             href="#how-it-works"
-            className="hover:text-zinc-950 dark:hover:text-zinc-100 transition-colors"
+            className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors"
           >
             How It Works
           </a>
           <a
             href="#mcp"
-            className="hover:text-zinc-950 dark:hover:text-zinc-100 transition-colors"
+            className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors"
           >
             MCP Stdio
           </a>
           <a
             href="#limits"
-            className="hover:text-zinc-950 dark:hover:text-zinc-100 transition-colors"
+            className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors"
           >
             Limits
           </a>

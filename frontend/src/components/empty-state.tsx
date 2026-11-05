@@ -37,7 +37,7 @@ export function EmptyState({ searched, query, onSelectSuggestion }: EmptyStatePr
 
   return (
     <div className="py-12 px-4 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-[#121215]/40 flex flex-col items-center justify-center text-center gap-4">
-      <div className="w-9 h-9 rounded-lg bg-zinc-200/60 dark:bg-zinc-800/60 border border-zinc-300/80 dark:border-zinc-700/60 flex items-center justify-center text-zinc-700 dark:text-zinc-300">
+      <div className="w-9 h-9 rounded-lg bg-[#8700ff]/10 dark:bg-[#8700ff]/20 border border-[#8700ff]/30 flex items-center justify-center text-[#8700ff] dark:text-[#a84dff]">
         <Sparkles className="w-4 h-4" />
       </div>
       <div className="flex flex-col gap-1 max-w-md">
@@ -60,7 +60,7 @@ export function EmptyState({ searched, query, onSelectSuggestion }: EmptyStatePr
               key={sug}
               type="button"
               onClick={() => onSelectSuggestion(sug)}
-              className="text-xs font-mono px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-950 dark:hover:text-white transition-all cursor-pointer shadow-2xs"
+              className="text-xs font-mono px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-[#8700ff]/40 hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-all cursor-pointer shadow-2xs"
             >
               {sug}
             </button>

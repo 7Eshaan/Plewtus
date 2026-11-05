@@ -76,7 +76,7 @@ export function AdvancedDropdown({
         <SlidersHorizontal className="w-3.5 h-3.5" />
         <span>Advanced</span>
         {activeCount > 0 && (
-          <span className="w-4 h-4 rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-950 text-[10px] font-bold flex items-center justify-center">
+          <span className="w-4 h-4 rounded-full bg-[#8700ff] text-white text-[10px] font-bold flex items-center justify-center shadow-xs shadow-[#8700ff]/30">
             {activeCount}
           </span>
         )}
@@ -120,7 +120,7 @@ export function AdvancedDropdown({
                   const val = parseInt(e.target.value, 10);
                   onChange({ ...options, limit: isNaN(val) ? 10 : Math.min(50, Math.max(1, val)) });
                 }}
-                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#8700ff]/50 focus:border-[#8700ff]/50"
               />
             </div>
 
@@ -138,7 +138,7 @@ export function AdvancedDropdown({
                     freshness: e.target.value as AdvancedOptions["freshness"],
                   })
                 }
-                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#8700ff]/50 focus:border-[#8700ff]/50"
               >
                 <option value="">Any time (Default)</option>
                 <option value="day">Past 24 hours (day)</option>
@@ -165,7 +165,7 @@ export function AdvancedDropdown({
                     country: e.target.value.toLowerCase().replace(/[^a-z]/g, ""),
                   })
                 }
-                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600 uppercase placeholder:normal-case"
+                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#8700ff]/50 focus:border-[#8700ff]/50 uppercase placeholder:normal-case"
               />
             </div>
 
@@ -186,7 +186,7 @@ export function AdvancedDropdown({
                     language: e.target.value.toLowerCase().replace(/[^a-z]/g, ""),
                   })
                 }
-                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600 uppercase placeholder:normal-case"
+                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#8700ff]/50 focus:border-[#8700ff]/50 uppercase placeholder:normal-case"
               />
             </div>
 
@@ -201,7 +201,7 @@ export function AdvancedDropdown({
                 placeholder="e.g. go.dev, github.com"
                 value={options.includeDomains}
                 onChange={(e) => onChange({ ...options, includeDomains: e.target.value })}
-                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#8700ff]/50 focus:border-[#8700ff]/50"
               />
             </div>
 
@@ -216,7 +216,7 @@ export function AdvancedDropdown({
                 placeholder="e.g. pinterest.com, medium.com"
                 value={options.excludeDomains}
                 onChange={(e) => onChange({ ...options, excludeDomains: e.target.value })}
-                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#8700ff]/50 focus:border-[#8700ff]/50"
               />
             </div>
           </div>
@@ -242,7 +242,7 @@ export function AdvancedDropdown({
                       const val = parseInt(e.target.value, 10);
                       onChange({ ...options, maxPages: isNaN(val) ? 3 : Math.min(10, Math.max(1, val)) });
                     }}
-                    className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                    className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#8700ff]/50 focus:border-[#8700ff]/50"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -260,7 +260,7 @@ export function AdvancedDropdown({
                       const val = parseInt(e.target.value, 10);
                       onChange({ ...options, maxCharsPerPage: isNaN(val) ? 4000 : Math.min(20000, Math.max(500, val)) });
                     }}
-                    className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+                    className="px-2.5 py-1.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#8700ff]/50 focus:border-[#8700ff]/50"
                   />
                 </div>
               </div>

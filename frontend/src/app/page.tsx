@@ -151,9 +151,12 @@ export default function HomePage() {
     <div className="min-h-screen flex flex-col bg-white dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 transition-colors">
       <Header />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-8 sm:py-12 flex flex-col gap-10">
-        {/* Centered Hero & Metasearch Playground Section */}
-        <section id="demo" className="w-full flex flex-col items-center text-center gap-5 pt-2 sm:pt-4">
+      <main className="flex-1 w-full flex flex-col">
+        {/* Centered Hero & Metasearch Playground Section (First Fold) */}
+        <section
+          id="demo"
+          className="w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] flex flex-col items-center justify-center text-center px-4 py-8 sm:py-12 gap-5 max-w-4xl mx-auto scroll-mt-14"
+        >
           <div className="flex flex-col items-center gap-2.5 max-w-2xl">
             <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans text-balance">
               Federated Search for AI Agents
@@ -165,8 +168,12 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Centered Metasearch Playground Card */}
-          <div className="w-full max-w-4xl mx-auto pt-2">
+          {/* Centered Metasearch Playground Card with subtle #8700ff ambient glow */}
+          <div className="relative w-full max-w-4xl mx-auto pt-2">
+            <div
+              className="absolute -inset-3 bg-gradient-to-r from-[#8700ff]/10 via-[#8700ff]/5 to-[#8700ff]/10 rounded-3xl blur-2xl opacity-70 dark:opacity-40 pointer-events-none -z-10"
+              aria-hidden="true"
+            />
             <SearchPreview
               query={query}
               onQueryChange={setQuery}
@@ -188,23 +195,26 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Section Divider */}
-        <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80 my-2" />
+        {/* 2nd Page Container: Documentation, MCP & Rate Limits */}
+        <div className="w-full max-w-4xl mx-auto px-4 flex flex-col gap-10 pb-16">
+          {/* Section Divider - Appears on 2nd page scroll */}
+          <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80" />
 
-        {/* How It Works Section */}
-        <HowItWorks />
+          {/* How It Works Section */}
+          <HowItWorks />
 
-        {/* Section Divider */}
-        <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80 my-2" />
+          {/* Section Divider */}
+          <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80 my-2" />
 
-        {/* Model Context Protocol (MCP) Section */}
-        <McpSection />
+          {/* Model Context Protocol (MCP) Section */}
+          <McpSection />
 
-        {/* Section Divider */}
-        <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80 my-2" />
+          {/* Section Divider */}
+          <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80 my-2" />
 
-        {/* Usage & Rate Limits Section */}
-        <UsageLimits />
+          {/* Usage & Rate Limits Section */}
+          <UsageLimits />
+        </div>
       </main>
 
       {/* Footer */}
@@ -217,16 +227,16 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center gap-4 text-xs">
-            <a href="#demo" className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+            <a href="#demo" className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors">
               Search Demo
             </a>
-            <a href="#how-it-works" className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+            <a href="#how-it-works" className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors">
               How It Works
             </a>
-            <a href="#mcp" className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+            <a href="#mcp" className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors">
               MCP Stdio
             </a>
-            <a href="#limits" className="hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+            <a href="#limits" className="hover:text-[#8700ff] dark:hover:text-[#a84dff] transition-colors">
               Limits
             </a>
           </div>

@@ -72,7 +72,7 @@ export function SearchBar({
       aria-label="Metasearch"
     >
       {/* Search Input Box */}
-      <div className="relative group flex items-center w-full rounded-xl border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-xs hover:border-zinc-400 dark:hover:border-zinc-700 focus-within:border-zinc-950 dark:focus-within:border-zinc-400 focus-within:ring-2 focus-within:ring-zinc-950/10 dark:focus-within:ring-white/10 transition-all duration-150">
+      <div className="relative group flex items-center w-full rounded-xl border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-[#121215] shadow-xs hover:border-zinc-400 dark:hover:border-zinc-700 focus-within:border-[#8700ff] focus-within:ring-2 focus-within:ring-[#8700ff]/20 transition-all duration-150">
         {/* Left search icon */}
         <div className="pl-4 pr-2 text-zinc-400 dark:text-zinc-500 flex items-center justify-center pointer-events-none">
           <Search className="w-4 h-4" />
@@ -116,7 +116,7 @@ export function SearchBar({
           <button
             type="submit"
             disabled={loading || !query.trim()}
-            className="px-3.5 py-2 rounded-lg bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 text-xs sm:text-sm font-medium hover:opacity-90 active:scale-98 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="px-3.5 py-2 rounded-lg bg-[#8700ff] hover:bg-[#9924ff] text-white text-xs sm:text-sm font-medium active:scale-98 transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer shadow-xs shadow-[#8700ff]/25"
             aria-label="Submit search"
           >
             {loading ? (

@@ -58,9 +58,9 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","a
   }
 
   return (
-    <section id="mcp" className="w-full pt-8 pb-4 flex flex-col gap-6">
+    <section id="mcp" className="w-full pt-8 pb-4 flex flex-col gap-6 scroll-mt-16">
       <div className="flex flex-col gap-1.5 text-center sm:text-left">
-        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-500 uppercase tracking-wider">
+        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-[#8700ff] dark:text-[#a84dff] uppercase tracking-wider font-semibold">
           <span>AI Agent Interoperability</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans">
@@ -102,7 +102,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","a
           <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-2 shadow-2xs">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
+                <ShieldCheck className="w-3.5 h-3.5 text-[#8700ff]" />
                 <code className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
                   extract
                 </code>

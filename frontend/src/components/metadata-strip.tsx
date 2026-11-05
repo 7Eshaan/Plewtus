@@ -86,7 +86,7 @@ export function MetadataStrip({ metadata }: MetadataStripProps) {
         {/* Cache status */}
         {metadata.cached && (
           <span
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-[#8700ff]/10 text-[#8700ff] dark:text-[#a84dff] border border-[#8700ff]/20"
             title="Served instantly from in-memory cache"
           >
             <Zap className="w-2.5 h-2.5" />
