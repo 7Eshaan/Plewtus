@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"plewtus/internal/cache"
@@ -25,6 +26,14 @@ type Orchestrator struct {
 	timeout   time.Duration
 	userAgent string
 	logger    *slog.Logger
+	flightMu  sync.Mutex
+	flights   map[string]*searchFlight
+}
+
+type searchFlight struct {
+	done     chan struct{}
+	response *model.SearchResponse
+	err      error
 }
 
 // New creates a new Orchestrator instance.
@@ -51,6 +60,7 @@ func New(registry *provider.Registry, timeout time.Duration, userAgent string, l
 		timeout:   timeout,
 		userAgent: userAgent,
 		logger:    logger,
+		flights:   make(map[string]*searchFlight),
 	}
 }
 
@@ -77,10 +87,57 @@ type providerOutcome struct {
 	name     string
 	response *model.ProviderResponse
 	err      error
+	tookMs   int64
 }
 
 // Search executes concurrent search queries across requested providers and fuses partial responses.
-func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*model.SearchResponse, error) {
+func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (response *model.SearchResponse, err error) {
+	start := time.Now()
+	if req == nil {
+		return nil, fmt.Errorf("search request cannot be nil")
+	}
+	if o.cache == nil {
+		return o.search(ctx, req)
+	}
+
+	cacheKey := o.cache.Key(req)
+	if cachedResp, ok := o.cache.Get(cacheKey); ok {
+		cachedResp.Metadata.TookMs = time.Since(start).Milliseconds()
+		cachedResp.Metadata.Timestamp = time.Now().UTC().Format(time.RFC3339)
+		return cachedResp, nil
+	}
+
+	o.flightMu.Lock()
+	if flight, exists := o.flights[cacheKey]; exists {
+		o.flightMu.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-flight.done:
+			return flight.response, flight.err
+		}
+	}
+	flight := &searchFlight{done: make(chan struct{})}
+	o.flights[cacheKey] = flight
+	o.flightMu.Unlock()
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			response = nil
+			err = fmt.Errorf("search orchestration panic: %v", recovered)
+			o.logger.Error("search orchestration panic recovered", slog.Any("error", recovered))
+		}
+		o.flightMu.Lock()
+		flight.response = response
+		flight.err = err
+		delete(o.flights, cacheKey)
+		close(flight.done)
+		o.flightMu.Unlock()
+	}()
+	return o.search(ctx, req)
+}
+
+func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest) (*model.SearchResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -108,11 +165,13 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 	// 3. Filter providers through circuit breakers and determine active query set
 	var providersToQuery []string
 	var initialFailed []model.ProviderError
+	breakerGenerations := make(map[string]uint64, len(requested))
 
 	for _, pName := range requested {
 		if o.breakers != nil {
 			breaker := o.breakers.Get(pName)
-			if err := breaker.Allow(); err != nil {
+			generation, err := breaker.AllowWithGeneration()
+			if err != nil {
 				o.logger.Warn("provider circuit breaker open, skipping",
 					slog.String("engine", pName),
 					slog.Any("error", err),
@@ -123,6 +182,7 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 				})
 				continue
 			}
+			breakerGenerations[pName] = generation
 		}
 		providersToQuery = append(providersToQuery, pName)
 	}
@@ -134,7 +194,14 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 			if containsProvider(requested, candidate) {
 				continue
 			}
-			if o.breakers == nil || o.breakers.Get(candidate).Allow() == nil {
+			if o.breakers == nil {
+				providersToQuery = append(providersToQuery, candidate)
+				queried = append(queried, candidate)
+				break
+			}
+			generation, err := o.breakers.Get(candidate).AllowWithGeneration()
+			if err == nil {
+				breakerGenerations[candidate] = generation
 				providersToQuery = append(providersToQuery, candidate)
 				queried = append(queried, candidate)
 				o.logger.Info("circuit breaker fallback: querying alternative healthy provider",
@@ -147,13 +214,15 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 
 	// 4. Dispatch queries to active providers concurrently
 	ch := make(chan providerOutcome, len(providersToQuery))
+	candidateLimit := searchCandidateLimit(req.Limit, req.Offset)
 
 	for _, pName := range providersToQuery {
-		go func(name string) {
+		generation := breakerGenerations[pName]
+		go func(name string, breakerGeneration uint64) {
 			defer func() {
 				if r := recover(); r != nil {
 					if o.breakers != nil {
-						o.breakers.Get(name).ReportFailure(fmt.Errorf("panic: %v", r))
+						o.breakers.Get(name).ReportFailureFor(breakerGeneration, fmt.Errorf("panic: %v", r))
 					}
 					ch <- providerOutcome{
 						name: name,
@@ -164,6 +233,9 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 
 			p, ok := o.registry.Get(name)
 			if !ok {
+				if o.breakers != nil {
+					o.breakers.Get(name).ReportFailureFor(breakerGeneration, fmt.Errorf("provider %q not found or not registered", name))
+				}
 				ch <- providerOutcome{
 					name: name,
 					err:  fmt.Errorf("provider %q not found or not registered", name),
@@ -177,7 +249,7 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 
 			pReq := model.ProviderRequest{
 				Query:          req.Query,
-				Limit:          req.Limit + req.Offset,
+				Limit:          candidateLimit,
 				Offset:         0,
 				Freshness:      req.Freshness,
 				Country:        req.Country,
@@ -188,23 +260,26 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 				Timeout:        o.timeout,
 			}
 
+			providerStart := time.Now()
 			resp, err := p.Search(pCtx, pReq)
+			tookMs := time.Since(providerStart).Milliseconds()
 			if err != nil {
 				if o.breakers != nil {
-					o.breakers.Get(name).ReportFailure(err)
+					o.breakers.Get(name).ReportFailureFor(breakerGeneration, err)
 				}
 				ch <- providerOutcome{
-					name: name,
-					err:  err,
+					name:   name,
+					err:    err,
+					tookMs: tookMs,
 				}
 				return
 			}
 			if resp == nil {
 				err := fmt.Errorf("provider %s returned an empty response", name)
 				if o.breakers != nil {
-					o.breakers.Get(name).ReportFailure(err)
+					o.breakers.Get(name).ReportFailureFor(breakerGeneration, err)
 				}
-				ch <- providerOutcome{name: name, err: err}
+				ch <- providerOutcome{name: name, err: err, tookMs: tookMs}
 				return
 			}
 			if len(resp.Results) == 0 {
@@ -215,19 +290,21 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (*m
 			}
 
 			if o.breakers != nil {
-				o.breakers.Get(name).ReportSuccess()
+				o.breakers.Get(name).ReportSuccessFor(breakerGeneration)
 			}
 			ch <- providerOutcome{
 				name:     name,
 				response: resp,
+				tookMs:   tookMs,
 			}
-		}(pName)
+		}(pName, generation)
 	}
 
 	// 5. Collect outcomes with context cancellation resilience
 	var successful []string
 	failed := append([]model.ProviderError(nil), initialFailed...)
 	var rawResponses []*model.ProviderResponse
+	providerTimings := make(map[string]int64, len(providersToQuery))
 	rawCount := 0
 	replied := make(map[string]bool)
 
@@ -236,6 +313,7 @@ collectLoop:
 		select {
 		case out := <-ch:
 			replied[out.name] = true
+			providerTimings[out.name] = out.tookMs
 			if out.err != nil {
 				o.logger.Warn("provider search failed",
 					slog.String("engine", out.name),
@@ -259,11 +337,12 @@ collectLoop:
 			)
 
 			// Drain any immediately available responses
-			drainResponses(ch, replied, &successful, &failed, &rawResponses, &rawCount)
+			drainResponses(ch, replied, &successful, &failed, &rawResponses, &rawCount, providerTimings)
 
 			// Mark remaining unreplied providers as failed due to context termination
 			for _, pName := range providersToQuery {
 				if !replied[pName] {
+					providerTimings[pName] = time.Since(start).Milliseconds()
 					failed = append(failed, model.ProviderError{
 						Engine: pName,
 						Error:  ctx.Err().Error(),
@@ -307,7 +386,7 @@ collectLoop:
 		IncludeDomains: req.IncludeDomains,
 		ExcludeDomains: req.ExcludeDomains,
 	}
-	uniqueResults, dedupedCount := pipeline.DeduplicateWithOptions(rawResponses, dedupOpts)
+	uniqueResults, dedupedCount, dedupStats := pipeline.DeduplicateDetailed(rawResponses, dedupOpts)
 	if rawCount > 0 && len(uniqueResults) == 0 {
 		o.logger.Warn("all raw provider results were rejected or filtered",
 			slog.Int("raw_results", rawCount),
@@ -330,8 +409,13 @@ collectLoop:
 	resp.Metadata.Providers.Queried = queried
 	resp.Metadata.Providers.Successful = successful
 	resp.Metadata.Providers.Failed = failed
+	resp.Metadata.Providers.TimingMs = providerTimings
 	resp.Metadata.Stats.RawCount = rawCount
 	resp.Metadata.Stats.DedupedCount = dedupedCount
+	resp.Metadata.Stats.RelevanceRejectedCount = dedupStats.RelevanceRejected
+	resp.Metadata.Stats.DomainRejectedCount = dedupStats.DomainRejected
+	resp.Metadata.Stats.InvalidURLCount = dedupStats.InvalidURL
+	resp.Metadata.Stats.DuplicateCount = dedupStats.Duplicates
 
 	// Populate applied filters in metadata if any filters were active
 	if req.Freshness != "" || len(req.IncludeDomains) > 0 || len(req.ExcludeDomains) > 0 ||
@@ -353,6 +437,21 @@ collectLoop:
 	}
 
 	return resp, nil
+}
+
+// searchCandidateLimit fetches a wider first-page pool for post-retrieval
+// relevance filtering and hybrid reranking, while respecting the public
+// provider window and keeping response sizes bounded.
+func searchCandidateLimit(limit, offset int) int {
+	requestedWindow := limit + offset
+	candidateLimit := requestedWindow
+	if candidateLimit < 30 {
+		candidateLimit = 30
+	}
+	if candidateLimit > 50 {
+		candidateLimit = 50
+	}
+	return candidateLimit
 }
 
 func containsProvider(providers []string, name string) bool {
@@ -389,11 +488,13 @@ func drainResponses(
 	failed *[]model.ProviderError,
 	rawResponses *[]*model.ProviderResponse,
 	rawCount *int,
+	providerTimings map[string]int64,
 ) {
 	for {
 		select {
 		case out := <-ch:
 			replied[out.name] = true
+			providerTimings[out.name] = out.tookMs
 			if out.err != nil {
 				*failed = append(*failed, model.ProviderError{
 					Engine: out.name,

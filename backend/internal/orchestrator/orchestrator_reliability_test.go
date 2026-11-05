@@ -21,6 +21,26 @@ type countProvider struct {
 	err   error
 }
 
+type delayedCountProvider struct {
+	calls   int64
+	started chan struct{}
+	release chan struct{}
+}
+
+func (c *delayedCountProvider) Name() string { return "delayed" }
+func (c *delayedCountProvider) Search(ctx context.Context, req model.ProviderRequest) (*model.ProviderResponse, error) {
+	atomic.AddInt64(&c.calls, 1)
+	c.started <- struct{}{}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.release:
+	}
+	return &model.ProviderResponse{Engine: c.Name(), Results: []model.RawSearchResult{{
+		Title: "Go documentation", URL: "https://go.dev/doc", Snippet: "Official Go documentation", Position: 1,
+	}}}, nil
+}
+
 func (c *countProvider) Name() string { return c.name }
 func (c *countProvider) Search(ctx context.Context, req model.ProviderRequest) (*model.ProviderResponse, error) {
 	atomic.AddInt64(&c.calls, 1)
@@ -61,6 +81,9 @@ func TestOrchestrator_CacheIntegration(t *testing.T) {
 	if resp1.Metadata.Cached {
 		t.Fatal("expected first response not to be cached")
 	}
+	if _, ok := resp1.Metadata.Providers.TimingMs["mock1"]; !ok {
+		t.Fatalf("expected per-provider timing metadata, got %+v", resp1.Metadata.Providers.TimingMs)
+	}
 	if atomic.LoadInt64(&p.calls) != 1 {
 		t.Fatalf("expected 1 call on cache miss, got %d", atomic.LoadInt64(&p.calls))
 	}
@@ -78,6 +101,51 @@ func TestOrchestrator_CacheIntegration(t *testing.T) {
 	}
 	if len(resp2.Results) != 1 || resp2.Results[0].URL != "https://go.dev/doc" {
 		t.Fatalf("unexpected cached results: %+v", resp2.Results)
+	}
+}
+
+func TestOrchestrator_CoalescesConcurrentCacheMisses(t *testing.T) {
+	reg := provider.NewRegistry()
+	p := &delayedCountProvider{started: make(chan struct{}, 2), release: make(chan struct{})}
+	reg.Register(p)
+	searchCache := cache.New(cache.Options{TTL: time.Minute, MaxEntries: 10})
+	orch := New(reg, time.Second, "test", testLogger()).WithCache(searchCache)
+	req := &model.SearchRequest{Query: "go documentation", Limit: 1, Providers: []string{"delayed"}}
+
+	responses := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			_, err := orch.Search(context.Background(), req)
+			responses <- err
+		}()
+	}
+	select {
+	case <-p.started:
+	case <-time.After(time.Second):
+		t.Fatal("provider search did not start")
+	}
+	time.Sleep(20 * time.Millisecond)
+	if got := atomic.LoadInt64(&p.calls); got != 1 {
+		t.Fatalf("expected concurrent identical searches to share one provider request, got %d calls", got)
+	}
+	close(p.release)
+	for i := 0; i < 2; i++ {
+		if err := <-responses; err != nil {
+			t.Fatalf("coalesced search failed: %v", err)
+		}
+	}
+}
+
+func TestSearchCandidateLimitOverfetchesWithinProviderWindow(t *testing.T) {
+	for _, tc := range []struct{ limit, offset, want int }{
+		{limit: 10, offset: 0, want: 30},
+		{limit: 1, offset: 0, want: 30},
+		{limit: 10, offset: 40, want: 50},
+		{limit: 50, offset: 0, want: 50},
+	} {
+		if got := searchCandidateLimit(tc.limit, tc.offset); got != tc.want {
+			t.Errorf("searchCandidateLimit(%d, %d) = %d, want %d", tc.limit, tc.offset, got, tc.want)
+		}
 	}
 }
 

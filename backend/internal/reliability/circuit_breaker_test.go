@@ -71,6 +71,24 @@ func TestCircuitBreaker_StateTransitions(t *testing.T) {
 	}
 }
 
+func TestCircuitBreaker_IgnoresStaleSuccessAfterTrip(t *testing.T) {
+	cb := NewCircuitBreaker("stale-outcome", BreakerOptions{FailureThreshold: 1, Cooldown: time.Minute})
+	generation, err := cb.AllowWithGeneration()
+	if err != nil {
+		t.Fatalf("expected request to be admitted, got %v", err)
+	}
+	cb.ReportFailureFor(generation, errors.New("upstream failed"))
+	if cb.State() != StateOpen {
+		t.Fatal("expected breaker to open after threshold failure")
+	}
+
+	// Simulates a successful request that began before the failure opened the circuit.
+	cb.ReportSuccessFor(generation)
+	if cb.State() != StateOpen {
+		t.Fatal("stale in-flight success must not close the open circuit")
+	}
+}
+
 func TestCircuitBreaker_HalfOpenProbeFailureTripsToOpen(t *testing.T) {
 	opts := BreakerOptions{
 		FailureThreshold: 1,

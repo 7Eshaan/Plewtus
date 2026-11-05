@@ -5,7 +5,8 @@ info:
   description: |
     Plewtus is an AI-agent search API backend that aggregates search results across
     multiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture.
-    Results are normalized, deduplicated, and ranked via Reciprocal Rank Fusion (RRF),
+    Results are relevance-filtered, normalized, deduplicated, and ranked using query relevance
+    combined with Reciprocal Rank Fusion (RRF),
     with optional AI-friendly webpage extraction (clean text, highlights, Markdown).
   license:
     name: MIT
@@ -20,7 +21,7 @@ paths:
       summary: Execute federated search
       description: |
         Dispatches concurrent search queries across upstream search engines, normalizes
-        and deduplicates results, computes Reciprocal Rank Fusion (RRF) scores, and
+        filters and deduplicates results, ranks with query relevance plus Reciprocal Rank Fusion (RRF), and
         optionally extracts webpage content for AI agents.
       operationId: search
       security:
@@ -270,6 +271,8 @@ components:
         - snippet
         - rank
         - score
+        - relevance_score
+        - ranking_score
         - engines
       properties:
         id:
@@ -293,8 +296,16 @@ components:
         score:
           type: number
           format: double
-          description: Reciprocal Rank Fusion (RRF) score.
+          description: Reciprocal Rank Fusion (RRF) consensus score; the final order also uses relevance_score.
           example: 0.049180
+        relevance_score:
+          type: number
+          format: double
+          description: Query relevance score derived from term coverage, title matches, and exact phrase matches.
+        ranking_score:
+          type: number
+          format: double
+          description: Hybrid ordering score (0.4 normalized RRF consensus plus 0.6 query relevance).
         engines:
           type: array
           items:
@@ -382,6 +393,7 @@ components:
         - queried
         - successful
         - failed
+        - timing_ms
       properties:
         queried:
           type: array
@@ -398,6 +410,12 @@ components:
           items:
             $ref: '#/components/schemas/ProviderError'
           description: Engines that failed, timed out, or encountered open circuit breakers.
+        timing_ms:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Per-provider elapsed time in milliseconds for completed attempts.
 
     ProviderError:
       type: object
@@ -417,6 +435,10 @@ components:
       required:
         - raw_count
         - deduped_count
+        - relevance_rejected_count
+        - domain_rejected_count
+        - invalid_url_count
+        - duplicate_count
       properties:
         raw_count:
           type: integer
@@ -424,6 +446,18 @@ components:
         deduped_count:
           type: integer
           description: Total unique results identified after canonical URL normalization.
+        relevance_rejected_count:
+          type: integer
+          description: Raw candidates rejected for insufficient query relevance.
+        domain_rejected_count:
+          type: integer
+          description: Raw candidates rejected by include/exclude domain filters.
+        invalid_url_count:
+          type: integer
+          description: Raw candidates rejected because their destination URL was empty or invalid.
+        duplicate_count:
+          type: integer
+          description: Candidates merged into an already-seen canonical destination URL.
 
     AppliedFilters:
       type: object

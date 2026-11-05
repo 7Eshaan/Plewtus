@@ -30,3 +30,23 @@ func BuildSearchQuery(req model.ProviderRequest) string {
 
 	return strings.Join(parts, " ")
 }
+
+// AcceptLanguage builds a consistent preference header for provider requests.
+// Search engines still receive their own provider-specific language parameter;
+// this header keeps redirects and localized interstitials aligned with it.
+func AcceptLanguage(language string) string {
+	language = strings.ToLower(strings.TrimSpace(language))
+	if language == "" {
+		return "en-US,en;q=0.9"
+	}
+	return language + ",en;q=0.8"
+}
+
+// NormalizeCountryCode converts commonly used aliases to ISO alpha-2 values.
+func NormalizeCountryCode(country string) string {
+	country = strings.ToLower(strings.TrimSpace(country))
+	if country == "uk" {
+		return "gb"
+	}
+	return country
+}

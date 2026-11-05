@@ -21,13 +21,15 @@ const (
 
 // Provider implements search scraping for DuckDuckGo.
 type Provider struct {
-	client *provider.HTTPClient
+	client  *provider.HTTPClient
+	timeout time.Duration
 }
 
 // New creates a new DuckDuckGo Provider instance.
 func New(timeout time.Duration, userAgent string) *Provider {
 	return &Provider{
-		client: provider.NewHTTPClient(timeout, userAgent),
+		client:  provider.NewHTTPClient(timeout, userAgent),
+		timeout: timeout,
 	}
 }
 
@@ -58,12 +60,24 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	// the provider budget. Otherwise a hung primary request consumes the entire
 	// context deadline and the lite fallback is invoked with an already-expired
 	// context, making fallback impossible.
-	primaryBudget := req.Timeout / 2
+	timeout := req.Timeout
+	if timeout <= 0 {
+		timeout = p.timeout
+	}
+	primaryBudget := timeout / 2
 	if primaryBudget <= 0 {
 		primaryBudget = 1500 * time.Millisecond
 	}
 	primaryCtx, cancelPrimary := context.WithTimeout(ctx, primaryBudget)
-	results, err := p.queryEndpoint(primaryCtx, HTMLURL, "https://html.duckduckgo.com", form, req.Limit, ParseHTMLResponse)
+	language := req.Language
+	if language == "" {
+		switch provider.NormalizeCountryCode(req.Country) {
+		case "de", "fr", "es", "jp":
+			language = provider.NormalizeCountryCode(req.Country)
+		}
+	}
+	acceptLanguage := provider.AcceptLanguage(language)
+	results, err := p.queryEndpoint(primaryCtx, HTMLURL, "https://html.duckduckgo.com", form, acceptLanguage, req.Limit, ParseHTMLResponse)
 	cancelPrimary()
 	if err == nil && len(results) > 0 {
 		return &model.ProviderResponse{
@@ -74,7 +88,7 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	}
 
 	// 4. If primary failed or returned challenge, try fallback endpoint (lite.duckduckgo.com/lite/)
-	liteResults, liteErr := p.queryEndpoint(ctx, LiteURL, "https://lite.duckduckgo.com", form, req.Limit, ParseLiteResponse)
+	liteResults, liteErr := p.queryEndpoint(ctx, LiteURL, "https://lite.duckduckgo.com", form, acceptLanguage, req.Limit, ParseLiteResponse)
 	if liteErr == nil && len(liteResults) > 0 {
 		return &model.ProviderResponse{
 			Engine:  p.Name(),
@@ -98,6 +112,7 @@ func (p *Provider) queryEndpoint(
 	ctx context.Context,
 	endpointURL, origin string,
 	form url.Values,
+	acceptLanguage string,
 	limit int,
 	parseFunc func(r io.Reader, limit int) ([]model.RawSearchResult, error),
 ) ([]model.RawSearchResult, error) {
@@ -110,6 +125,7 @@ func (p *Provider) queryEndpoint(
 	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	httpReq.Header.Set("Origin", origin)
 	httpReq.Header.Set("Referer", origin+"/")
+	httpReq.Header.Set("Accept-Language", acceptLanguage)
 
 	resp, err := p.client.Do(ctx, httpReq)
 	if err != nil {
@@ -148,35 +164,21 @@ func mapFreshness(freshness string) string {
 }
 
 func mapRegion(country, language string) string {
-	c := strings.ToLower(strings.TrimSpace(country))
+	c := provider.NormalizeCountryCode(country)
 	l := strings.ToLower(strings.TrimSpace(language))
-
-	if c != "" && l != "" {
-		return c + "-" + l
+	if c == "" {
+		c = "us"
 	}
-	if c != "" {
+	if l == "" {
 		switch c {
-		case "us":
-			return "us-en"
-		case "uk", "gb":
-			return "uk-en"
-		case "de":
-			return "de-de"
-		case "fr":
-			return "fr-fr"
-		case "es":
-			return "es-es"
-		case "ca":
-			return "ca-en"
-		case "au":
-			return "au-en"
-		case "in":
-			return "in-en"
-		case "jp":
-			return "jp-jp"
+		case "de", "fr", "es", "jp":
+			l = c
 		default:
-			return c + "-en"
+			l = "en"
 		}
 	}
-	return ""
+	if c == "gb" {
+		c = "uk" // DuckDuckGo's locale identifier uses "uk" for Great Britain.
+	}
+	return c + "-" + l
 }

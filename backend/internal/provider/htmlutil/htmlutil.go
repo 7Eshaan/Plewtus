@@ -100,18 +100,14 @@ func HasAncestorID(n *html.Node, id string) bool {
 	return false
 }
 
-// FindAllInAncestorScope prefers nodes nested under the expected organic
-// results container. Some provider responses omit or rename that container, so
-// it falls back to the selector across the document when the scoped search is
-// empty. Query relevance filtering is applied later in the pipeline.
+// FindAllInAncestorScope returns matching nodes only when they are nested under
+// the expected organic-results container. A missing container is treated as a
+// parser miss by the provider instead of scraping similarly-classed modules
+// elsewhere on the page (such as sidebars, ads, and navigation).
 func FindAllInAncestorScope(n *html.Node, id string, predicate func(*html.Node) bool) []*html.Node {
-	scoped := FindAll(n, func(candidate *html.Node) bool {
+	return FindAll(n, func(candidate *html.Node) bool {
 		return predicate(candidate) && HasAncestorID(candidate, id)
 	})
-	if len(scoped) > 0 {
-		return scoped
-	}
-	return FindAll(n, predicate)
 }
 
 // TextContent recursively extracts and concatenates all text under a node,

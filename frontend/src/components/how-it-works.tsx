@@ -64,7 +64,7 @@ export function HowItWorks() {
           </div>
         </div>
 
-        {/* Step 3: Reciprocal Rank Fusion */}
+        {/* Step 3: Query-aware rank fusion */}
         <div className="p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-3 shadow-2xs hover:border-[#8700ff]/40 dark:hover:border-[#8700ff]/40 transition-colors">
           <div className="w-8 h-8 rounded-lg bg-[#8700ff]/10 dark:bg-[#8700ff]/20 border border-[#8700ff]/30 flex items-center justify-center text-[#8700ff] dark:text-[#a84dff]">
             <Award className="w-4 h-4" />
@@ -73,15 +73,15 @@ export function HowItWorks() {
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs text-[#8700ff] dark:text-[#a84dff] font-semibold">03</span>
               <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">
-                Reciprocal Rank Fusion (RRF)
+                Query-aware rank fusion
               </h3>
             </div>
             <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Combines independent provider rankings using the standard information retrieval formula with smoothing constant <code className="text-[11px] font-mono">k = 60</code>. Multi-engine consensus earns higher authority scores.
+              Filters weak matches, then balances query relevance with multi-engine consensus. Relevance favors query coverage, title matches, and exact phrases; RRF combines provider positions with <code className="text-[11px] font-mono">k = 60</code>.
             </p>
           </div>
           <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 font-mono text-[10px] text-[#8700ff] dark:text-[#a84dff] bg-[#8700ff]/5 dark:bg-[#8700ff]/10 border border-[#8700ff]/15 p-2 rounded">
-            score(d) = &Sigma; 1 / (60 + rank_m(d))
+            rank = 0.6 &times; relevance + 0.4 &times; normalized RRF
           </div>
         </div>
       </div>

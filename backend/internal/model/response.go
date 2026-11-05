@@ -9,18 +9,20 @@ type SearchResponse struct {
 	Metadata SearchMetadata `json:"metadata"`
 }
 
-// SearchResult represents a single deduplicated, ranked search result.
+// SearchResult represents a single deduplicated, query-relevance and consensus-ranked result.
 type SearchResult struct {
-	ID            string            `json:"id"`
-	Title         string            `json:"title"`
-	URL           string            `json:"url"`
-	Snippet       string            `json:"snippet"`
-	Rank          int               `json:"rank"`
-	Score         float64           `json:"score"`
-	Relevance     float64           `json:"-"` // Internal lexical relevance used only to break RRF ties.
-	Engines       []EngineSource    `json:"engines"`
-	PublishedDate string            `json:"published_date,omitempty"`
-	Content       *ExtractedContent `json:"content,omitempty"`
+	ID             string            `json:"id"`
+	Title          string            `json:"title"`
+	URL            string            `json:"url"`
+	Snippet        string            `json:"snippet"`
+	Rank           int               `json:"rank"`
+	Score          float64           `json:"score"`
+	RelevanceScore float64           `json:"relevance_score"`
+	RankingScore   float64           `json:"ranking_score"`
+	Relevance      float64           `json:"-"` // Internal query relevance input to the hybrid ranker.
+	Engines        []EngineSource    `json:"engines"`
+	PublishedDate  string            `json:"published_date,omitempty"`
+	Content        *ExtractedContent `json:"content,omitempty"`
 }
 
 // EngineSource records which engine discovered this result and its ranking position.
@@ -40,7 +42,7 @@ type ExtractedContent struct {
 	PublishedDate string   `json:"-"`
 }
 
-// SearchMetadata provides honest, transparent details about the search execution.
+// SearchMetadata provides transparent details about the search execution.
 type SearchMetadata struct {
 	TotalResults int              `json:"total_results"`
 	TookMs       int64            `json:"took_ms"`
@@ -64,9 +66,10 @@ type AppliedFilters struct {
 
 // ProviderMetadata breaks down provider execution status.
 type ProviderMetadata struct {
-	Queried    []string        `json:"queried"`
-	Successful []string        `json:"successful"`
-	Failed     []ProviderError `json:"failed"`
+	Queried    []string         `json:"queried"`
+	Successful []string         `json:"successful"`
+	Failed     []ProviderError  `json:"failed"`
+	TimingMs   map[string]int64 `json:"timing_ms"`
 }
 
 // ProviderError captures engine-level failures without failing the whole request.
@@ -77,8 +80,12 @@ type ProviderError struct {
 
 // SearchStats records result counts through the pipeline.
 type SearchStats struct {
-	RawCount     int `json:"raw_count"`
-	DedupedCount int `json:"deduped_count"`
+	RawCount               int `json:"raw_count"`
+	DedupedCount           int `json:"deduped_count"`
+	RelevanceRejectedCount int `json:"relevance_rejected_count"`
+	DomainRejectedCount    int `json:"domain_rejected_count"`
+	InvalidURLCount        int `json:"invalid_url_count"`
+	DuplicateCount         int `json:"duplicate_count"`
 }
 
 // HealthResponse represents the response from GET /health.
@@ -108,6 +115,7 @@ func NewSearchResponse(query string) *SearchResponse {
 				Queried:    []string{},
 				Successful: []string{},
 				Failed:     []ProviderError{},
+				TimingMs:   map[string]int64{},
 			},
 			Stats: SearchStats{
 				RawCount:     0,

@@ -198,7 +198,7 @@ export function ApiQuickstart() {
           Direct HTTP &amp; Code Integration
         </h2>
         <p className="text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl leading-relaxed">
-          Plewtus exposes a unified JSON endpoint. Send a single POST request to query DuckDuckGo, Bing, and Yahoo simultaneously with canonical deduplication, RRF ranking, and optional content extraction.
+          Plewtus exposes a unified JSON endpoint. Send a single POST request to query DuckDuckGo, Bing, and Yahoo simultaneously with relevance-aware consensus ranking, canonical deduplication, and optional content extraction.
         </p>
       </div>
 
@@ -223,9 +223,9 @@ export function ApiQuickstart() {
         <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-1 shadow-2xs">
           <div className="flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100 font-semibold">
             <Sparkles className="w-3.5 h-3.5 text-[#8700ff] dark:text-[#a84dff]" />
-            <span>RRF Ranking</span>
+            <span>Relevance-aware ranking</span>
           </div>
-          <span className="text-[11px] text-zinc-500">k=60 fusion score</span>
+          <span className="text-[11px] text-zinc-500">0.6 relevance + 0.4 normalized RRF</span>
         </div>
 
         <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-1 shadow-2xs">

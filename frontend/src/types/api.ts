@@ -16,7 +16,7 @@ export interface paths {
         /**
          * Execute federated search
          * @description Dispatches concurrent search queries across upstream search engines, normalizes
-         *     and deduplicates results, computes Reciprocal Rank Fusion (RRF) scores, and
+         *     filters and deduplicates results, ranks with query relevance plus Reciprocal Rank Fusion (RRF), and
          *     optionally extracts webpage content for AI agents.
          */
         post: operations["search"];
@@ -171,10 +171,20 @@ export interface components {
             rank: number;
             /**
              * Format: double
-             * @description Reciprocal Rank Fusion (RRF) score.
+             * @description Reciprocal Rank Fusion (RRF) consensus score; the final order also uses relevance_score.
              * @example 0.04918
              */
             score: number;
+            /**
+             * Format: double
+             * @description Query relevance score derived from term coverage, title matches, and exact phrase matches.
+             */
+            relevance_score: number;
+            /**
+             * Format: double
+             * @description Hybrid ordering score (0.4 normalized RRF consensus plus 0.6 query relevance).
+             */
+            ranking_score: number;
             /** @description Search engines that independently discovered this result. */
             engines: components["schemas"]["EngineSource"][];
             /**
@@ -236,6 +246,10 @@ export interface components {
             successful: string[];
             /** @description Engines that failed, timed out, or encountered open circuit breakers. */
             failed: components["schemas"]["ProviderError"][];
+            /** @description Per-provider elapsed time in milliseconds for completed attempts. */
+            timing_ms: {
+                [key: string]: number;
+            };
         };
         ProviderError: {
             /** @description Failing search engine name. */
@@ -248,6 +262,14 @@ export interface components {
             raw_count: number;
             /** @description Total unique results identified after canonical URL normalization. */
             deduped_count: number;
+            /** @description Raw candidates rejected for insufficient query relevance. */
+            relevance_rejected_count: number;
+            /** @description Raw candidates rejected by include/exclude domain filters. */
+            domain_rejected_count: number;
+            /** @description Raw candidates rejected because their destination URL was empty or invalid. */
+            invalid_url_count: number;
+            /** @description Candidates merged into an already-seen canonical destination URL. */
+            duplicate_count: number;
         };
         AppliedFilters: {
             freshness?: string;

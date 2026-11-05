@@ -1,6 +1,6 @@
 # Plewtus Search API Reference
 
-Plewtus is an AI-agent metasearch API that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo), normalizes and deduplicates destination URLs, fuses rankings via Reciprocal Rank Fusion (RRF), and provides optional safe webpage content extraction.
+Plewtus is an AI-agent metasearch API that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo), filters and ranks results using query relevance plus Reciprocal Rank Fusion (RRF), deduplicates destination URLs, and provides optional safe webpage content extraction.
 
 ---
 
@@ -55,7 +55,7 @@ Every `/search` response includes usage and rate limit status headers:
 
 ### 1. `POST /search`
 
-Executes federated search across multiple search engines with deduplication and RRF fusion.
+Executes federated search across multiple search engines with relevance filtering, hybrid relevance/consensus ranking, and deduplication. `score` remains the pure RRF consensus score; `relevance_score` and `ranking_score` expose the relevance estimate and final ordering score.
 
 #### Request Headers
 
@@ -105,6 +105,8 @@ Request bodies are limited to 1 MiB and must contain exactly one JSON value. Sea
       "snippet": "Go Concurrency Patterns (video) presents the basics of Go's concurrency primitives...",
       "rank": 1,
       "score": 0.049180,
+      "relevance_score": 1.0,
+      "ranking_score": 1.0,
       "engines": [
         { "name": "duckduckgo", "position": 1 },
         { "name": "bing", "position": 1 },
@@ -123,11 +125,16 @@ Request bodies are limited to 1 MiB and must contain exactly one JSON value. Sea
     "providers": {
       "queried": ["duckduckgo", "bing", "yahoo"],
       "successful": ["duckduckgo", "bing", "yahoo"],
-      "failed": []
+      "failed": [],
+      "timing_ms": {"duckduckgo": 420, "bing": 510, "yahoo": 630}
     },
     "stats": {
       "raw_count": 6,
-      "deduped_count": 4
+      "deduped_count": 4,
+      "relevance_rejected_count": 0,
+      "domain_rejected_count": 0,
+      "invalid_url_count": 0,
+      "duplicate_count": 2
     },
     "filters": {
       "limit": 10,

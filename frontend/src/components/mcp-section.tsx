@@ -88,7 +88,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","a
               </span>
             </div>
             <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Dispatches multi-engine search across DuckDuckGo, Bing, and Yahoo with automatic consensus deduplication, RRF scoring, and optional content extraction.
+              Searches DuckDuckGo, Bing, and Yahoo, filters weak query matches, combines relevance with engine consensus, and can extract page content.
             </p>
             <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap gap-1 text-[10px] font-mono text-zinc-500">
               <span className="px-1.5 py-0.5 rounded bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">query (required)</span>

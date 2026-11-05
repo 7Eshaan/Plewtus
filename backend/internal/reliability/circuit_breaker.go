@@ -46,6 +46,7 @@ type CircuitBreaker struct {
 	cooldown         time.Duration
 	state            State
 	failures         int
+	generation       uint64
 	lastTrippedAt    time.Time
 	halfOpenProbing  bool
 }
@@ -82,6 +83,14 @@ func (cb *CircuitBreaker) State() State {
 
 // Allow checks if a request is permitted. If the circuit is open, returns ErrCircuitOpen.
 func (cb *CircuitBreaker) Allow() error {
+	_, err := cb.AllowWithGeneration()
+	return err
+}
+
+// AllowWithGeneration returns the circuit generation associated with an
+// admitted request. Outcomes from an older generation cannot undo a later
+// open/half-open transition.
+func (cb *CircuitBreaker) AllowWithGeneration() (uint64, error) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
@@ -90,35 +99,49 @@ func (cb *CircuitBreaker) Allow() error {
 
 	switch cb.state {
 	case StateClosed:
-		return nil
+		return cb.generation, nil
 
 	case StateHalfOpen:
 		if !cb.halfOpenProbing {
 			// Allow 1 probe request through
 			cb.halfOpenProbing = true
-			return nil
+			return cb.generation, nil
 		}
 		// Probe is already in-flight, reject concurrent calls until probe completes
-		return fmt.Errorf("%w (%s in probe)", ErrCircuitOpen, cb.name)
+		return cb.generation, fmt.Errorf("%w (%s in probe)", ErrCircuitOpen, cb.name)
 
 	case StateOpen:
 		remaining := cb.cooldown - now.Sub(cb.lastTrippedAt)
 		if remaining < 0 {
 			remaining = 0
 		}
-		return fmt.Errorf("%w (%s cooling down, %.1fs remaining)", ErrCircuitOpen, cb.name, remaining.Seconds())
+		return cb.generation, fmt.Errorf("%w (%s cooling down, %.1fs remaining)", ErrCircuitOpen, cb.name, remaining.Seconds())
 
 	default:
-		return nil
+		return cb.generation, nil
 	}
 }
 
 // ReportSuccess records a successful provider execution, closing the circuit.
 func (cb *CircuitBreaker) ReportSuccess() {
 	cb.mu.Lock()
+	generation := cb.generation
+	cb.mu.Unlock()
+	cb.ReportSuccessFor(generation)
+}
+
+// ReportSuccessFor applies a result only if it belongs to the current circuit generation.
+func (cb *CircuitBreaker) ReportSuccessFor(generation uint64) {
+	cb.mu.Lock()
 	defer cb.mu.Unlock()
+	if generation != cb.generation {
+		return
+	}
 
 	cb.failures = 0
+	if cb.state == StateHalfOpen {
+		cb.generation++
+	}
 	cb.state = StateClosed
 	cb.halfOpenProbing = false
 }
@@ -126,7 +149,18 @@ func (cb *CircuitBreaker) ReportSuccess() {
 // ReportFailure records a failed provider execution.
 func (cb *CircuitBreaker) ReportFailure(err error) {
 	cb.mu.Lock()
+	generation := cb.generation
+	cb.mu.Unlock()
+	cb.ReportFailureFor(generation, err)
+}
+
+// ReportFailureFor applies a failure only if it belongs to the current circuit generation.
+func (cb *CircuitBreaker) ReportFailureFor(generation uint64, err error) {
+	cb.mu.Lock()
 	defer cb.mu.Unlock()
+	if generation != cb.generation {
+		return
+	}
 
 	now := time.Now()
 
@@ -134,6 +168,7 @@ func (cb *CircuitBreaker) ReportFailure(err error) {
 	case StateHalfOpen:
 		// Probe failed, immediately trip back to Open
 		cb.state = StateOpen
+		cb.generation++
 		cb.lastTrippedAt = now
 		cb.halfOpenProbing = false
 
@@ -141,6 +176,7 @@ func (cb *CircuitBreaker) ReportFailure(err error) {
 		cb.failures++
 		if cb.failures >= cb.failureThreshold {
 			cb.state = StateOpen
+			cb.generation++
 			cb.lastTrippedAt = now
 		}
 
@@ -157,6 +193,7 @@ func (cb *CircuitBreaker) Reset() {
 	cb.state = StateClosed
 	cb.failures = 0
 	cb.halfOpenProbing = false
+	cb.generation++
 }
 
 func (cb *CircuitBreaker) updateStateLocked(now time.Time) {

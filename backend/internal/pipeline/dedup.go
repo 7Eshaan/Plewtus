@@ -31,6 +31,14 @@ type DeduplicateOptions struct {
 	Ranker         Ranker
 }
 
+// DeduplicationStats records candidate rejection and merge reasons.
+type DeduplicationStats struct {
+	RelevanceRejected int
+	DomainRejected    int
+	InvalidURL        int
+	Duplicates        int
+}
+
 // Deduplicate takes raw provider responses from multiple search engines,
 // canonicalizes and deduplicates URLs, merges engine positions, titles,
 // and snippets, applies ranking (defaulting to RRFRanker if no custom ranker is passed),
@@ -48,10 +56,17 @@ func Deduplicate(responses []*model.ProviderResponse, limit int, rankers ...Rank
 }
 
 // DeduplicateWithOptions performs deduplication, domain inclusion/exclusion filtering,
-// RRF ranking, and offset/limit pagination over raw provider responses.
+// query-aware consensus ranking, and offset/limit pagination over raw provider responses.
 func DeduplicateWithOptions(responses []*model.ProviderResponse, opts DeduplicateOptions) (results []model.SearchResult, dedupedCount int) {
+	results, dedupedCount, _ = DeduplicateDetailed(responses, opts)
+	return results, dedupedCount
+}
+
+// DeduplicateDetailed performs the complete candidate pipeline and also
+// reports why raw results were rejected or merged, for production diagnostics.
+func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOptions) (results []model.SearchResult, dedupedCount int, stats DeduplicationStats) {
 	if len(responses) == 0 {
-		return []model.SearchResult{}, 0
+		return []model.SearchResult{}, 0, stats
 	}
 
 	// Sort provider responses by engine name for deterministic processing order
@@ -67,21 +82,24 @@ func DeduplicateWithOptions(responses []*model.ProviderResponse, opts Deduplicat
 	for _, resp := range sortedResponses {
 		for _, raw := range resp.Results {
 			if strings.TrimSpace(raw.URL) == "" {
+				stats.InvalidURL++
 				continue
 			}
 			relevance, relevant := QueryRelevance(opts.Query, raw.Title, raw.Snippet)
 			if !relevant {
+				stats.RelevanceRejected++
 				continue
 			}
 
 			cleanURL, key, err := NormalizeURL(raw.URL)
 			if err != nil {
-				cleanURL = strings.TrimSpace(raw.URL)
-				key = strings.ToLower(cleanURL)
+				stats.InvalidURL++
+				continue
 			}
 
 			// Domain filtering: verify against include and exclude constraints
 			if !matchesDomainFilters(cleanURL, opts.IncludeDomains, opts.ExcludeDomains) {
+				stats.DomainRejected++
 				continue
 			}
 
@@ -107,6 +125,7 @@ func DeduplicateWithOptions(responses []*model.ProviderResponse, opts Deduplicat
 				seen[key] = item
 				list = append(list, item)
 			} else {
+				stats.Duplicates++
 				// 1. Merge engine source and position
 				engineRecorded := false
 				for idx, eng := range existing.engines {
@@ -136,14 +155,14 @@ func DeduplicateWithOptions(responses []*model.ProviderResponse, opts Deduplicat
 					existing.publishedDate = strings.TrimSpace(raw.PublishedDate)
 				}
 
-				// 4. Select most informative title
-				existing.title = selectBetterTitle(existing.title, raw.Title)
-
-				// 5. Select most complete snippet
-				existing.snippet = selectBetterSnippet(existing.snippet, raw.Snippet)
-				if relevance > existing.relevance {
-					existing.relevance = relevance
-				}
+				// 4. Merge the best title and snippet independently. A strong snippet
+				// must not cause a weaker title from the same provider response to
+				// replace a better title from another engine.
+				candidateTitle := strings.TrimSpace(raw.Title)
+				candidateSnippet := cleanSnippet(raw.Snippet)
+				existing.title = selectQueryAwareTitle(opts.Query, existing.title, candidateTitle)
+				existing.snippet = selectQueryAwareSnippet(opts.Query, existing.snippet, candidateSnippet)
+				existing.relevance, _ = QueryRelevance(opts.Query, existing.title, existing.snippet)
 
 				// 6. Prefer secure HTTPS URL over insecure HTTP
 				if strings.HasPrefix(cleanURL, "https://") && strings.HasPrefix(existing.url, "http://") {
@@ -155,7 +174,7 @@ func DeduplicateWithOptions(responses []*model.ProviderResponse, opts Deduplicat
 
 	dedupedCount = len(list)
 	if dedupedCount == 0 {
-		return []model.SearchResult{}, 0
+		return []model.SearchResult{}, 0, stats
 	}
 
 	// Sort engine sources inside each result by SERP position
@@ -202,7 +221,7 @@ func DeduplicateWithOptions(responses []*model.ProviderResponse, opts Deduplicat
 		ranked = ranked[:opts.Limit]
 	}
 
-	return ranked, dedupedCount
+	return ranked, dedupedCount, stats
 }
 
 func matchesDomainFilters(rawURL string, includeDomains, excludeDomains []string) bool {
@@ -271,6 +290,21 @@ func selectBetterTitle(curr, candidate string) string {
 	return curr
 }
 
+func selectQueryAwareTitle(query, curr, candidate string) string {
+	if strings.TrimSpace(query) == "" {
+		return selectBetterTitle(curr, candidate)
+	}
+	currentScore, _ := QueryRelevance(query, curr, "")
+	candidateScore, _ := QueryRelevance(query, candidate, "")
+	if candidateScore > currentScore+1e-9 {
+		return strings.TrimSpace(candidate)
+	}
+	if currentScore > candidateScore+1e-9 {
+		return strings.TrimSpace(curr)
+	}
+	return selectBetterTitle(curr, candidate)
+}
+
 func selectBetterSnippet(curr, candidate string) string {
 	curr = cleanSnippet(curr)
 	candidate = cleanSnippet(candidate)
@@ -294,6 +328,21 @@ func selectBetterSnippet(curr, candidate string) string {
 		return candidate
 	}
 	return curr
+}
+
+func selectQueryAwareSnippet(query, curr, candidate string) string {
+	if strings.TrimSpace(query) == "" {
+		return selectBetterSnippet(curr, candidate)
+	}
+	currentScore, _ := QueryRelevance(query, "", curr)
+	candidateScore, _ := QueryRelevance(query, "", candidate)
+	if candidateScore > currentScore+1e-9 {
+		return cleanSnippet(candidate)
+	}
+	if currentScore > candidateScore+1e-9 {
+		return cleanSnippet(curr)
+	}
+	return selectBetterSnippet(curr, candidate)
 }
 
 func cleanSnippet(s string) string {

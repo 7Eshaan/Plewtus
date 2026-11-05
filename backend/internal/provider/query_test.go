@@ -63,3 +63,18 @@ func TestBuildSearchQuery(t *testing.T) {
 		})
 	}
 }
+
+func TestAcceptLanguage(t *testing.T) {
+	if got := AcceptLanguage(""); got != "en-US,en;q=0.9" {
+		t.Fatalf("default Accept-Language = %q", got)
+	}
+	if got := AcceptLanguage(" FR "); got != "fr,en;q=0.8" {
+		t.Fatalf("localized Accept-Language = %q", got)
+	}
+}
+
+func TestNormalizeCountryCode(t *testing.T) {
+	if got := NormalizeCountryCode("UK"); got != "gb" {
+		t.Fatalf("UK alias normalized to %q, want gb", got)
+	}
+}

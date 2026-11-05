@@ -245,6 +245,19 @@ func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	return m.roundTripFunc(req)
 }
 
+type countingReadCloser struct {
+	reader *strings.Reader
+	read   int
+}
+
+func (r *countingReadCloser) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.read += n
+	return n, err
+}
+
+func (r *countingReadCloser) Close() error { return nil }
+
 func TestFetcher_MIMETypeGuard(t *testing.T) {
 	mockTransport := &mockRoundTripper{
 		roundTripFunc: func(req *http.Request) (*http.Response, error) {
@@ -303,6 +316,42 @@ func TestFetcher_MIMETypeGuard(t *testing.T) {
 	}
 	if !strings.Contains(contentType, "text/html") {
 		t.Errorf("expected text/html content type, got %q", contentType)
+	}
+}
+
+func TestFetcherRejectsUnsupportedMIMEWithoutDownloadingWholeBody(t *testing.T) {
+	body := &countingReadCloser{reader: strings.NewReader("%PDF-1.4" + strings.Repeat("x", 1024*1024))}
+	transport := &mockRoundTripper{roundTripFunc: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     http.Header{"Content-Type": []string{"application/pdf"}},
+			Body:       body,
+		}, nil
+	}}
+	fetcher := NewFetcher(FetcherOptions{Transport: transport})
+	_, _, err := fetcher.Fetch(context.Background(), "https://example.com/large.pdf")
+	if err == nil || !strings.Contains(err.Error(), "unsupported content type") {
+		t.Fatalf("expected PDF MIME rejection, got %v", err)
+	}
+	if body.read > 512 {
+		t.Fatalf("expected MIME rejection after reading at most 512 bytes, read %d", body.read)
+	}
+}
+
+func TestFetcherRejectsOversizedBodyRatherThanReturningTruncatedContent(t *testing.T) {
+	transport := &mockRoundTripper{roundTripFunc: func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     http.Header{"Content-Type": []string{"text/html"}},
+			Body:       io.NopCloser(strings.NewReader("<html>" + strings.Repeat("x", 1024) + "</html>")),
+		}, nil
+	}}
+	fetcher := NewFetcher(FetcherOptions{Transport: transport, MaxBodyBytes: 512})
+	_, _, err := fetcher.Fetch(context.Background(), "https://example.com/large")
+	if err == nil || !strings.Contains(err.Error(), "exceeds 512 bytes") {
+		t.Fatalf("expected oversized body rejection, got %v", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -119,14 +120,10 @@ func ExtractHighlights(text string, query string, maxHighlights int) []string {
 		return fallback
 	}
 
-	// Sort by score descending
-	for i := 0; i < len(candidates)-1; i++ {
-		for j := i + 1; j < len(candidates); j++ {
-			if candidates[j].score > candidates[i].score {
-				candidates[i], candidates[j] = candidates[j], candidates[i]
-			}
-		}
-	}
+	// Sort by score descending in O(n log n) for long articles.
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return candidates[i].score > candidates[j].score
+	})
 
 	// Pick top N
 	count := maxHighlights
@@ -137,13 +134,9 @@ func ExtractHighlights(text string, query string, maxHighlights int) []string {
 	top := candidates[:count]
 
 	// Re-sort selected sentences by original document order for natural reading flow
-	for i := 0; i < len(top)-1; i++ {
-		for j := i + 1; j < len(top); j++ {
-			if top[j].index < top[i].index {
-				top[i], top[j] = top[j], top[i]
-			}
-		}
-	}
+	sort.Slice(top, func(i, j int) bool {
+		return top[i].index < top[j].index
+	})
 
 	result := make([]string, len(top))
 	for i, item := range top {

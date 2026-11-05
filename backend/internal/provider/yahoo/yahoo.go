@@ -63,7 +63,7 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if country == "" {
 		country = "us"
 	}
-	params.Set("vc", strings.ToLower(country))
+	params.Set("vc", provider.NormalizeCountryCode(country))
 
 	if age := mapFreshness(req.Freshness); age != "" {
 		params.Set("age", age)
@@ -77,7 +77,13 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	// Retry on transient network errors (such as unexpected EOF during Yahoo's initial cookie redirect)
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
-			time.Sleep(time.Duration(attempt) * 400 * time.Millisecond)
+			timer := time.NewTimer(time.Duration(attempt) * 400 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-timer.C:
+			}
 		}
 
 		var httpReq *http.Request
@@ -87,7 +93,7 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 		}
 
 		httpReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-		httpReq.Header.Set("Accept-Language", "en-US,en;q=0.9")
+		httpReq.Header.Set("Accept-Language", provider.AcceptLanguage(lang))
 		httpReq.Header.Set("Referer", "https://search.yahoo.com/")
 
 		resp, err = p.client.Do(ctx, httpReq)

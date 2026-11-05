@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Plewtus | AI Metasearch Engine",
-  description: "Federated metasearch API with multi-engine consensus, RRF ranking, and AI extraction.",
+  description: "Federated metasearch API with query relevance, multi-engine consensus ranking, and AI extraction.",
 };
 
 export default function RootLayout({

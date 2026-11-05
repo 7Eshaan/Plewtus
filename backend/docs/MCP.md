@@ -67,7 +67,7 @@ Add to your MCP settings:
 ## Available MCP Tools
 
 ### 1. `search`
-Search the web across multiple search engines with automatic consensus deduplication, Reciprocal Rank Fusion (RRF), and optional content extraction.
+Search the web across multiple search engines with query-relevance filtering, hybrid relevance/consensus ranking, deduplication, and optional content extraction.
 
 **Parameters:**
 - `query` (`string`, **required**): The search query.

@@ -56,6 +56,39 @@ func TestQueryRelevanceAllowsPartialOverlapForParaphrasedResults(t *testing.T) {
 	}
 }
 
+func TestQueryRelevanceRejectsLowCoverageForLongQueries(t *testing.T) {
+	query := "model context protocol stdio transport specification"
+	score, relevant := QueryRelevance(query, "Model Protocol Overview", "A general guide to protocols.")
+	if relevant {
+		t.Fatalf("expected low-coverage result to be rejected, score %.2f", score)
+	}
+}
+
+func TestQueryRelevanceAcceptsExactPhrase(t *testing.T) {
+	query := "model context protocol stdio"
+	score, relevant := QueryRelevance(query, "Model Context Protocol stdio transport", "")
+	if !relevant || score < 0.9 {
+		t.Fatalf("expected exact title phrase to be a strong match, relevant=%v score=%.2f", relevant, score)
+	}
+}
+
+func TestQueryRelevancePreservesNegationAndProgrammingLanguageTokens(t *testing.T) {
+	partialScore, _ := QueryRelevance("no internet connection", "Internet connection available", "Connect to the internet.")
+	exactScore, exactRelevant := QueryRelevance("no internet connection", "No internet connection: troubleshooting guide", "")
+	if !exactRelevant || partialScore >= exactScore {
+		t.Fatalf("expected the exact negated topic to score above a partial overlap: partial=%.2f exact=%.2f", partialScore, exactScore)
+	}
+	if _, relevant := QueryRelevance("C++ memory safety", "C memory safety overview", "Memory safety in the C language."); relevant {
+		t.Fatal("expected C++ query to reject results about C")
+	}
+	if _, relevant := QueryRelevance("C++ memory safety", "C++ memory safety", "Safer systems programming."); !relevant {
+		t.Fatal("expected exact C++ result to pass")
+	}
+	if _, relevant := QueryRelevance("CAN bus", "Bus schedule and route map", "Public transit bus services."); relevant {
+		t.Fatal("expected a query for CAN bus to reject generic transit-bus results")
+	}
+}
+
 func TestDeduplicateWithOptionsFiltersBeforeRRF(t *testing.T) {
 	responses := []*model.ProviderResponse{
 		{
@@ -92,5 +125,29 @@ func TestRRFRankerUsesRelevanceToBreakEqualScores(t *testing.T) {
 	})
 	if results[0].Title != "Strong match" {
 		t.Fatalf("expected stronger lexical match first, got %q", results[0].Title)
+	}
+}
+
+func TestRRFRankerLetsStrongQueryFitBeatWeakEngineConsensus(t *testing.T) {
+	results := DefaultRanker.Rank([]model.SearchResult{
+		{
+			Title:     "Weak consensus match",
+			Relevance: 0.60,
+			Engines: []model.EngineSource{
+				{Name: "bing", Position: 2},
+				{Name: "yahoo", Position: 2},
+			},
+		},
+		{
+			Title:     "Strong exact match",
+			Relevance: 1,
+			Engines:   []model.EngineSource{{Name: "bing", Position: 1}},
+		},
+	})
+	if results[0].Title != "Strong exact match" {
+		t.Fatalf("expected query fit to beat weak consensus, got %q", results[0].Title)
+	}
+	if results[0].Score >= results[1].Score {
+		t.Fatal("expected exposed score to retain pure RRF values even when hybrid ranking order differs")
 	}
 }

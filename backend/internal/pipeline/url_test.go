@@ -107,14 +107,10 @@ func TestNormalizeURL_CanonicalMatching(t *testing.T) {
 }
 
 func TestNormalizeURL_InvalidOrEmpty(t *testing.T) {
-	_, _, err := NormalizeURL("")
-	if err == nil {
-		t.Errorf("expected error for empty URL")
-	}
-
-	_, _, err = NormalizeURL("   ")
-	if err == nil {
-		t.Errorf("expected error for whitespace URL")
+	for _, raw := range []string{"", "   ", "not a url ://", "https://user:pass@example.com/"} {
+		if _, _, err := NormalizeURL(raw); err == nil {
+			t.Errorf("expected error for invalid URL %q", raw)
+		}
 	}
 }
 

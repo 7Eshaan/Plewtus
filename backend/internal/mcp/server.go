@@ -188,7 +188,7 @@ func (s *Server) toolDefinitions() []map[string]any {
 	return []map[string]any{
 		{
 			"name":        "search",
-			"description": "Search the web across multiple search engines (DuckDuckGo, Bing, Yahoo) with automatic RRF ranking, deduplication, URL unwrapping, and optional AI content extraction.",
+			"description": "Search the web across multiple search engines (DuckDuckGo, Bing, Yahoo) with query-relevance filtering, hybrid relevance/consensus ranking, deduplication, URL unwrapping, and optional AI content extraction.",
 			"inputSchema": map[string]any{
 				"type": "object",
 				"properties": map[string]any{

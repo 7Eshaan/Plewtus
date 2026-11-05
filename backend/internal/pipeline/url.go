@@ -103,6 +103,12 @@ func NormalizeURL(rawURL string) (cleanURL string, canonicalKey string, err erro
 	if err != nil {
 		return "", "", fmt.Errorf("invalid url %q: %w", rawURL, err)
 	}
+	if parsed.Hostname() == "" {
+		return "", "", fmt.Errorf("invalid url %q: host is empty", rawURL)
+	}
+	if parsed.User != nil {
+		return "", "", fmt.Errorf("invalid url %q: embedded credentials are not allowed", rawURL)
+	}
 
 	// 1. Normalize Scheme
 	scheme := strings.ToLower(parsed.Scheme)

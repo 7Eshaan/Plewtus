@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"strings"
 	"testing"
 
 	"plewtus/internal/model"
@@ -325,5 +326,51 @@ func TestDeduplicate_OffsetAndLimit(t *testing.T) {
 	})
 	if len(beyondResults) != 0 {
 		t.Errorf("expected 0 results when offset exceeds total items, got %d", len(beyondResults))
+	}
+}
+
+func TestDeduplicateDetailedReportsCandidateDecisions(t *testing.T) {
+	responses := []*model.ProviderResponse{
+		{Engine: "bing", Results: []model.RawSearchResult{
+			{Title: "Go Docs", URL: "https://go.dev/doc", Snippet: "Go language documentation", Position: 1},
+			{Title: "Go Docs", URL: "https://ads.example/doc", Snippet: "Go language documentation", Position: 2},
+			{Title: "Go Docs", URL: "not a url ://", Snippet: "Go language documentation", Position: 3},
+			{Title: "Unrelated sports", URL: "https://sports.example/", Snippet: "Football news", Position: 4},
+		}},
+		{Engine: "yahoo", Results: []model.RawSearchResult{
+			{Title: "Official Go Docs", URL: "https://www.go.dev/doc?utm_source=test", Snippet: "Go language documentation", Position: 1},
+		}},
+	}
+	results, deduped, stats := DeduplicateDetailed(responses, DeduplicateOptions{
+		Query: "go docs", Limit: 10, ExcludeDomains: []string{"ads.example"},
+	})
+	if len(results) != 1 || deduped != 1 {
+		t.Fatalf("expected one merged result, got results=%d deduped=%d", len(results), deduped)
+	}
+	if stats.RelevanceRejected != 1 || stats.DomainRejected != 1 || stats.InvalidURL != 1 || stats.Duplicates != 1 {
+		t.Fatalf("unexpected candidate stats: %+v", stats)
+	}
+}
+
+func TestDeduplicateMergesTitleAndSnippetByQueryFit(t *testing.T) {
+	responses := []*model.ProviderResponse{
+		{Engine: "bing", Results: []model.RawSearchResult{{
+			Title: "Lando Norris", URL: "https://example.com/driver",
+			Snippet: "A short profile of the McLaren Formula One driver.", Position: 1,
+		}}},
+		{Engine: "yahoo", Results: []model.RawSearchResult{{
+			Title: "Formula One drivers", URL: "https://example.com/driver",
+			Snippet: "Lando Norris is a British racing driver competing in Formula One.", Position: 2,
+		}}},
+	}
+	results, _ := DeduplicateWithOptions(responses, DeduplicateOptions{Query: "Lando Norris", Limit: 10})
+	if len(results) != 1 {
+		t.Fatalf("expected one merged result, got %d", len(results))
+	}
+	if results[0].Title != "Lando Norris" {
+		t.Errorf("expected query-matching title to be retained, got %q", results[0].Title)
+	}
+	if !strings.Contains(results[0].Snippet, "Lando Norris") {
+		t.Errorf("expected query-matching snippet to be retained, got %q", results[0].Snippet)
 	}
 }

@@ -10,7 +10,9 @@ import (
 
 const (
 	// DefaultRRFK is the standard smoothing parameter established by Cormack, Clarke, and Buettcher (SIGIR 2009).
-	DefaultRRFK = 60.0
+	DefaultRRFK            = 60.0
+	ConsensusRankingWeight = 0.4
+	RelevanceRankingWeight = 0.6
 )
 
 // Ranker defines the interface for ranking and fusing search results.
@@ -21,7 +23,8 @@ type Ranker interface {
 	Rank(results []model.SearchResult) []model.SearchResult
 }
 
-// RRFRanker implements Reciprocal Rank Fusion (RRF).
+// RRFRanker uses Reciprocal Rank Fusion (RRF) consensus and query relevance
+// to produce the final hybrid result order. The public Score remains raw RRF.
 // For each document d, its score is computed as:
 //
 //	score(d) = sum_{m in M} 1 / (k + r_m(d))
@@ -76,7 +79,7 @@ func (r *RRFRanker) ComputeScore(engines []model.EngineSource) float64 {
 	return score
 }
 
-// Rank scores and re-orders the given search results using RRF.
+// Rank scores and re-orders results using query relevance and normalized RRF consensus.
 func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 	if len(results) == 0 {
 		return []model.SearchResult{}
@@ -85,15 +88,38 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 	type scoredItem struct {
 		result       model.SearchResult
 		rawScore     float64
+		rankScore    float64
 		relevance    float64
 		bestPosition int
 		engineCount  int
 		originalIdx  int
 	}
 
+	// Normalize consensus against the theoretical rank-1 score for the engines
+	// that contributed results. This lets relevance participate in the final
+	// ordering without changing the externally reported RRF score.
+	engineNames := make(map[string]struct{})
+	for _, res := range results {
+		for _, eng := range res.Engines {
+			if eng.Name != "" {
+				engineNames[eng.Name] = struct{}{}
+			}
+		}
+	}
+	maxConsensus := float64(len(engineNames)) / (r.k + 1)
+	if maxConsensus == 0 {
+		maxConsensus = 1
+	}
+
 	scored := make([]scoredItem, len(results))
 	for i, res := range results {
 		rawScore := r.ComputeScore(res.Engines)
+		consensus := math.Min(1, rawScore/maxConsensus)
+		relevance := math.Max(0, math.Min(1, res.Relevance))
+		// Give query fit more weight than consensus. The relevance gate removes
+		// obvious noise; this blend also prevents weak lexical matches from
+		// winning solely because correlated engines ranked them similarly.
+		rankScore := ConsensusRankingWeight*consensus + RelevanceRankingWeight*relevance
 
 		bestPos := math.MaxInt32
 		for _, eng := range res.Engines {
@@ -108,21 +134,19 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 		scored[i] = scoredItem{
 			result:       res,
 			rawScore:     rawScore,
-			relevance:    res.Relevance,
+			rankScore:    rankScore,
+			relevance:    relevance,
 			bestPosition: bestPos,
 			engineCount:  len(res.Engines),
 			originalIdx:  i,
 		}
 	}
 
-	// Sort by:
-	// 1. RRF Score descending (highest fused relevance first)
-	// 2. Engine count descending (more consensus first)
-	// 3. Best original SERP position ascending (top engine position)
-	// 4. Stable original discovery index ascending
+	// Sort by hybrid query-fit/consensus score, then preserve deterministic
+	// secondary ordering. Score remains the pure RRF value for API compatibility.
 	sort.Slice(scored, func(i, j int) bool {
-		if math.Abs(scored[i].rawScore-scored[j].rawScore) > 1e-12 {
-			return scored[i].rawScore > scored[j].rawScore
+		if math.Abs(scored[i].rankScore-scored[j].rankScore) > 1e-12 {
+			return scored[i].rankScore > scored[j].rankScore
 		}
 		if math.Abs(scored[i].relevance-scored[j].relevance) > 1e-12 {
 			return scored[i].relevance > scored[j].relevance
@@ -143,6 +167,8 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 		res.Rank = rank
 		// Round to 6 decimal places for clean, transparent agent consumption
 		res.Score = math.Round(item.rawScore*1e6) / 1e6
+		res.RelevanceScore = math.Round(item.relevance*1e6) / 1e6
+		res.RankingScore = math.Round(item.rankScore*1e6) / 1e6
 		res.ID = fmt.Sprintf("res_%d", rank)
 		ranked[i] = res
 	}

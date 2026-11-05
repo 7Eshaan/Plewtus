@@ -63,7 +63,7 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 		// unauthenticated IP-localized noise from hijacking general search queries.
 		country = "US"
 	}
-	params.Set("cc", strings.ToUpper(country))
+	params.Set("cc", strings.ToUpper(provider.NormalizeCountryCode(country)))
 	if filter := mapFreshness(req.Freshness); filter != "" {
 		params.Set("filters", filter)
 	}
@@ -75,7 +75,7 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	}
 
 	httpReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-	httpReq.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	httpReq.Header.Set("Accept-Language", provider.AcceptLanguage(lang))
 	httpReq.Header.Set("Referer", "https://www.bing.com/")
 
 	resp, err := p.client.Do(ctx, httpReq)

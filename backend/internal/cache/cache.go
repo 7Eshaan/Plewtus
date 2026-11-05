@@ -248,6 +248,12 @@ func cloneSearchResponse(src *model.SearchResponse) *model.SearchResponse {
 	dst.Metadata.Providers.Queried = append([]string(nil), src.Metadata.Providers.Queried...)
 	dst.Metadata.Providers.Successful = append([]string(nil), src.Metadata.Providers.Successful...)
 	dst.Metadata.Providers.Failed = append([]model.ProviderError(nil), src.Metadata.Providers.Failed...)
+	if src.Metadata.Providers.TimingMs != nil {
+		dst.Metadata.Providers.TimingMs = make(map[string]int64, len(src.Metadata.Providers.TimingMs))
+		for name, tookMs := range src.Metadata.Providers.TimingMs {
+			dst.Metadata.Providers.TimingMs[name] = tookMs
+		}
+	}
 
 	if src.Metadata.Filters != nil {
 		flt := *src.Metadata.Filters

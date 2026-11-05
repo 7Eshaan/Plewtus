@@ -114,40 +114,61 @@ func (f *Fetcher) Fetch(ctx context.Context, targetURL string) ([]byte, string, 
 		return nil, "", fmt.Errorf("upstream server responded with status %d %s", resp.StatusCode, resp.Status)
 	}
 
-	// 4. Validate Content-Type
+	// 4. Read only a small prefix before MIME validation. Unsupported files
+	// should not make the extractor download their entire body just to reject it.
+	prefixLimit := int64(512)
+	if f.maxBodyBytes <= prefixLimit {
+		prefixLimit = f.maxBodyBytes + 1
+	}
+	prefix := make([]byte, prefixLimit)
+	n, readErr := io.ReadFull(resp.Body, prefix)
+	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
+		return nil, "", fmt.Errorf("failed reading response body: %w", readErr)
+	}
+	if int64(n) > f.maxBodyBytes {
+		return nil, "", fmt.Errorf("response body exceeds %d bytes", f.maxBodyBytes)
+	}
+	if n == 0 {
+		return nil, "", errors.New("response body is empty")
+	}
+	initialChunk := prefix[:n]
+
+	// 5. Validate Content-Type. Trust explicit web MIME types, sniff generic or
+	// missing types, and reject other declared types before reading more bytes.
 	rawContentType := resp.Header.Get("Content-Type")
-	contentType := strings.ToLower(rawContentType)
-
-	// Read first chunk to detect MIME if header is missing or ambiguous
-	limitReader := io.LimitReader(resp.Body, f.maxBodyBytes)
-	initialBuf := make([]byte, 512)
-	n, err := io.ReadFull(limitReader, initialBuf)
-	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
-		return nil, "", fmt.Errorf("failed to read response body: %w", err)
+	contentType := strings.ToLower(strings.TrimSpace(rawContentType))
+	baseContentType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	switch {
+	case strings.Contains(baseContentType, "text/html"), strings.Contains(baseContentType, "application/xhtml+xml"):
+		// Accepted as HTML.
+	case baseContentType == "", strings.Contains(baseContentType, "application/octet-stream"):
+		contentType = strings.ToLower(http.DetectContentType(initialChunk))
+		baseContentType = contentType
+	case strings.Contains(baseContentType, "text/plain"), strings.Contains(baseContentType, "application/xml"), strings.Contains(baseContentType, "text/xml"):
+		if !isHTMLContentType(baseContentType, initialChunk) {
+			return nil, "", fmt.Errorf("unsupported content type %q: only HTML webpages are extracted", rawContentType)
+		}
+	default:
+		return nil, "", fmt.Errorf("unsupported content type %q: only HTML webpages are extracted", rawContentType)
 	}
-
-	initialChunk := initialBuf[:n]
-
-	if contentType == "" || strings.Contains(contentType, "application/octet-stream") {
-		detected := http.DetectContentType(initialChunk)
-		contentType = strings.ToLower(detected)
-	}
-
-	if !isHTMLContentType(contentType, initialChunk) {
+	if !isHTMLContentType(baseContentType, initialChunk) {
 		return nil, "", fmt.Errorf("unsupported content type %q: only HTML webpages are extracted", rawContentType)
 	}
 
-	// 5. Read remainder of the body up to maxBodyBytes
-	var remainder []byte
-	if n > 0 && n == 512 {
-		rest, err := io.ReadAll(limitReader)
+	// Continue reading HTML only, with a one-byte sentinel to detect truncation.
+	body := append([]byte(nil), initialChunk...)
+	remaining := f.maxBodyBytes - int64(len(body))
+	if remaining > 0 {
+		rest, err := io.ReadAll(io.LimitReader(resp.Body, remaining+1))
 		if err != nil {
 			return nil, "", fmt.Errorf("failed reading response body: %w", err)
 		}
-		remainder = rest
+		body = append(body, rest...)
+	}
+	if int64(len(body)) > f.maxBodyBytes {
+		return nil, "", fmt.Errorf("response body exceeds %d bytes", f.maxBodyBytes)
 	}
 
-	body := append(initialChunk, remainder...)
 	return body, contentType, nil
 }
 

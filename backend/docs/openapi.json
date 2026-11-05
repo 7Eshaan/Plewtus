@@ -3,7 +3,7 @@
   "info": {
     "title": "Plewtus Metasearch API",
     "version": "0.1.0",
-    "description": "Plewtus is an AI-agent search API backend that aggregates search results across\nmultiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture.\nResults are normalized, deduplicated, and ranked via Reciprocal Rank Fusion (RRF),\nwith optional AI-friendly webpage extraction (clean text, highlights, Markdown).\n",
+    "description": "Plewtus is an AI-agent search API backend that aggregates search results across\nmultiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture.\nResults are relevance-filtered, normalized, deduplicated, and ranked using query relevance\ncombined with Reciprocal Rank Fusion (RRF), with optional AI-friendly webpage extraction.\n",
     "license": {
       "name": "MIT"
     }
@@ -18,7 +18,7 @@
     "/search": {
       "post": {
         "summary": "Execute federated search",
-        "description": "Dispatches concurrent search queries across upstream search engines, normalizes\nand deduplicates results, computes Reciprocal Rank Fusion (RRF) scores, and\noptionally extracts webpage content for AI agents.\n",
+        "description": "Dispatches concurrent search queries across upstream search engines, relevance-filters and\ndeduplicates results, ranks using query relevance plus Reciprocal Rank Fusion (RRF), and\noptionally extracts webpage content for AI agents.\n",
         "operationId": "search",
         "security": [
           {
@@ -389,6 +389,8 @@
           "snippet",
           "rank",
           "score",
+          "relevance_score",
+          "ranking_score",
           "engines"
         ],
         "properties": {
@@ -418,8 +420,18 @@
           "score": {
             "type": "number",
             "format": "double",
-            "description": "Reciprocal Rank Fusion (RRF) score.",
+            "description": "Reciprocal Rank Fusion (RRF) consensus score; the final order also uses relevance_score.",
             "example": 0.04918
+          },
+          "relevance_score": {
+            "type": "number",
+            "format": "double",
+            "description": "Query relevance score derived from term coverage, title matches, and exact phrase matches."
+          },
+          "ranking_score": {
+            "type": "number",
+            "format": "double",
+            "description": "Hybrid ordering score (0.4 normalized RRF consensus plus 0.6 query relevance)."
           },
           "engines": {
             "type": "array",
@@ -533,7 +545,8 @@
         "required": [
           "queried",
           "successful",
-          "failed"
+          "failed",
+          "timing_ms"
         ],
         "properties": {
           "queried": {
@@ -556,6 +569,14 @@
               "$ref": "#/components/schemas/ProviderError"
             },
             "description": "Engines that failed, timed out, or encountered open circuit breakers."
+          },
+          "timing_ms": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "description": "Per-provider elapsed time in milliseconds for completed attempts."
           }
         }
       },
@@ -580,7 +601,11 @@
         "type": "object",
         "required": [
           "raw_count",
-          "deduped_count"
+          "deduped_count",
+          "relevance_rejected_count",
+          "domain_rejected_count",
+          "invalid_url_count",
+          "duplicate_count"
         ],
         "properties": {
           "raw_count": {
@@ -590,6 +615,22 @@
           "deduped_count": {
             "type": "integer",
             "description": "Total unique results identified after canonical URL normalization."
+          },
+          "relevance_rejected_count": {
+            "type": "integer",
+            "description": "Raw candidates rejected for insufficient query relevance."
+          },
+          "domain_rejected_count": {
+            "type": "integer",
+            "description": "Raw candidates rejected by include/exclude domain filters."
+          },
+          "invalid_url_count": {
+            "type": "integer",
+            "description": "Raw candidates rejected because their destination URL was empty or invalid."
+          },
+          "duplicate_count": {
+            "type": "integer",
+            "description": "Candidates merged into an already-seen canonical destination URL."
           }
         }
       },
