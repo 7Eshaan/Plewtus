@@ -1,58 +1,101 @@
+<div align="center">
+
 # Plewtus
 
-Plewtus is a metasearch API with a Next.js playground. It queries DuckDuckGo, Bing, and Yahoo, combines results with Reciprocal Rank Fusion, and can extract page content as Markdown, text, or highlights.
+### Federated search for AI agents
 
-## Run the full stack with Docker
+Search DuckDuckGo, Bing, and Yahoo in parallel. Deduplicate destinations, rank with Reciprocal Rank Fusion, and optionally extract pages as Markdown.
 
-Requirements: Docker Desktop with Docker Compose.
+<p>
+  <img alt="Go 1.27.3" src="https://img.shields.io/badge/Go-1.27.3-00ADD8?logo=go&logoColor=white">
+  <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-black?logo=next.js">
+  <img alt="Docker Compose" src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white">
+</p>
+
+</div>
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Playground] --> B[Next.js API proxy]
+    B --> C[Go search API]
+    D[API client] --> C
+    C --> E[DuckDuckGo]
+    C --> F[Bing]
+    C --> G[Yahoo]
+    E --> H[Normalize & deduplicate]
+    F --> H
+    G --> H
+    H --> I[Reciprocal Rank Fusion]
+    I --> J{Extract content?}
+    J -- Yes --> K[Safe page extraction]
+    J -- No --> L[Ranked JSON results]
+    K --> L
+```
+
+## Run it
+
+Requires Docker Desktop and Docker Compose.
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and replace `PLEWTUS_API_KEY` with a long random value. Then build and start both services:
+Set `PLEWTUS_API_KEY` in `.env` to a long random value, then start the app:
 
 ```bash
 docker compose up --build -d
 ```
 
-Open [http://localhost:3000](http://localhost:3000) for the web app. The API is available at `http://localhost:8080`.
+| Service | Local URL |
+| --- | --- |
+| Playground | [http://localhost:3000](http://localhost:3000) |
+| Search API | `http://localhost:8080` |
+| Health check | `http://localhost:8080/healthz` |
 
-To check the API directly, load the key from `.env` into your shell and send a search request:
+## Search with Markdown extraction
+
+Load the local API key and call the backend directly:
 
 ```bash
-set -a
-. ./.env
-set +a
+set -a && . ./.env && set +a
 
 curl -sS http://localhost:8080/search \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $PLEWTUS_API_KEY" \
-  -d '{"query":"golang concurrency patterns","limit":3}'
+  -d '{
+    "query": "golang concurrency patterns",
+    "limit": 3,
+    "extract": {
+      "enabled": true,
+      "mode": "markdown",
+      "max_pages": 2
+    }
+  }'
 ```
 
-To request Markdown extraction, include an `extract` object:
+Extracted page content is returned in `results[].content.markdown`. Other modes: `highlights`, `text`, and `metadata`.
+
+## Deploy
+
+- **Backend · Render:** create a Docker web service from `backend/Dockerfile`. Set `PLEWTUS_AUTH_REQUIRED=true` and `PLEWTUS_API_KEYS=<key>:pro`.
+- **Frontend · Vercel:** import the repo with root directory `frontend`. Set `PLEWTUS_BACKEND_URL` to the Render service URL and `PLEWTUS_API_KEY` to the matching key (without `:pro`). Keep the key server-side; never prefix it with `NEXT_PUBLIC_`.
+
+Render’s free backend sleeps when idle, so its first request after a quiet period may be slow.
+
+## Interfaces & docs
+
+- `POST /search` — JSON search API
+- `GET /healthz` — health probe
+- MCP over stdio — `cd backend && go run ./cmd/plewtus mcp`
+- [API reference](backend/docs/API.md) · [MCP setup](backend/docs/MCP.md) · [OpenAPI spec](backend/docs/openapi.yaml)
+
+## Local development
 
 ```bash
-curl -sS http://localhost:8080/search \
-  -H 'Content-Type: application/json' \
-  -H "Authorization: Bearer $PLEWTUS_API_KEY" \
-  -d '{"query":"golang concurrency patterns","limit":3,"extract":{"enabled":true,"mode":"markdown","max_pages":2,"max_chars_per_page":4000}}'
+(cd backend && go test ./...)
+(cd frontend && npm ci && npm run dev)
 ```
 
-The extracted content appears under each result's `content.markdown`. The API key is shared between the services through Compose and is required by the backend.
-
-Useful commands:
-
-```bash
-docker compose logs -f       # follow service logs
-docker compose ps             # show service and health status
-docker compose down           # stop and remove the containers
-docker compose up --build -d  # rebuild after changing code
-```
-
-You can change the published ports with `FRONTEND_PORT` and `BACKEND_PORT` in `.env`. Do not commit `.env` or use the example key for a public deployment. The API's cache, quotas, and circuit-breaker state are in memory and reset when the backend restarts.
-
-## Run services without Docker
-
-See [backend/README.md](backend/README.md) and [frontend/README.md](frontend/README.md) for local development instructions.
+To stop the Docker stack: `docker compose down`.
