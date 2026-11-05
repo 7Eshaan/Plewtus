@@ -151,3 +151,28 @@ func TestRRFRankerLetsStrongQueryFitBeatWeakEngineConsensus(t *testing.T) {
 		t.Fatal("expected exposed score to retain pure RRF values even when hybrid ranking order differs")
 	}
 }
+
+func TestDeduplicateWithOptions_FallbackWhenAllRelevanceRejected(t *testing.T) {
+	responses := []*model.ProviderResponse{
+		{
+			Engine: "bing",
+			Results: []model.RawSearchResult{
+				{Title: "Inter Miami CF", URL: "https://intermiamicf.com/", Snippet: "Major League Soccer club.", Position: 1},
+				{Title: "MLS Highlights", URL: "https://mlssoccer.com/", Snippet: "Watch soccer games online.", Position: 2},
+			},
+		},
+	}
+
+	// Query is "messi", none of the snippets/titles contain "messi", so strict relevance would reject both.
+	// But fallback ensures user receives results rather than an empty screen.
+	results, count := DeduplicateWithOptions(responses, DeduplicateOptions{
+		Query: "messi",
+		Limit: 10,
+	})
+	if count != 2 || len(results) != 2 {
+		t.Fatalf("expected fallback to admit 2 candidates when strict relevance rejects all, got count=%d results=%d", count, len(results))
+	}
+	if results[0].Title != "Inter Miami CF" {
+		t.Fatalf("expected top result to be Inter Miami CF, got %q", results[0].Title)
+	}
+}

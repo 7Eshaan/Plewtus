@@ -11,39 +11,26 @@ import (
 
 // HTTPClient wraps an http.Client with polite scraping defaults.
 type HTTPClient struct {
-	client    *http.Client
+	transport *http.Transport
+	timeout   time.Duration
 	userAgent string
 }
 
-// NewHTTPClient creates a client configured with cookie jar and redirect handling.
+// NewHTTPClient creates a client configured with transport connection pooling and isolated cookie jars.
 func NewHTTPClient(timeout time.Duration, userAgent string) *HTTPClient {
-	jar, _ := cookiejar.New(nil)
 	var transport *http.Transport
 	if defTr, ok := http.DefaultTransport.(*http.Transport); ok {
 		transport = defTr.Clone()
 	}
 
 	return &HTTPClient{
-		client: &http.Client{
-			Transport: transport,
-			Jar:       jar,
-			Timeout:   timeout,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 10 {
-					return fmt.Errorf("stopped after 10 redirects")
-				}
-				// Copy User-Agent to redirected requests
-				if userAgent != "" {
-					req.Header.Set("User-Agent", userAgent)
-				}
-				return nil
-			},
-		},
+		transport: transport,
+		timeout:   timeout,
 		userAgent: userAgent,
 	}
 }
 
-// Do executes an HTTP request, setting polite default headers.
+// Do executes an HTTP request with isolated cookies, setting polite default headers.
 func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response, error) {
 	req = req.WithContext(ctx)
 
@@ -57,13 +44,31 @@ func (c *HTTPClient) Do(ctx context.Context, req *http.Request) (*http.Response,
 		req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	}
 
-	return c.client.Do(req)
+	// Use an isolated cookie jar per request so search engines cannot track
+	// scraping sessions across different queries, while still supporting redirects within this call.
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Transport: c.transport,
+		Jar:       jar,
+		Timeout:   c.timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			if c.userAgent != "" {
+				req.Header.Set("User-Agent", c.userAgent)
+			}
+			return nil
+		},
+	}
+
+	return client.Do(req)
 }
 
 // CloseIdleConnections closes any idle TCP connections in the client transport.
 func (c *HTTPClient) CloseIdleConnections() {
-	if tr, ok := c.client.Transport.(*http.Transport); ok && tr != nil {
-		tr.CloseIdleConnections()
+	if c.transport != nil {
+		c.transport.CloseIdleConnections()
 	}
 }
 

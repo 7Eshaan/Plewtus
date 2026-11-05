@@ -64,11 +64,20 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if timeout <= 0 {
 		timeout = p.timeout
 	}
+	// Cap DuckDuckGo's total budget to 3s so a hung/rate-limited datacenter request
+	// does not block the entire search for the full server timeout.
+	const maxDDGBudget = 3 * time.Second
+	if timeout > maxDDGBudget {
+		timeout = maxDDGBudget
+	}
+	ddgCtx, cancelDDG := context.WithTimeout(ctx, timeout)
+	defer cancelDDG()
+
 	primaryBudget := timeout / 2
 	if primaryBudget <= 0 {
-		primaryBudget = 1500 * time.Millisecond
+		primaryBudget = 1200 * time.Millisecond
 	}
-	primaryCtx, cancelPrimary := context.WithTimeout(ctx, primaryBudget)
+	primaryCtx, cancelPrimary := context.WithTimeout(ddgCtx, primaryBudget)
 	language := req.Language
 	if language == "" {
 		switch provider.NormalizeCountryCode(req.Country) {
@@ -88,7 +97,7 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	}
 
 	// 4. If primary failed or returned challenge, try fallback endpoint (lite.duckduckgo.com/lite/)
-	liteResults, liteErr := p.queryEndpoint(ctx, LiteURL, "https://lite.duckduckgo.com", form, acceptLanguage, req.Limit, ParseLiteResponse)
+	liteResults, liteErr := p.queryEndpoint(ddgCtx, LiteURL, "https://lite.duckduckgo.com", form, acceptLanguage, req.Limit, ParseLiteResponse)
 	if liteErr == nil && len(liteResults) > 0 {
 		return &model.ProviderResponse{
 			Engine:  p.Name(),
