@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ Plewtus
+# Plewtus
 
 ### Federated Metasearch & Extraction Engine for AI Agents
 
@@ -15,50 +15,50 @@
   <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square">
 </p>
 
-[Quickstart](#-quickstart) • [Architecture](#-architecture) • [MCP for AI Agents](#-mcp-for-ai-agents) • [API & Extraction](#-search--page-extraction) • [Configuration](#-configuration-reference)
+[Quickstart](#quickstart) • [Architecture](#architecture) • [MCP Integration](#model-context-protocol-mcp-integration) • [Search & Extraction](#search--page-extraction) • [Configuration](#configuration-reference)
 
 </div>
 
 ---
 
-## 🌟 Highlights
+## Key Capabilities
 
-- **🌐 Zero Search API Keys Required** — Built-in resilient scrapers for DuckDuckGo, Bing, and Yahoo with automatic query escaping and anti-bot mitigation.
-- **⚡ Sub-Second Concurrent Search** — Fan-out queries across all providers in parallel with per-engine timeouts and circuit breakers.
-- **🧠 Reciprocal Rank Fusion (RRF)** — Merges multi-engine rankings into a consensus score ($k=60$) with domain-level deduplication.
-- **📄 On-The-Fly Web Extraction** — Automatically strips boilerplate, adverts, and scripts, converting target web pages into clean **Markdown**, **Highlights**, or plain text.
-- **🤖 Native Model Context Protocol (MCP)** — Seamless stdio MCP integration with **ChatGPT Desktop**, **Claude Desktop**, **Cursor**, and local LLM harnesses (**DeepSeek Harness**, **Ollama**).
-- **🛡️ Production-Grade Hardening** — Full SSRF protection (loopback/private IP blocking), in-memory TTL caching, token bucket rate limits, and zero external database dependencies.
+- **Zero Search API Keys Required** — Built-in resilient scrapers for DuckDuckGo, Bing, and Yahoo with automatic query escaping and anti-bot mitigation.
+- **Sub-Second Concurrent Search** — Fan-out queries across all providers in parallel with per-engine timeouts, circuit breakers, and graceful fallback.
+- **Reciprocal Rank Fusion (RRF)** — Merges multi-engine rankings into a consensus score ($k=60$) alongside domain-level canonical deduplication.
+- **On-The-Fly Web Extraction** — Automatically strips boilerplate, adverts, and scripts, converting target web pages into clean Markdown, Highlights, or plain text.
+- **Native Model Context Protocol (MCP)** — Seamless stdio MCP integration with ChatGPT Desktop, OpenAI Codex CLI, Claude Desktop, Cursor, and local LLM harnesses (DeepSeek Harness, Ollama).
+- **Production-Grade Reliability** — Full SSRF protection (loopback and private IP blocking), thread-safe in-memory TTL caching, token bucket rate limits, and zero external database dependencies.
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
     subgraph Clients["Clients & AI Agents"]
-        Agent["🤖 AI Agent (ChatGPT / Claude / Cursor / Harness)"]
-        Playground["🖥 Next.js Web Playground (Port 3000)"]
-        APIClient["📡 Direct REST Client (cURL / SDK)"]
+        Agent["AI Agent (ChatGPT / Codex / Claude / Cursor / DSH)"]
+        Playground["Next.js Web Playground (Port 3000)"]
+        APIClient["Direct REST Client (cURL / SDK)"]
     end
 
     subgraph PlewtusEngine["Plewtus Core Engine (Go · Port 8080)"]
         Router{"Protocol Gateway"}
-        Cache[("⚡ In-Memory TTL Cache")]
-        Breakers["⚡ Circuit Breakers & Concurrency Limiters"]
+        Cache[("In-Memory TTL Cache")]
+        Breakers["Circuit Breakers & Concurrency Limiters"]
         
         subgraph Providers["Concurrent Search Providers"]
-            DDG["🦆 DuckDuckGo Scraper"]
-            Bing["🔎 Bing Scraper"]
-            Yahoo["🟣 Yahoo Scraper"]
+            DDG["DuckDuckGo Scraper"]
+            Bing["Bing Scraper"]
+            Yahoo["Yahoo Scraper"]
         end
 
-        Fusion["⚖️ URL Deduplication & Reciprocal Rank Fusion (RRF)"]
+        Fusion["URL Deduplication & Reciprocal Rank Fusion (RRF)"]
         
         subgraph Extractor["Safe Content Extractor"]
-            SSRF["🛡️ SSRF & Private IP Guard"]
-            Sanitize["🧹 HTML Sanitizer & Readability Engine"]
-            Formatter["📝 Markdown / Highlights Formatter"]
+            SSRF["SSRF & Private IP Guard"]
+            Sanitize["HTML Sanitizer & Readability Engine"]
+            Formatter["Markdown / Highlights Formatter"]
         end
     end
 
@@ -76,7 +76,7 @@ flowchart TD
 
 ---
 
-## 🚀 Quickstart
+## Quickstart
 
 ### Option 1: Docker Compose (Recommended)
 
@@ -102,7 +102,7 @@ docker compose up --build -d
 
 ---
 
-### Option 2: Native Binary / Local Dev
+### Option 2: Native Binary / Local Development
 
 ```bash
 # Run backend
@@ -117,7 +117,7 @@ npm run dev
 
 ---
 
-## 🤖 MCP for AI Agents
+## Model Context Protocol (MCP) Integration
 
 Plewtus includes a native [Model Context Protocol](https://modelcontextprotocol.io/) stdio server, turning Plewtus into a private real-time search engine for any LLM.
 
@@ -191,7 +191,7 @@ Add to your workspace `.cursor/mcp.json` or MCP Extension config:
 
 ---
 
-## 🔍 Search & Page Extraction
+## Search & Page Extraction
 
 Execute a search with automated Markdown extraction:
 
@@ -246,16 +246,16 @@ curl -sS http://localhost:8080/search \
 
 ### Extraction Modes
 
-| Mode | Output Format | Ideal Use Case |
+| Mode | Output Format | Recommended Use Case |
 | :--- | :--- | :--- |
 | `markdown` | Clean GitHub Flavored Markdown | Deep synthesis and technical documentation |
-| `highlights` | Top high-signal excerpt sentences | Fast fact verification and low-context models |
+| `highlights` | High-signal excerpt sentences | Fast fact verification and lightweight context |
 | `text` | Cleaned plain readable text | General classification or summarization |
-| `metadata` | Title, description, author, publication date | Source vetting and quick cataloging |
+| `metadata` | Title, description, author, publication date | Source vetting and cataloging |
 
 ---
 
-## ⚙️ Configuration Reference
+## Configuration Reference
 
 Plewtus is configured via environment variables:
 
@@ -273,7 +273,7 @@ Plewtus is configured via environment variables:
 
 ---
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```text
 PlewtusV1/
@@ -297,6 +297,6 @@ PlewtusV1/
 
 ---
 
-## 📄 License
+## License
 
 Distributed under the Apache License 2.0. See [LICENSE](LICENSE) for more information.
