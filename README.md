@@ -15,7 +15,7 @@
   <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square">
 </p>
 
-[Quickstart](#-quickstart) • [Architecture](#-architecture) • [MCP for AI Agents](#-mcp-for-ai-agents) • [API & Extraction](#-search--page-extraction) • [Deployment](#-deployment)
+[Quickstart](#-quickstart) • [Architecture](#-architecture) • [MCP for AI Agents](#-mcp-for-ai-agents) • [API & Extraction](#-search--page-extraction) • [Configuration](#-configuration-reference)
 
 </div>
 
@@ -270,23 +270,6 @@ Plewtus is configured via environment variables:
 | `PLEWTUS_DEFAULT_TIMEOUT` | `5s` | Max duration per upstream provider request |
 | `PLEWTUS_RATE_LIMIT_FREE` | `10` | Free tier requests allowed per minute |
 | `PLEWTUS_QUOTA_FREE` | `100` | Free tier requests allowed per day |
-
----
-
-## 🚢 Deployment
-
-### Backend on Render
-1. Create a **Web Service** pointing to your repository.
-2. Select **Docker** environment using `backend/Dockerfile`.
-3. Set environment variables:
-   - `PLEWTUS_AUTH_REQUIRED=true`
-   - `PLEWTUS_API_KEYS=your_secret_key:pro`
-
-### Frontend on Vercel
-1. Import repository and set the **Root Directory** to `frontend`.
-2. Configure environment variables:
-   - `PLEWTUS_BACKEND_URL=https://your-backend.onrender.com`
-   - `PLEWTUS_API_KEY=your_secret_key` *(kept server-side in Next.js API routes)*
 
 ---
 
