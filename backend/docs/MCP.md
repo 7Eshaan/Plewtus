@@ -25,7 +25,30 @@ Plewtus can be launched as an MCP stdio server in two equivalent ways:
 
 ## Configuration for AI Clients
 
-### 1. Claude Desktop
+### 1. OpenAI Codex / ChatGPT CLI (`~/.codex/config.toml`)
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.plewtus]
+enabled = true
+command = "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+cwd = "/absolute/path/to/PlewtusV1"
+
+[mcp_servers.plewtus.env]
+PLEWTUS_CACHE_ENABLED = "true"
+PLEWTUS_CACHE_TTL_SECONDS = "600"
+```
+
+### 2. ChatGPT Desktop (GUI)
+
+Navigate to **Settings → MCP Servers → Connect to a custom MCP**:
+- **Name:** `plewtus`
+- **Type:** `STDIO`
+- **Command to launch:** `/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp`
+- **Working directory:** `/absolute/path/to/PlewtusV1`
+
+### 3. Claude Desktop
 
 Add Plewtus to your `claude_desktop_config.json`:
 

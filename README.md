@@ -1,66 +1,201 @@
 <div align="center">
 
-# Plewtus
+# ⚡ Plewtus
 
-### Federated search for AI agents
+### Federated Metasearch & Extraction Engine for AI Agents
 
-Search DuckDuckGo, Bing, and Yahoo in parallel. Deduplicate destinations, rank with Reciprocal Rank Fusion, and optionally extract pages as Markdown.
+**Zero search API keys required.** Query multiple search engines concurrently, deduplicate URLs, rank results with Reciprocal Rank Fusion (RRF), safely extract full page content into LLM-ready Markdown, and connect directly to AI agents via the Model Context Protocol (MCP).
 
-<p>
-  <img alt="Go 1.27.3" src="https://img.shields.io/badge/Go-1.27.3-00ADD8?logo=go&logoColor=white">
-  <img alt="Next.js 16" src="https://img.shields.io/badge/Next.js-16-black?logo=next.js">
-  <img alt="Docker Compose" src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white">
+<p align="center">
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.27.3-00ADD8?style=flat-square&logo=go&logoColor=white">
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js">
+  <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black">
+  <img alt="Protocol" src="https://img.shields.io/badge/MCP-Protocol-8A2BE2?style=flat-square">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white">
+  <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square">
 </p>
+
+[Quickstart](#-quickstart) • [Architecture](#-architecture) • [MCP for AI Agents](#-mcp-for-ai-agents) • [API & Extraction](#-search--page-extraction) • [Deployment](#-deployment)
 
 </div>
 
-## How it works
+---
+
+## 🌟 Highlights
+
+- **🌐 Zero Search API Keys Required** — Built-in resilient scrapers for DuckDuckGo, Bing, and Yahoo with automatic query escaping and anti-bot mitigation.
+- **⚡ Sub-Second Concurrent Search** — Fan-out queries across all providers in parallel with per-engine timeouts and circuit breakers.
+- **🧠 Reciprocal Rank Fusion (RRF)** — Merges multi-engine rankings into a consensus score ($k=60$) with domain-level deduplication.
+- **📄 On-The-Fly Web Extraction** — Automatically strips boilerplate, adverts, and scripts, converting target web pages into clean **Markdown**, **Highlights**, or plain text.
+- **🤖 Native Model Context Protocol (MCP)** — Seamless stdio MCP integration with **ChatGPT Desktop**, **Claude Desktop**, **Cursor**, and local LLM harnesses (**DeepSeek Harness**, **Ollama**).
+- **🛡️ Production-Grade Hardening** — Full SSRF protection (loopback/private IP blocking), in-memory TTL caching, token bucket rate limits, and zero external database dependencies.
+
+---
+
+## 🏗 Architecture
 
 ```mermaid
-flowchart LR
-    A[Playground] --> B[Next.js API proxy]
-    B --> C[Go search API]
-    D[API client] --> C
-    C --> E[DuckDuckGo]
-    C --> F[Bing]
-    C --> G[Yahoo]
-    E --> H[Normalize & deduplicate]
-    F --> H
-    G --> H
-    H --> I[Reciprocal Rank Fusion]
-    I --> J{Extract content?}
-    J -- Yes --> K[Safe page extraction]
-    J -- No --> L[Ranked JSON results]
-    K --> L
+flowchart TD
+    subgraph Clients["Clients & AI Agents"]
+        Agent["🤖 AI Agent (ChatGPT / Claude / Cursor / Harness)"]
+        Playground["🖥 Next.js Web Playground (Port 3000)"]
+        APIClient["📡 Direct REST Client (cURL / SDK)"]
+    end
+
+    subgraph PlewtusEngine["Plewtus Core Engine (Go · Port 8080)"]
+        Router{"Protocol Gateway"}
+        Cache[("⚡ In-Memory TTL Cache")]
+        Breakers["⚡ Circuit Breakers & Concurrency Limiters"]
+        
+        subgraph Providers["Concurrent Search Providers"]
+            DDG["🦆 DuckDuckGo Scraper"]
+            Bing["🔎 Bing Scraper"]
+            Yahoo["🟣 Yahoo Scraper"]
+        end
+
+        Fusion["⚖️ URL Deduplication & Reciprocal Rank Fusion (RRF)"]
+        
+        subgraph Extractor["Safe Content Extractor"]
+            SSRF["🛡️ SSRF & Private IP Guard"]
+            Sanitize["🧹 HTML Sanitizer & Readability Engine"]
+            Formatter["📝 Markdown / Highlights Formatter"]
+        end
+    end
+
+    Agent -- "MCP (stdio JSON-RPC)" --> Router
+    Playground -- "REST Proxy" --> Router
+    APIClient -- "POST /search" --> Router
+
+    Router <--> Cache
+    Router --> Breakers
+    Breakers --> DDG & Bing & Yahoo
+    DDG & Bing & Yahoo --> Fusion
+    Fusion --> SSRF --> Sanitize --> Formatter
+    Formatter --> Router
 ```
 
-## Run it
+---
 
-Requires Docker Desktop and Docker Compose.
+## 🚀 Quickstart
+
+### Option 1: Docker Compose (Recommended)
+
+Run the full stack (Go Search API + Next.js Playground) with a single command:
 
 ```bash
+# 1. Clone repository
+git clone https://github.com/your-username/PlewtusV1.git
+cd PlewtusV1
+
+# 2. Configure environment
 cp .env.example .env
-```
 
-Set `PLEWTUS_API_KEY` in `.env` to a long random value, then start the app:
-
-```bash
+# 3. Start services
 docker compose up --build -d
 ```
 
-| Service | Local URL |
-| --- | --- |
-| Playground | [http://localhost:3000](http://localhost:3000) |
-| Search API | `http://localhost:8080` |
-| Health check | `http://localhost:8080/healthz` |
+| Service | Address | Description |
+| :--- | :--- | :--- |
+| **Playground UI** | [http://localhost:3000](http://localhost:3000) | Interactive web interface with live JSON inspector |
+| **Search API** | [http://localhost:8080](http://localhost:8080) | High-performance Go REST API |
+| **Health Check** | [http://localhost:8080/healthz](http://localhost:8080/healthz) | Liveness and readiness probe |
 
-## Search with Markdown extraction
+---
 
-Load the local API key and call the backend directly:
+### Option 2: Native Binary / Local Dev
 
 ```bash
-set -a && . ./.env && set +a
+# Run backend
+cd backend
+go run ./cmd/plewtus serve
 
+# In another terminal, run frontend
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## 🤖 MCP for AI Agents
+
+Plewtus includes a native [Model Context Protocol](https://modelcontextprotocol.io/) stdio server, turning Plewtus into a private real-time search engine for any LLM.
+
+### Compile the MCP Binary
+```bash
+cd backend
+go build -o bin/plewtus-mcp ./cmd/plewtus-mcp
+```
+
+### 1. ChatGPT Desktop (GUI)
+Under **Settings → MCP Servers → Connect to a custom MCP**:
+- **Name:** `plewtus`
+- **Type:** `STDIO`
+- **Command to launch:** `/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp`
+- **Working directory:** `/absolute/path/to/PlewtusV1`
+
+### 2. OpenAI Codex / ChatGPT CLI (`~/.codex/config.toml`)
+Add to `~/.codex/config.toml`:
+```toml
+[mcp_servers.plewtus]
+enabled = true
+command = "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+cwd = "/absolute/path/to/PlewtusV1"
+
+[mcp_servers.plewtus.env]
+PLEWTUS_CACHE_ENABLED = "true"
+PLEWTUS_CACHE_TTL_SECONDS = "600"
+```
+
+### 3. Claude Desktop
+Add to your `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "plewtus": {
+      "command": "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp",
+      "env": {
+        "PLEWTUS_CACHE_ENABLED": "true",
+        "PLEWTUS_CACHE_TTL_SECONDS": "600"
+      }
+    }
+  }
+}
+```
+
+### 4. Cursor / VS Code
+Add to your workspace `.cursor/mcp.json` or MCP Extension config:
+```json
+{
+  "mcpServers": {
+    "plewtus": {
+      "command": "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+    }
+  }
+}
+```
+
+### 5. DeepSeek Harness (`cordis.patch.yml`)
+```yaml
+- id: mcp-plewtus
+  name: "@deepseek-ai/dsh-mcp-client"
+  config:
+    serverName: plewtus
+    transport: stdio
+    command: "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+```
+
+### Available MCP Tools
+- **`search`**: Multi-engine search with freshness filtering, domain whitelisting/blacklisting, and optional on-the-fly webpage extraction (`markdown`, `highlights`, `text`).
+- **`extract`**: Direct SSRF-safe content extraction from any list of target URLs.
+
+---
+
+## 🔍 Search & Page Extraction
+
+Execute a search with automated Markdown extraction:
+
+```bash
 curl -sS http://localhost:8080/search \
   -H 'Content-Type: application/json' \
   -H "Authorization: Bearer $PLEWTUS_API_KEY" \
@@ -75,27 +210,110 @@ curl -sS http://localhost:8080/search \
   }'
 ```
 
-Extracted page content is returned in `results[].content.markdown`. Other modes: `highlights`, `text`, and `metadata`.
+### Response Preview
 
-## Deploy
-
-- **Backend · Render:** create a Docker web service from `backend/Dockerfile`. Set `PLEWTUS_AUTH_REQUIRED=true` and `PLEWTUS_API_KEYS=<key>:pro`.
-- **Frontend · Vercel:** import the repo with root directory `frontend`. Set `PLEWTUS_BACKEND_URL` to the Render service URL and `PLEWTUS_API_KEY` to the matching key (without `:pro`). Keep the key server-side; never prefix it with `NEXT_PUBLIC_`.
-
-Render’s free backend sleeps when idle, so its first request after a quiet period may be slow.
-
-## Interfaces & docs
-
-- `POST /search` — JSON search API
-- `GET /healthz` — health probe
-- MCP over stdio — `cd backend && go run ./cmd/plewtus mcp`
-- [API reference](backend/docs/API.md) · [MCP setup](backend/docs/MCP.md) · [OpenAPI spec](backend/docs/openapi.yaml)
-
-## Local development
-
-```bash
-(cd backend && go test ./...)
-(cd frontend && npm ci && npm run dev)
+```json
+{
+  "query": "golang concurrency patterns",
+  "results": [
+    {
+      "id": "res_1",
+      "title": "Go Concurrency Patterns: Pipelines and cancellation",
+      "url": "https://go.dev/blog/pipelines",
+      "snippet": "Go's concurrency primitives make it easy to construct streaming data pipelines...",
+      "score": 0.032787,
+      "ranking_score": 0.9412,
+      "engines": [
+        {"name": "duckduckgo", "position": 1},
+        {"name": "yahoo", "position": 1}
+      ],
+      "content": {
+        "markdown": "# Go Concurrency Patterns: Pipelines\n\nGo provides primitives that facilitate building concurrent pipelines...",
+        "author": "Sameer Ajmani",
+        "extracted_at": "2026-11-06T16:30:14Z"
+      }
+    }
+  ],
+  "metadata": {
+    "took_ms": 1820,
+    "providers": {
+      "queried": ["duckduckgo", "bing", "yahoo"],
+      "successful": ["bing", "duckduckgo", "yahoo"]
+    }
+  }
+}
 ```
 
-To stop the Docker stack: `docker compose down`.
+### Extraction Modes
+
+| Mode | Output Format | Ideal Use Case |
+| :--- | :--- | :--- |
+| `markdown` | Clean GitHub Flavored Markdown | Deep synthesis and technical documentation |
+| `highlights` | Top high-signal excerpt sentences | Fast fact verification and low-context models |
+| `text` | Cleaned plain readable text | General classification or summarization |
+| `metadata` | Title, description, author, publication date | Source vetting and quick cataloging |
+
+---
+
+## ⚙️ Configuration Reference
+
+Plewtus is configured via environment variables:
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `PORT` | `8080` | HTTP listening port for the REST API |
+| `PLEWTUS_AUTH_REQUIRED` | `false` | When `true`, rejects requests lacking a valid Bearer token |
+| `PLEWTUS_API_KEYS` | `""` | Comma-delimited list of authorized keys (e.g. `key1:free,key2:pro`) |
+| `PLEWTUS_PROVIDERS` | `duckduckgo,bing,yahoo` | Default providers queried per search |
+| `PLEWTUS_CACHE_ENABLED` | `true` | Enables in-memory LRU search cache |
+| `PLEWTUS_CACHE_TTL_SECONDS` | `300` | Search result cache expiration in seconds |
+| `PLEWTUS_DEFAULT_TIMEOUT` | `5s` | Max duration per upstream provider request |
+| `PLEWTUS_RATE_LIMIT_FREE` | `10` | Free tier requests allowed per minute |
+| `PLEWTUS_QUOTA_FREE` | `100` | Free tier requests allowed per day |
+
+---
+
+## 🚢 Deployment
+
+### Backend on Render
+1. Create a **Web Service** pointing to your repository.
+2. Select **Docker** environment using `backend/Dockerfile`.
+3. Set environment variables:
+   - `PLEWTUS_AUTH_REQUIRED=true`
+   - `PLEWTUS_API_KEYS=your_secret_key:pro`
+
+### Frontend on Vercel
+1. Import repository and set the **Root Directory** to `frontend`.
+2. Configure environment variables:
+   - `PLEWTUS_BACKEND_URL=https://your-backend.onrender.com`
+   - `PLEWTUS_API_KEY=your_secret_key` *(kept server-side in Next.js API routes)*
+
+---
+
+## 📂 Repository Structure
+
+```text
+PlewtusV1/
+├── backend/
+│   ├── cmd/
+│   │   ├── plewtus/         # Unified server & CLI binary
+│   │   └── plewtus-mcp/     # Dedicated stdio MCP server binary
+│   ├── internal/
+│   │   ├── cache/           # Thread-safe in-memory TTL caching
+│   │   ├── extractor/       # HTML parser, readability & markdown formatter
+│   │   ├── mcp/             # Model Context Protocol JSON-RPC 2.0 handler
+│   │   ├── orchestrator/    # Concurrent execution & RRF rank fusion
+│   │   ├── provider/        # DuckDuckGo, Bing, and Yahoo scrapers
+│   │   └── reliability/     # Circuit breakers, retries, and SSRF guards
+│   └── docs/                # OpenAPI specification and API manuals
+├── frontend/
+│   ├── src/app/             # Next.js 16 App Router UI & API proxy
+│   └── src/components/      # Playground, filters, and JSON viewer
+└── docker-compose.yml       # Production-ready container orchestration
+```
+
+---
+
+## 📄 License
+
+Distributed under the Apache License 2.0. See [LICENSE](LICENSE) for more information.
