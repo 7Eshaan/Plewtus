@@ -33,6 +33,7 @@ type EngineSource struct {
 
 // ExtractedContent holds optional extracted text, markdown, or highlights.
 type ExtractedContent struct {
+	Title         string   `json:"title,omitempty"`
 	Text          string   `json:"text,omitempty"`
 	Markdown      string   `json:"markdown,omitempty"`
 	Highlights    []string `json:"highlights,omitempty"`
@@ -134,7 +135,7 @@ func (src *SearchResponse) Clone() *SearchResponse {
 
 	dst := &SearchResponse{
 		Query:    src.Query,
-		Results:  make([]SearchResult, len(src.Results)),
+		Results:  make([]SearchResult, len(src.Results)), // non-nil even when empty
 		Metadata: src.Metadata,
 	}
 
@@ -155,10 +156,11 @@ func (src *SearchResponse) Clone() *SearchResponse {
 		}
 	}
 
-	// Deep copy metadata slices
-	dst.Metadata.Providers.Queried = append([]string(nil), src.Metadata.Providers.Queried...)
-	dst.Metadata.Providers.Successful = append([]string(nil), src.Metadata.Providers.Successful...)
-	dst.Metadata.Providers.Failed = append([]ProviderError(nil), src.Metadata.Providers.Failed...)
+	// Deep copy metadata slices. Keep empty slices non-nil so they serialize
+	// as [] rather than null, matching the API contract.
+	dst.Metadata.Providers.Queried = append([]string{}, src.Metadata.Providers.Queried...)
+	dst.Metadata.Providers.Successful = append([]string{}, src.Metadata.Providers.Successful...)
+	dst.Metadata.Providers.Failed = append([]ProviderError{}, src.Metadata.Providers.Failed...)
 	if src.Metadata.Providers.TimingMs != nil {
 		dst.Metadata.Providers.TimingMs = make(map[string]int64, len(src.Metadata.Providers.TimingMs))
 		for name, tookMs := range src.Metadata.Providers.TimingMs {
@@ -168,8 +170,12 @@ func (src *SearchResponse) Clone() *SearchResponse {
 
 	if src.Metadata.Filters != nil {
 		flt := *src.Metadata.Filters
-		flt.IncludeDomains = append([]string(nil), src.Metadata.Filters.IncludeDomains...)
-		flt.ExcludeDomains = append([]string(nil), src.Metadata.Filters.ExcludeDomains...)
+		if src.Metadata.Filters.IncludeDomains != nil {
+			flt.IncludeDomains = append([]string{}, src.Metadata.Filters.IncludeDomains...)
+		}
+		if src.Metadata.Filters.ExcludeDomains != nil {
+			flt.ExcludeDomains = append([]string{}, src.Metadata.Filters.ExcludeDomains...)
+		}
 		dst.Metadata.Filters = &flt
 	}
 

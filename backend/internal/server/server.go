@@ -69,11 +69,6 @@ func (s *Server) WithUsageManager(um *usage.Manager) *Server {
 	return s
 }
 
-// UsageManager returns the server's usage manager.
-func (s *Server) UsageManager() *usage.Manager {
-	return s.usageMgr
-}
-
 // setupRoutes registers all HTTP endpoints.
 func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /health", s.handleHealth())

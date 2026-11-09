@@ -116,9 +116,9 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 		rawScore := r.ComputeScore(res.Engines)
 		consensus := math.Min(1, rawScore/maxConsensus)
 		relevance := math.Max(0, math.Min(1, res.Relevance))
-		// Give query fit more weight than consensus. The relevance gate removes
-		// obvious noise; this blend also prevents weak lexical matches from
-		// winning solely because correlated engines ranked them similarly.
+		// Give query fit more weight than consensus. The relevance filter removes
+		// obvious noise upstream; this blend lets strong agreement across engines
+		// beat marginally better keyword overlap.
 		rankScore := ConsensusRankingWeight*consensus + RelevanceRankingWeight*relevance
 
 		bestPos := math.MaxInt32
@@ -142,26 +142,16 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 		}
 	}
 
-	// Sort by relevance in descending order (most relevant at top, less relevant towards bottom):
-	// - Results matching query keywords stay on top in descending order of relevance.
-	// - Ties in relevance are broken by hybrid RRF consensus, engine count, and SERP positions.
-	// - Zero-relevance results sink to the very bottom.
-	sort.Slice(scored, func(i, j int) bool {
-		// 1. Results with positive relevance strictly outrank zero-relevance results
-		iRelevant := scored[i].relevance > 0.01
-		jRelevant := scored[j].relevance > 0.01
-		if iRelevant != jRelevant {
-			return iRelevant
-		}
-
-		// 2. Strict descending relevance: higher relevance always ranks on top
-		if math.Abs(scored[i].relevance-scored[j].relevance) > 1e-4 {
-			return scored[i].relevance > scored[j].relevance
-		}
-
-		// 3. For results with identical relevance, hybrid consensus and engine positions decide
-		if math.Abs(scored[i].rankScore-scored[j].rankScore) > 1e-12 {
+	// Order by the hybrid ranking score so that multi-engine consensus can
+	// outweigh small lexical differences (keyword-stuffed pages found deep in a
+	// single engine must not beat a page every engine ranks first). Ties fall
+	// back to relevance, engine count, best SERP position, and discovery order.
+	sort.SliceStable(scored, func(i, j int) bool {
+		if math.Abs(scored[i].rankScore-scored[j].rankScore) > 1e-9 {
 			return scored[i].rankScore > scored[j].rankScore
+		}
+		if math.Abs(scored[i].relevance-scored[j].relevance) > 1e-9 {
+			return scored[i].relevance > scored[j].relevance
 		}
 		if scored[i].engineCount != scored[j].engineCount {
 			return scored[i].engineCount > scored[j].engineCount

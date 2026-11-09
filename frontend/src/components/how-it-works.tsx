@@ -1,12 +1,10 @@
-"use client";
-
 import { Cpu, GitMerge, Award, ArrowRight } from "lucide-react";
 
 export function HowItWorks() {
   return (
     <section id="how-it-works" className="w-full pt-8 pb-4 flex flex-col gap-6 scroll-mt-16">
       <div className="flex flex-col gap-1.5 text-center sm:text-left">
-        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-[#8700ff] dark:text-[#a84dff] uppercase tracking-wider font-semibold">
+        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-brand dark:text-brand-light uppercase tracking-wider font-semibold">
           <span>Architecture &amp; Pipeline</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans">
@@ -60,28 +58,28 @@ export function HowItWorks() {
           <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center gap-1.5 text-[10px] font-mono text-zinc-500">
             <span>Canonical hash normalization</span>
             <ArrowRight className="w-3 h-3 text-zinc-400" />
-            <span className="text-emerald-500">Zero duplicate URLs</span>
+            <span className="text-emerald-500">One entry per page</span>
           </div>
         </div>
 
         {/* Step 3: Query-aware rank fusion */}
-        <div className="p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-3 shadow-2xs hover:border-[#8700ff]/40 dark:hover:border-[#8700ff]/40 transition-colors">
-          <div className="w-8 h-8 rounded-lg bg-[#8700ff]/10 dark:bg-[#8700ff]/20 border border-[#8700ff]/30 flex items-center justify-center text-[#8700ff] dark:text-[#a84dff]">
+        <div className="p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-3 shadow-2xs hover:border-brand/40 dark:hover:border-brand/40 transition-colors">
+          <div className="w-8 h-8 rounded-lg bg-brand/10 dark:bg-brand/20 border border-brand/30 flex items-center justify-center text-brand dark:text-brand-light">
             <Award className="w-4 h-4" />
           </div>
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-[#8700ff] dark:text-[#a84dff] font-semibold">03</span>
+              <span className="font-mono text-xs text-brand dark:text-brand-light font-semibold">03</span>
               <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">
                 Query-aware rank fusion
               </h3>
             </div>
             <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Filters weak matches, then balances query relevance with multi-engine consensus. Relevance favors query coverage, title matches, and exact phrases; RRF combines provider positions with <code className="text-[11px] font-mono">k = 60</code>.
+              Removes off-topic results (and discards decoy result pages some engines serve to bots), then blends query relevance with multi-engine consensus. Relevance favors query coverage, title matches, and exact phrases; RRF combines provider positions with <code className="text-[11px] font-mono">k = 60</code>.
             </p>
           </div>
-          <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 font-mono text-[10px] text-[#8700ff] dark:text-[#a84dff] bg-[#8700ff]/5 dark:bg-[#8700ff]/10 border border-[#8700ff]/15 p-2 rounded">
-            rank = 0.6 &times; relevance + 0.4 &times; normalized RRF
+          <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 font-mono text-[10px] text-brand dark:text-brand-light bg-brand/5 dark:bg-brand/10 border border-brand/15 p-2 rounded">
+            rank = 0.8 &times; relevance + 0.2 &times; normalized RRF
           </div>
         </div>
       </div>

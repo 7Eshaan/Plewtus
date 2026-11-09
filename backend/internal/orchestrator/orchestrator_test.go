@@ -238,21 +238,17 @@ func TestOrchestrator_UnknownProvider(t *testing.T) {
 
 	orch := New(reg, 1*time.Second, "test-agent", testLogger())
 
-	resp, err := orch.Search(context.Background(), &model.SearchRequest{
+	_, err := orch.Search(context.Background(), &model.SearchRequest{
 		Query:     "test unknown",
 		Providers: []string{"known", "ghost_engine"},
 	})
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !errors.Is(err, model.ErrInvalidRequest) {
+		t.Fatalf("expected invalid request error for unknown provider, got %v", err)
 	}
-
-	if len(resp.Results) != 1 {
-		t.Errorf("expected 1 result from known provider, got %d", len(resp.Results))
-	}
-
-	if len(resp.Metadata.Providers.Failed) != 1 || resp.Metadata.Providers.Failed[0].Engine != "ghost_engine" {
-		t.Errorf("expected ghost_engine to be marked as failed, got %v", resp.Metadata.Providers.Failed)
+	if orch.breakers != nil {
+		if n := len(orch.breakers.Names()); n != 0 {
+			t.Fatalf("unknown providers must not allocate circuit breakers, got %d", n)
+		}
 	}
 }
 

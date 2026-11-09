@@ -12,7 +12,7 @@ Create `frontend/.env.local` from `.env.example`, set a backend URL and server-s
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Start the Go server from `backend/` as described in `backend/README.md`; the frontend default backend URL is `http://localhost:8890`.
+Open [http://localhost:3000](http://localhost:3000). Start the Go server from `backend/` as described in the root `README.md`; the frontend default backend URL is `http://localhost:8080` (override with `PLEWTUS_BACKEND_URL`).
 
 ## Commands
 

@@ -186,8 +186,8 @@ func TestSearchEndpoint_SearcherTimeout(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusRequestTimeout {
-		t.Errorf("expected status 408, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusGatewayTimeout {
+		t.Errorf("expected status 504, got %d", resp.StatusCode)
 	}
 
 	var errResp model.ErrorResponse

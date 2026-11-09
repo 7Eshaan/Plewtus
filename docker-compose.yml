@@ -19,6 +19,7 @@ services:
       PLEWTUS_BACKEND_URL: http://backend:8080
       PLEWTUS_API_KEY: "${PLEWTUS_API_KEY:?Copy .env.example to .env and set PLEWTUS_API_KEY}"
       PLEWTUS_RATE_LIMIT_PER_MINUTE: "${PLEWTUS_RATE_LIMIT_PER_MINUTE:-20}"
+      PLEWTUS_TRUST_PROXY_HEADERS: "${PLEWTUS_TRUST_PROXY_HEADERS:-false}"
     depends_on:
       backend:
         condition: service_healthy

@@ -145,11 +145,21 @@ func NewManager(opts Options) *Manager {
 	}
 }
 
-// RegisterKey adds or updates an API key with an assigned tier.
-func (m *Manager) RegisterKey(key, tierName string) {
+// Authenticate verifies the caller's credentials without consuming rate-limit
+// tokens or quota, so handlers can reject unauthenticated calls before parsing.
+func (m *Manager) Authenticate(r *http.Request) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.apiKeys[key] = tierName
+	if rawKey := extractAPIKey(r); rawKey != "" {
+		if _, ok := m.apiKeys[rawKey]; !ok {
+			return ErrInvalidAPIKey
+		}
+		return nil
+	}
+	if m.authRequired {
+		return ErrAuthRequired
+	}
+	return nil
 }
 
 // Check inspects the incoming request, authenticates, and validates rate limit and quota.
@@ -309,17 +319,6 @@ func (m *Manager) Stats() Stats {
 	return s
 }
 
-// Reset clears all in-memory usage tracking.
-func (m *Manager) Reset() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.buckets = make(map[string]*tokenBucket)
-	m.quotas = make(map[string]*quotaRecord)
-	m.stats = Stats{}
-	m.lastCleanup = time.Now()
-}
-
 func (m *Manager) cleanupStaleRecords(now time.Time) {
 	if now.Sub(m.lastCleanup) < time.Minute {
 		return
@@ -330,6 +329,16 @@ func (m *Manager) cleanupStaleRecords(now time.Time) {
 		if bucket.lastRefill.Before(cutoff) {
 			delete(m.buckets, key)
 			delete(m.quotas, key)
+		}
+	}
+	// Quota records can exist without a bucket (e.g. callers rejected for an
+	// exhausted quota); drop any from previous UTC days.
+	today := now.Format("2006-01-02")
+	for key, record := range m.quotas {
+		if record.day != today {
+			if _, hasBucket := m.buckets[key]; !hasBucket {
+				delete(m.quotas, key)
+			}
 		}
 	}
 }

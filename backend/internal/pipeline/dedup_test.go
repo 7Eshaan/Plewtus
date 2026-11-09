@@ -344,14 +344,11 @@ func TestDeduplicateDetailedReportsCandidateDecisions(t *testing.T) {
 	results, deduped, stats := DeduplicateDetailed(responses, DeduplicateOptions{
 		Query: "go docs", Limit: 10, ExcludeDomains: []string{"ads.example"},
 	})
-	if len(results) != 2 || deduped != 2 {
-		t.Fatalf("expected all fetched results retained with most relevant on top, got results=%d deduped=%d", len(results), deduped)
+	if len(results) != 1 || deduped != 1 {
+		t.Fatalf("expected the off-topic result to be dropped, got results=%d deduped=%d", len(results), deduped)
 	}
 	if !strings.Contains(results[0].Title, "Go Docs") {
-		t.Fatalf("expected relevant result on top, got %q", results[0].Title)
-	}
-	if !strings.Contains(results[1].Title, "Unrelated sports") {
-		t.Fatalf("expected less relevant result towards bottom, got %q", results[1].Title)
+		t.Fatalf("expected relevant result to be kept, got %q", results[0].Title)
 	}
 	if stats.RelevanceRejected != 1 || stats.DomainRejected != 1 || stats.InvalidURL != 1 || stats.Duplicates != 1 {
 		t.Fatalf("unexpected candidate stats: %+v", stats)

@@ -98,6 +98,7 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 	}
 
 	content := &model.ExtractedContent{
+		Title:         parsed.Metadata.Title,
 		Author:        parsed.Metadata.Author,
 		Description:   parsed.Metadata.Description,
 		ExtractedAt:   time.Now().UTC().Format(time.RFC3339),
@@ -109,31 +110,27 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 		mode = "highlights"
 	}
 
+	// Each mode returns one representation of the page body; duplicating the
+	// same content as both Markdown and text would double agent token usage.
 	switch mode {
 	case "markdown":
-		content.Markdown = ToMarkdown(parsed.MainNode, maxChars)
-		content.Text = ToText(parsed.MainNode, maxChars)
+		content.Markdown = ToMarkdownWithBase(parsed.MainNode, maxChars, parsed.ResolveBase(targetURL))
 
 	case "text":
 		content.Text = ToText(parsed.MainNode, maxChars)
 
 	case "metadata":
-		if parsed.Metadata.Description != "" {
-			content.Text = parsed.Metadata.Description
-		} else {
+		if parsed.Metadata.Description == "" {
 			content.Text = ToText(parsed.MainNode, 500)
 		}
 
 	case "highlights":
 		fallthrough
 	default:
-		fullText := ToText(parsed.MainNode, 10000)
-		highlights := ExtractHighlights(fullText, opts.Query, 4)
-		content.Highlights = highlights
-		if len(highlights) > 0 {
+		fullText := ToText(parsed.MainNode, 20000)
+		content.Highlights = ExtractHighlights(fullText, opts.Query, 4)
+		if len(content.Highlights) == 0 {
 			content.Text = truncateCleanly(fullText, maxChars)
-		} else {
-			content.Text = ToText(parsed.MainNode, maxChars)
 		}
 	}
 

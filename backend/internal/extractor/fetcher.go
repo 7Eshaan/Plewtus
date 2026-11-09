@@ -15,7 +15,8 @@ import (
 // Fetcher safely retrieves web page HTML while enforcing SSRF protection,
 // MIME type checks, and maximum size limits.
 type Fetcher struct {
-	client       *http.Client
+	transport    http.RoundTripper
+	timeout      time.Duration
 	userAgent    string
 	maxBodyBytes int64
 }
@@ -52,8 +53,6 @@ func NewFetcher(opts FetcherOptions) *Fetcher {
 		ua = DefaultUserAgent
 	}
 
-	jar, _ := cookiejar.New(nil)
-
 	var transport http.RoundTripper = opts.Transport
 	if transport == nil {
 		transport = &http.Transport{
@@ -67,17 +66,24 @@ func NewFetcher(opts FetcherOptions) *Fetcher {
 		}
 	}
 
-	client := &http.Client{
-		Transport:     transport,
-		CheckRedirect: SafeCheckRedirect(5),
-		Jar:           jar,
-		Timeout:       timeout,
-	}
-
 	return &Fetcher{
-		client:       client,
+		transport:    transport,
+		timeout:      timeout,
 		userAgent:    ua,
 		maxBodyBytes: maxBytes,
+	}
+}
+
+// newClient builds a per-fetch client. Each fetch gets its own cookie jar so
+// cookies never leak between unrelated sites or accumulate in a long-running
+// process, while redirect chains (e.g. consent hops) still keep their cookies.
+func (f *Fetcher) newClient() *http.Client {
+	jar, _ := cookiejar.New(nil)
+	return &http.Client{
+		Transport:     f.transport,
+		CheckRedirect: SafeCheckRedirect(5),
+		Jar:           jar,
+		Timeout:       f.timeout,
 	}
 }
 
@@ -104,7 +110,7 @@ func (f *Fetcher) Fetch(ctx context.Context, targetURL string) ([]byte, string, 
 	req.Header.Set("Sec-Fetch-User", "?1")
 
 	// 3. Execute request
-	resp, err := f.client.Do(req)
+	resp, err := f.newClient().Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("http request failed: %w", err)
 	}

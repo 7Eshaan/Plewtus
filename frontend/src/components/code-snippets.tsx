@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { Terminal, Copy, Check, Info } from "lucide-react";
-import type {
-  ProviderName,
-  ExtractionMode,
-  AdvancedOptions,
+import { buildSearchRequest } from "@/lib/build-request";
+import {
+  EXAMPLE_QUERIES,
+  type ProviderName,
+  type ExtractionMode,
+  type AdvancedOptions,
 } from "@/types/search";
 
 interface CodeSnippetsProps {
@@ -17,6 +19,20 @@ interface CodeSnippetsProps {
 
 type SnippetLang = "curl" | "javascript" | "python";
 
+/** Renders a JSON-compatible value as a Python literal (True/False/None). */
+function toPython(value: unknown, indent = 0): string {
+  const pad = "    ".repeat(indent + 1);
+  const end = "    ".repeat(indent);
+  if (value === null || value === undefined) return "None";
+  if (typeof value === "boolean") return value ? "True" : "False";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((v) => toPython(v, indent + 1)).join(", ")}]`;
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return "{}";
+  return `{\n${entries.map(([k, v]) => `${pad}${JSON.stringify(k)}: ${toPython(v, indent + 1)},`).join("\n")}\n${end}}`;
+}
+
 export function CodeSnippets({
   query,
   providers,
@@ -26,46 +42,7 @@ export function CodeSnippets({
   const [activeLang, setActiveLang] = useState<SnippetLang>("curl");
   const [copied, setCopied] = useState(false);
 
-  // Construct request payload reflecting chosen options
-  const q = query.trim() || "golang concurrency patterns";
-  const payload: Record<string, unknown> = { query: q };
-
-  if (advancedOptions.limit !== 50) {
-    payload.limit = advancedOptions.limit;
-  }
-  if (providers.length < 3) {
-    payload.providers = providers;
-  }
-  if (advancedOptions.freshness) {
-    payload.freshness = advancedOptions.freshness;
-  }
-  if (advancedOptions.country.trim()) {
-    payload.country = advancedOptions.country.trim().toLowerCase();
-  }
-  if (advancedOptions.language.trim()) {
-    payload.language = advancedOptions.language.trim().toLowerCase();
-  }
-  if (advancedOptions.includeDomains.trim()) {
-    payload.include_domains = advancedOptions.includeDomains
-      .split(",")
-      .map((d) => d.trim())
-      .filter(Boolean);
-  }
-  if (advancedOptions.excludeDomains.trim()) {
-    payload.exclude_domains = advancedOptions.excludeDomains
-      .split(",")
-      .map((d) => d.trim())
-      .filter(Boolean);
-  }
-  if (extractionMode !== "none") {
-    payload.extract = {
-      enabled: true,
-      mode: extractionMode,
-      max_pages: advancedOptions.maxPages,
-      max_chars_per_page: advancedOptions.maxCharsPerPage,
-    };
-  }
-
+  const payload = buildSearchRequest(query.trim() || EXAMPLE_QUERIES[1], providers, extractionMode, advancedOptions);
   const jsonPayloadString = JSON.stringify(payload, null, 2);
 
   // Generate language-specific code snippets using PLACEHOLDER key strictly
@@ -77,7 +54,7 @@ export function CodeSnippets({
         return `curl -X POST http://localhost:8080/search \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${PLACEHOLDER_KEY}" \\
-  -d '${JSON.stringify(payload, null, 2).replace(/'/g, "'\\''")}'`;
+  -d '${jsonPayloadString.replace(/'/g, "'\\''")}'`;
 
       case "javascript":
         return `// Execute Plewtus search with fetch (Node 18+ or browser)
@@ -93,12 +70,11 @@ const response = await fetch("http://localhost:8080/search", {
 const data = await response.json();
 console.log(\`Results: \${data.results.length} ranked in \${data.metadata.took_ms}ms\`);
 for (const item of data.results) {
-  console.log(\`#\${item.rank} [\${item.score.toFixed(4)}] \${item.title} -> \${item.url}\`);
+  console.log(\`#\${item.rank} [\${item.ranking_score.toFixed(2)}] \${item.title} -> \${item.url}\`);
 }`;
 
       case "python":
         return `# Execute Plewtus search with python-requests
-import json
 import requests
 
 url = "http://localhost:8080/search"
@@ -106,14 +82,15 @@ headers = {
     "Content-Type": "application/json",
     "Authorization": "Bearer ${PLACEHOLDER_KEY}",
 }
-payload = json.loads(${JSON.stringify(JSON.stringify(payload))})
+payload = ${toPython(payload)}
 
-response = requests.post(url, headers=headers, json=payload)
+response = requests.post(url, headers=headers, json=payload, timeout=30)
+response.raise_for_status()
 data = response.json()
 
 print(f"Results: {len(data['results'])} ranked in {data['metadata']['took_ms']}ms")
 for item in data["results"]:
-    print(f"#{item['rank']} [{item['score']:.4f}] {item['title']} -> {item['url']}")`;
+    print(f"#{item['rank']} [{item['ranking_score']:.2f}] {item['title']} -> {item['url']}")`;
     }
   }
 
@@ -210,7 +187,7 @@ for item in data["results"]:
         <div className="flex items-center gap-1">
           <Info className="w-3 h-3 text-zinc-400" />
           <span>
-            Key placeholder <code className="px-1 py-0.2 rounded bg-zinc-200/60 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold">{PLACEHOLDER_KEY}</code>. Demo keys are never exposed in client snippets.
+            Key placeholder <code className="px-1 py-0.5 rounded bg-zinc-200/60 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold">{PLACEHOLDER_KEY}</code>. Demo keys are never exposed in client snippets.
           </span>
         </div>
         <span className="hidden sm:inline text-zinc-400 dark:text-zinc-500">

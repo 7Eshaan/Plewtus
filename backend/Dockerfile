@@ -14,9 +14,9 @@ RUN apk add --no-cache ca-certificates wget \
 COPY --from=build /out/plewtus /usr/local/bin/plewtus
 USER plewtus
 ENV PLEWTUS_HOST=0.0.0.0 \
-    PORT=10000 \
+    PORT=8080 \
     PLEWTUS_ENV=production
-EXPOSE 10000
+EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget -q -O /dev/null "http://127.0.0.1:${PORT}/healthz" || exit 1
 ENTRYPOINT ["/usr/local/bin/plewtus"]

@@ -186,6 +186,17 @@ func (cb *CircuitBreaker) ReportFailureFor(generation uint64, err error) {
 	}
 }
 
+// ReleaseFor records that an admitted request ended without a verdict on the
+// provider's health (for example the caller cancelled). It frees a half-open
+// probe slot so the next request can probe, without counting a failure.
+func (cb *CircuitBreaker) ReleaseFor(generation uint64) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	if generation == cb.generation && cb.state == StateHalfOpen {
+		cb.halfOpenProbing = false
+	}
+}
+
 // Reset restores the breaker to closed state.
 func (cb *CircuitBreaker) Reset() {
 	cb.mu.Lock()
@@ -246,4 +257,15 @@ func (m *Manager) ResetAll() {
 	for _, cb := range m.breakers {
 		cb.Reset()
 	}
+}
+
+// Names returns the providers that currently have a breaker allocated.
+func (m *Manager) Names() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	names := make([]string, 0, len(m.breakers))
+	for name := range m.breakers {
+		names = append(names, name)
+	}
+	return names
 }

@@ -143,7 +143,7 @@
             }
           },
           "408": {
-            "description": "Request Timeout or context cancellation.",
+            "description": "The client cancelled the request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -171,7 +171,17 @@
             }
           },
           "500": {
-            "description": "Internal Server Error.",
+            "description": "Internal Server Error (all providers failed or unexpected failure).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The search exceeded its time budget.",
             "content": {
               "application/json": {
                 "schema": {
@@ -420,7 +430,7 @@
           "score": {
             "type": "number",
             "format": "double",
-            "description": "Reciprocal Rank Fusion (RRF) consensus score; the final order also uses relevance_score.",
+            "description": "Raw Reciprocal Rank Fusion (RRF) consensus score, sum of 1/(60 + position) over engines. Results are ordered by ranking_score.",
             "example": 0.04918
           },
           "relevance_score": {
@@ -431,7 +441,7 @@
           "ranking_score": {
             "type": "number",
             "format": "double",
-            "description": "Hybrid ordering score (0.4 normalized RRF consensus plus 0.6 query relevance)."
+            "description": "Hybrid ordering score (0.8 query relevance plus 0.2 normalized RRF consensus); results are sorted by this value."
           },
           "engines": {
             "type": "array",
@@ -472,6 +482,10 @@
       "ExtractedContent": {
         "type": "object",
         "properties": {
+          "title": {
+            "type": "string",
+            "description": "Page title from Open Graph/Twitter metadata or the <title> tag."
+          },
           "markdown": {
             "type": "string",
             "description": "Clean Markdown representation of webpage content."
@@ -618,7 +632,7 @@
           },
           "relevance_rejected_count": {
             "type": "integer",
-            "description": "Raw candidates rejected for insufficient query relevance."
+            "description": "Deduplicated results removed because they did not match the query."
           },
           "domain_rejected_count": {
             "type": "integer",

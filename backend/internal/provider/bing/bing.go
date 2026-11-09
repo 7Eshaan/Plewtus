@@ -100,10 +100,9 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing bing response: %w", err)
 	}
-	if len(results) == 0 {
-		return nil, fmt.Errorf("bing response contained no parseable organic results")
-	}
-
+	// Zero organic results is a legitimate outcome (e.g. narrow site: filters)
+	// and must not count as a provider failure. Block pages are reported by the
+	// parser as ErrChallengeEncountered instead.
 	return &model.ProviderResponse{
 		Engine:  p.Name(),
 		Results: results,

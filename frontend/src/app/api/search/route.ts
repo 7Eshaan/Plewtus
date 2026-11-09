@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limiter";
+import { sanitizeSearchRequest } from "@/lib/sanitize-request";
 import type { components } from "@/types/api";
 
-type SearchRequest = components["schemas"]["SearchRequest"];
 type SearchResponse = components["schemas"]["SearchResponse"];
 type ErrorResponse = components["schemas"]["ErrorResponse"];
 
@@ -87,9 +87,9 @@ export async function POST(req: Request): Promise<NextResponse<SearchResponse | 
   }
 
   // 3. Parse and validate request body
-  let body: SearchRequest;
+  let rawBody: unknown;
   try {
-    body = (await readBoundedBody(req)) as SearchRequest;
+    rawBody = await readBoundedBody(req);
   } catch (error) {
     if (error instanceof RangeError) {
       return NextResponse.json<ErrorResponse>(
@@ -110,22 +110,16 @@ export async function POST(req: Request): Promise<NextResponse<SearchResponse | 
     );
   }
 
-  if (!body || typeof body.query !== "string" || body.query.trim() === "") {
+  const sanitized = sanitizeSearchRequest(rawBody);
+  if (!sanitized.ok) {
     return NextResponse.json<ErrorResponse>(
-      {
-        error: "validation_error",
-        message: "Field 'query' is required and must not be empty.",
-        code: 400,
-      },
-      {
-        status: 400,
-        headers: rateLimitHeaders,
-      }
+      { error: "validation_error", message: sanitized.message, code: 400 },
+      { status: 400, headers: rateLimitHeaders }
     );
   }
 
   // 4. Dispatch request to the Go backend with server-side credentials
-  const backendBaseUrl = process.env.PLEWTUS_BACKEND_URL || "http://localhost:8890";
+  const backendBaseUrl = process.env.PLEWTUS_BACKEND_URL || "http://localhost:8080";
   const targetUrl = `${backendBaseUrl.replace(/\/+$/, "")}/search`;
 
   try {
@@ -135,7 +129,7 @@ export async function POST(req: Request): Promise<NextResponse<SearchResponse | 
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(sanitized.request),
       cache: "no-store",
       signal: AbortSignal.timeout(45_000),
     });
@@ -169,11 +163,15 @@ export async function POST(req: Request): Promise<NextResponse<SearchResponse | 
       headers: responseHeaders,
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unknown connection failure";
+    // Log details server-side; don't reveal internal hostnames to visitors.
+    console.error("search backend request failed", error);
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
     return NextResponse.json<ErrorResponse>(
       {
-        error: "backend_unavailable",
-        message: `Failed to connect to search backend at ${backendBaseUrl}: ${msg}`,
+        error: timedOut ? "backend_timeout" : "backend_unavailable",
+        message: timedOut
+          ? "The search backend took too long to respond. Please retry."
+          : "The search backend is unreachable right now. Please retry shortly.",
         code: 502,
       },
       {

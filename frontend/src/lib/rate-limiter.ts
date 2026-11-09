@@ -99,18 +99,32 @@ export function resetRateLimits(): void {
   globalLimiter.reset();
 }
 
+/**
+ * Identifies the client for rate limiting.
+ *
+ * Forwarding headers are only trusted when a proxy we control sets them:
+ * on Vercel (the platform overwrites `x-vercel-forwarded-for`) or when
+ * PLEWTUS_TRUST_PROXY_HEADERS=true behind a reverse proxy that appends the
+ * client address to X-Forwarded-For. Otherwise any caller could rotate the
+ * header to bypass the limit, so all untrusted traffic shares one bucket.
+ */
 export function getClientIp(req: Request): string {
-  const vercelIp = req.headers.get("x-vercel-forwarded-for");
-  if (vercelIp) {
-    const clientIp = vercelIp.split(",")[0]?.trim();
+  if (process.env.VERCEL) {
+    const vercelIp = req.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim();
+    if (vercelIp && isNodeIP(vercelIp)) return vercelIp;
+  }
+
+  if (process.env.PLEWTUS_TRUST_PROXY_HEADERS === "true") {
+    const realIp = req.headers.get("x-real-ip")?.trim();
+    if (realIp && isNodeIP(realIp)) return realIp;
+    // The right-most entry is the one appended by our own proxy.
+    const hops = (req.headers.get("x-forwarded-for") ?? "")
+      .split(",")
+      .map((h) => h.trim())
+      .filter(Boolean);
+    const clientIp = hops[hops.length - 1];
     if (clientIp && isNodeIP(clientIp)) return clientIp;
   }
-  const realIp = req.headers.get("x-real-ip");
-  if (realIp && isNodeIP(realIp.trim())) return realIp.trim();
-  const forwardedFor = req.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    const clientIp = forwardedFor.split(",")[0]?.trim();
-    if (clientIp && isNodeIP(clientIp)) return clientIp;
-  }
-  return "127.0.0.1";
+
+  return "untrusted-shared";
 }

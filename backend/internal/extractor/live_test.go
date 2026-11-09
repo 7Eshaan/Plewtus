@@ -38,8 +38,8 @@ func TestLiveWebpageExtraction(t *testing.T) {
 	if contentMD.Markdown == "" {
 		t.Errorf("expected non-empty markdown")
 	}
-	if contentMD.Text == "" {
-		t.Errorf("expected non-empty text")
+	if contentMD.Text != "" {
+		t.Errorf("markdown mode should not duplicate the page as text")
 	}
 	if len(contentMD.Markdown) > 2050 {
 		t.Errorf("markdown exceeded max chars: %d", len(contentMD.Markdown))

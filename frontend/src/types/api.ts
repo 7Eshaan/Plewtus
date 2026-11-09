@@ -171,7 +171,7 @@ export interface components {
             rank: number;
             /**
              * Format: double
-             * @description Reciprocal Rank Fusion (RRF) consensus score; the final order also uses relevance_score.
+             * @description Raw Reciprocal Rank Fusion (RRF) consensus score, sum of 1/(60 + position) over engines. Results are ordered by ranking_score.
              * @example 0.04918
              */
             score: number;
@@ -182,7 +182,7 @@ export interface components {
             relevance_score: number;
             /**
              * Format: double
-             * @description Hybrid ordering score (0.4 normalized RRF consensus plus 0.6 query relevance).
+             * @description Hybrid ordering score (0.8 query relevance plus 0.2 normalized RRF consensus); results are sorted by this value.
              */
             ranking_score: number;
             /** @description Search engines that independently discovered this result. */
@@ -207,6 +207,8 @@ export interface components {
             position: number;
         };
         ExtractedContent: {
+            /** @description Page title from Open Graph/Twitter metadata or the <title> tag. */
+            title?: string;
             /** @description Clean Markdown representation of webpage content. */
             markdown?: string;
             /** @description Plain text extracted from primary article elements. */
@@ -262,7 +264,7 @@ export interface components {
             raw_count: number;
             /** @description Total unique results identified after canonical URL normalization. */
             deduped_count: number;
-            /** @description Raw candidates rejected for insufficient query relevance. */
+            /** @description Deduplicated results removed because they did not match the query. */
             relevance_rejected_count: number;
             /** @description Raw candidates rejected by include/exclude domain filters. */
             domain_rejected_count: number;
@@ -371,7 +373,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Request Timeout or context cancellation. */
+            /** @description The client cancelled the request. */
             408: {
                 headers: {
                     [name: string]: unknown;
@@ -391,8 +393,17 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Internal Server Error. */
+            /** @description Internal Server Error (all providers failed or unexpected failure). */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The search exceeded its time budget. */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

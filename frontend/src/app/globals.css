@@ -2,34 +2,26 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Brand palette exposed as Tailwind utilities (bg-brand, text-brand-light, ...) */
+@theme {
+  --color-brand: #8700ff;
+  --color-brand-hover: #9924ff;
+  --color-brand-light: #a84dff;
+  --color-surface-dark: #09090b;
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #09090b;
-  --card: #fafafa;
-  --card-border: #e4e4e7;
-  --muted: #71717a;
-  --muted-bg: #f4f4f5;
-  --accent: #8700ff;
-  --accent-fg: #ffffff;
-  --brand: #8700ff;
-  --brand-hover: #9924ff;
-  --brand-muted: rgba(135, 0, 255, 0.1);
-  --brand-border: rgba(135, 0, 255, 0.25);
+  color-scheme: light;
 }
 
 .dark {
   --background: #09090b;
   --foreground: #fafafa;
-  --card: #121215;
-  --card-border: #27272a;
-  --muted: #a1a1aa;
-  --muted-bg: #18181b;
-  --accent: #8700ff;
-  --accent-fg: #ffffff;
-  --brand: #8700ff;
-  --brand-hover: #a84dff;
-  --brand-muted: rgba(135, 0, 255, 0.15);
-  --brand-border: rgba(135, 0, 255, 0.3);
+  color-scheme: dark;
 }
 
 ::selection {
@@ -40,6 +32,15 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

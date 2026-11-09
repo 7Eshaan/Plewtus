@@ -1,5 +1,3 @@
-"use client";
-
 import { AlertCircle, RotateCcw } from "lucide-react";
 import type { components } from "@/types/api";
 
@@ -11,11 +9,12 @@ interface ErrorStateProps {
 }
 
 export function ErrorState({ error, onRetry }: ErrorStateProps) {
-  const isRateLimit = error.code === 429 || error.error === "rate_limit_exceeded";
-  const isBackendUnavailable = error.code === 502 || error.error === "backend_unavailable";
+  const isRateLimit = error.code === 429 || error.error === "rate_limit_exceeded" || error.error === "quota_exceeded";
+  const isBackendUnavailable = error.error === "backend_unavailable" || error.error === "backend_timeout" || error.code === 502;
+  const isValidation = error.code === 400;
 
   return (
-    <div className="p-4 sm:p-5 rounded-xl border border-rose-500/20 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-950/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div role="alert" className="p-4 sm:p-5 rounded-xl border border-rose-500/20 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-950/15 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
       <div className="flex items-start gap-3">
         <div className="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 flex items-center justify-center flex-shrink-0 mt-0.5 sm:mt-0">
           <AlertCircle className="w-4 h-4" />
@@ -24,12 +23,14 @@ export function ErrorState({ error, onRetry }: ErrorStateProps) {
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-rose-950 dark:text-rose-200">
               {isRateLimit
-                ? "Rate Limit Exceeded"
+                ? "Rate limit reached"
                 : isBackendUnavailable
-                ? "Backend Offline"
-                : "Search Failed"}
+                  ? "Search backend unavailable"
+                  : isValidation
+                    ? "Invalid search"
+                    : "Search failed"}
             </span>
-            <span className="font-mono text-xs px-1.5 py-0.2 rounded bg-rose-200/50 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
+            <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-rose-200/50 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300">
               {error.error}
             </span>
           </div>
@@ -38,7 +39,7 @@ export function ErrorState({ error, onRetry }: ErrorStateProps) {
           </p>
           {isBackendUnavailable && (
             <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
-              If the backend is hosted on a free-tier service (such as Render), it may take 30–50 seconds to spin up from sleep. Please wait a moment and retry.
+              The backend may be starting up or temporarily unreachable. Wait a moment and retry.
             </p>
           )}
         </div>

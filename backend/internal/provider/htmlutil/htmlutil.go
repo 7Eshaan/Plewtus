@@ -110,8 +110,19 @@ func FindAllInAncestorScope(n *html.Node, id string, predicate func(*html.Node) 
 	})
 }
 
+// blockBoundaryTags separate words visually; inline tags such as <b> and
+// <span> (used by search engines to highlight query terms) do not.
+var blockBoundaryTags = map[string]bool{
+	"address": true, "article": true, "aside": true, "blockquote": true, "br": true,
+	"dd": true, "div": true, "dl": true, "dt": true, "figcaption": true, "footer": true,
+	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true, "header": true,
+	"hr": true, "li": true, "ol": true, "p": true, "section": true, "table": true,
+	"td": true, "th": true, "tr": true, "ul": true,
+}
+
 // TextContent recursively extracts and concatenates all text under a node,
-// normalizing whitespace.
+// normalizing whitespace. Text inside adjacent inline elements is joined
+// without inserting spaces ("write-<b>ahead</b>" -> "write-ahead").
 func TextContent(n *html.Node) string {
 	if n == nil {
 		return ""
@@ -124,10 +135,17 @@ func TextContent(n *html.Node) string {
 		}
 		if curr.Type == html.TextNode {
 			sb.WriteString(curr.Data)
+			return
+		}
+		block := curr.Type == html.ElementNode && blockBoundaryTags[curr.Data]
+		if block {
 			sb.WriteString(" ")
 		}
 		for c := curr.FirstChild; c != nil; c = c.NextSibling {
 			collect(c)
+		}
+		if block {
+			sb.WriteString(" ")
 		}
 	}
 	collect(n)

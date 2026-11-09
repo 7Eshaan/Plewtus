@@ -55,6 +55,16 @@ var blockedCIDRs = []string{
 
 	// IPv6 documentation
 	"2001:db8::/32",
+
+	// IPv6 transition mechanisms that can embed arbitrary (including private)
+	// IPv4 addresses: NAT64 (RFC 6052/8215), 6to4 (RFC 3056), Teredo (RFC 4380)
+	"64:ff9b::/96",
+	"64:ff9b:1::/48",
+	"2002::/16",
+	"2001::/32",
+
+	// IPv6 discard-only (RFC 6666)
+	"100::/64",
 }
 
 var parsedBlockedPrefixes []netip.Prefix
@@ -178,14 +188,26 @@ func SafeDialContext(dialTimeout time.Duration) func(ctx context.Context, networ
 			return nil, fmt.Errorf("no safe public IP addresses available for %q", host)
 		}
 
-		// Directly dial the safe resolved IP to prevent DNS rebinding between check and connect
+		// Dial the vetted IPs directly (never re-resolving the hostname) to
+		// prevent DNS rebinding, falling back across addresses so a host whose
+		// first record is unreachable (e.g. IPv6 without a route) still works.
 		dialer := &net.Dialer{
 			Timeout:   dialTimeout,
 			KeepAlive: 30 * time.Second,
 		}
 
-		target := net.JoinHostPort(safeIPs[0].String(), port)
-		return dialer.DialContext(ctx, network, target)
+		var lastErr error
+		for _, ip := range safeIPs {
+			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		return nil, lastErr
 	}
 }
 

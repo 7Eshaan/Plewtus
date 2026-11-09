@@ -8,7 +8,8 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+# public/ may be absent in a fresh clone (git does not track empty dirs).
+RUN mkdir -p public && npm run build
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app

@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 
@@ -73,32 +72,4 @@ func (r *Registry) Names() []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// DefaultRegistry is the global default provider registry.
-var DefaultRegistry = NewRegistry()
-
-// Register adds a provider to the default registry.
-func Register(p Provider) {
-	DefaultRegistry.Register(p)
-}
-
-// Get retrieves a provider from the default registry.
-func Get(name string) (Provider, bool) {
-	return DefaultRegistry.Get(name)
-}
-
-// All returns all providers in the default registry.
-func All() []Provider {
-	return DefaultRegistry.All()
-}
-
-// Names returns all provider names in the default registry.
-func Names() []string {
-	return DefaultRegistry.Names()
-}
-
-// ErrProviderNotFound is returned when a requested provider is not registered.
-func ErrProviderNotFound(name string) error {
-	return fmt.Errorf("search provider %q is not registered", name)
 }

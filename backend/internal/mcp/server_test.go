@@ -5,19 +5,23 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 
 	"plewtus/internal/model"
 )
 
 type mockSearcher struct {
+	mu      sync.Mutex
 	lastReq *model.SearchRequest
 	resp    *model.SearchResponse
 	err     error
 }
 
 func (m *mockSearcher) Search(ctx context.Context, req *model.SearchRequest) (*model.SearchResponse, error) {
+	m.mu.Lock()
 	m.lastReq = req
+	m.mu.Unlock()
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -79,7 +83,7 @@ func TestMCP_Initialize(t *testing.T) {
 	srv := NewServer(&mockSearcher{}, &mockExtractor{}, nil, nil, nil)
 	resp := executeMCPRequest(t, srv, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}`)
 
-	if resp.ID != float64(1) {
+	if string(resp.ID) != "1" {
 		t.Fatalf("expected ID 1, got %v", resp.ID)
 	}
 	if resp.Error != nil {
@@ -90,8 +94,8 @@ func TestMCP_Initialize(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected result map, got %T", resp.Result)
 	}
-	if resMap["protocolVersion"] != ProtocolVersion {
-		t.Fatalf("expected protocolVersion %s, got %v", ProtocolVersion, resMap["protocolVersion"])
+	if resMap["protocolVersion"] != "2024-11-05" {
+		t.Fatalf("expected negotiated protocolVersion 2024-11-05, got %v", resMap["protocolVersion"])
 	}
 	serverInfo := resMap["serverInfo"].(map[string]any)
 	if serverInfo["name"] != "plewtus" {

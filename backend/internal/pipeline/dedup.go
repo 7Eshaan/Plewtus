@@ -19,6 +19,7 @@ type mergedResult struct {
 	engineCount   int
 	firstSeen     int
 	relevance     float64
+	relevant      bool
 }
 
 // DeduplicateOptions configures the result aggregation, filtering, ranking, and pagination.
@@ -37,6 +38,26 @@ type DeduplicationStats struct {
 	DomainRejected    int
 	InvalidURL        int
 	Duplicates        int
+	// LowQualityEngines lists providers whose whole response was discarded
+	// because almost none of it matched the query (anti-bot result poisoning).
+	LowQualityEngines []string
+}
+
+const (
+	// A provider response needs at least this many candidates before the
+	// result-poisoning gate is applied, so tiny legitimate responses survive.
+	lowQualityMinCandidates = 4
+	// Responses where fewer than this fraction of candidates match the query
+	// are treated as poisoned/off-topic SERPs.
+	lowQualityRelevantFraction = 0.25
+)
+
+type candidate struct {
+	raw       model.RawSearchResult
+	cleanURL  string
+	key       string
+	relevance float64
+	relevant  bool
 }
 
 // Deduplicate takes raw provider responses from multiple search engines,
@@ -70,43 +91,68 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 	}
 
 	// Sort provider responses by engine name for deterministic processing order
-	sortedResponses := make([]*model.ProviderResponse, len(responses))
-	copy(sortedResponses, responses)
+	sortedResponses := make([]*model.ProviderResponse, 0, len(responses))
+	for _, resp := range responses {
+		if resp != nil {
+			sortedResponses = append(sortedResponses, resp)
+		}
+	}
 	sort.Slice(sortedResponses, func(i, j int) bool {
 		return sortedResponses[i].Engine < sortedResponses[j].Engine
 	})
 
-	seen := make(map[string]*mergedResult)
-	var list []*mergedResult
-
-	for _, resp := range sortedResponses {
+	// 1. Validate, normalize, and score every raw result per provider.
+	query := newQueryProfile(opts.Query)
+	perResponse := make([][]candidate, len(sortedResponses))
+	lowQuality := make([]bool, len(sortedResponses))
+	healthyResponses := 0
+	for i, resp := range sortedResponses {
+		relevantCount := 0
 		for _, raw := range resp.Results {
 			if strings.TrimSpace(raw.URL) == "" {
 				stats.InvalidURL++
 				continue
 			}
-			relevance, relevant := QueryRelevance(opts.Query, raw.Title, raw.Snippet)
-			if !relevant {
-				stats.RelevanceRejected++
-			}
-
 			cleanURL, key, err := NormalizeURL(raw.URL)
 			if err != nil {
 				stats.InvalidURL++
 				continue
 			}
-
-			// Domain filtering: verify against include and exclude constraints
 			if !matchesDomainFilters(cleanURL, opts.IncludeDomains, opts.ExcludeDomains) {
 				stats.DomainRejected++
 				continue
 			}
+			relevance, relevant := query.relevance(raw.Title, raw.Snippet)
+			if relevant {
+				relevantCount++
+			}
+			perResponse[i] = append(perResponse[i], candidate{raw: raw, cleanURL: cleanURL, key: key, relevance: relevance, relevant: relevant})
+		}
+		n := len(perResponse[i])
+		if query.hasTerms() && n >= lowQualityMinCandidates && float64(relevantCount)/float64(n) < lowQualityRelevantFraction {
+			lowQuality[i] = true
+		} else if relevantCount > 0 {
+			healthyResponses++
+		}
+	}
 
-			existing, found := seen[key]
+	// 2. Discard poisoned provider responses, but only when at least one other
+	// provider produced on-topic results (otherwise the query itself is simply
+	// hard to match lexically, e.g. non-Latin scripts or typos).
+	seen := make(map[string]*mergedResult)
+	var list []*mergedResult
+	for i, resp := range sortedResponses {
+		if lowQuality[i] && healthyResponses > 0 {
+			stats.LowQualityEngines = append(stats.LowQualityEngines, resp.Engine)
+			continue
+		}
+		for _, c := range perResponse[i] {
+			raw := c.raw
+			existing, found := seen[c.key]
 			if !found {
 				item := &mergedResult{
-					canonicalKey:  key,
-					url:           cleanURL,
+					canonicalKey:  c.key,
+					url:           c.cleanURL,
 					title:         strings.TrimSpace(raw.Title),
 					snippet:       cleanSnippet(raw.Snippet),
 					publishedDate: strings.TrimSpace(raw.PublishedDate),
@@ -119,59 +165,73 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 					bestPosition: raw.Position,
 					engineCount:  1,
 					firstSeen:    len(list),
-					relevance:    relevance,
+					relevance:    c.relevance,
+					relevant:     c.relevant,
 				}
-				seen[key] = item
+				seen[c.key] = item
 				list = append(list, item)
-			} else {
-				stats.Duplicates++
-				// 1. Merge engine source and position
-				engineRecorded := false
-				for idx, eng := range existing.engines {
-					if eng.Name == resp.Engine {
-						engineRecorded = true
-						if raw.Position < eng.Position {
-							existing.engines[idx].Position = raw.Position
-						}
-						break
+				continue
+			}
+
+			stats.Duplicates++
+			// 1. Merge engine source and position
+			engineRecorded := false
+			for idx, eng := range existing.engines {
+				if eng.Name == resp.Engine {
+					engineRecorded = true
+					if raw.Position < eng.Position {
+						existing.engines[idx].Position = raw.Position
 					}
-				}
-				if !engineRecorded {
-					existing.engines = append(existing.engines, model.EngineSource{
-						Name:     resp.Engine,
-						Position: raw.Position,
-					})
-					existing.engineCount++
-				}
-
-				// 2. Update best position
-				if raw.Position < existing.bestPosition {
-					existing.bestPosition = raw.Position
-				}
-
-				// 3. Merge published date if not previously available
-				if existing.publishedDate == "" && strings.TrimSpace(raw.PublishedDate) != "" {
-					existing.publishedDate = strings.TrimSpace(raw.PublishedDate)
-				}
-
-				// 4. Merge the best title and snippet independently. A strong snippet
-				// must not cause a weaker title from the same provider response to
-				// replace a better title from another engine.
-				candidateTitle := strings.TrimSpace(raw.Title)
-				candidateSnippet := cleanSnippet(raw.Snippet)
-				existing.title = selectQueryAwareTitle(opts.Query, existing.title, candidateTitle)
-				existing.snippet = selectQueryAwareSnippet(opts.Query, existing.snippet, candidateSnippet)
-				candRel, _ := QueryRelevance(opts.Query, existing.title, existing.snippet)
-				if candRel > existing.relevance {
-					existing.relevance = candRel
-				}
-
-				// 5. Prefer secure HTTPS URL over insecure HTTP
-				if strings.HasPrefix(cleanURL, "https://") && strings.HasPrefix(existing.url, "http://") {
-					existing.url = cleanURL
+					break
 				}
 			}
+			if !engineRecorded {
+				existing.engines = append(existing.engines, model.EngineSource{
+					Name:     resp.Engine,
+					Position: raw.Position,
+				})
+				existing.engineCount++
+			}
+
+			// 2. Update best position
+			if raw.Position < existing.bestPosition {
+				existing.bestPosition = raw.Position
+			}
+
+			// 3. Merge published date if not previously available
+			if existing.publishedDate == "" && strings.TrimSpace(raw.PublishedDate) != "" {
+				existing.publishedDate = strings.TrimSpace(raw.PublishedDate)
+			}
+
+			// 4. Merge the best title and snippet independently. A strong snippet
+			// must not cause a weaker title from the same provider response to
+			// replace a better title from another engine.
+			existing.title = query.selectTitle(existing.title, strings.TrimSpace(raw.Title))
+			existing.snippet = query.selectSnippet(existing.snippet, cleanSnippet(raw.Snippet))
+			if candRel, candRelevant := query.relevance(existing.title, existing.snippet); candRel > existing.relevance {
+				existing.relevance = candRel
+				existing.relevant = existing.relevant || candRelevant
+			}
+			existing.relevant = existing.relevant || c.relevant
+
+			// 5. Prefer secure HTTPS URL over insecure HTTP
+			if strings.HasPrefix(c.cleanURL, "https://") && strings.HasPrefix(existing.url, "http://") {
+				existing.url = c.cleanURL
+			}
 		}
+	}
+
+	// 3. Drop results that do not match the query. If nothing matches at all,
+	// keep the candidates rather than returning an empty page.
+	relevantList := list[:0:0]
+	for _, item := range list {
+		if item.relevant {
+			relevantList = append(relevantList, item)
+		}
+	}
+	if len(relevantList) > 0 {
+		stats.RelevanceRejected = len(list) - len(relevantList)
+		list = relevantList
 	}
 
 	dedupedCount = len(list)
@@ -292,21 +352,6 @@ func selectBetterTitle(curr, candidate string) string {
 	return curr
 }
 
-func selectQueryAwareTitle(query, curr, candidate string) string {
-	if strings.TrimSpace(query) == "" {
-		return selectBetterTitle(curr, candidate)
-	}
-	currentScore, _ := QueryRelevance(query, curr, "")
-	candidateScore, _ := QueryRelevance(query, candidate, "")
-	if candidateScore > currentScore+1e-9 {
-		return strings.TrimSpace(candidate)
-	}
-	if currentScore > candidateScore+1e-9 {
-		return strings.TrimSpace(curr)
-	}
-	return selectBetterTitle(curr, candidate)
-}
-
 func selectBetterSnippet(curr, candidate string) string {
 	curr = cleanSnippet(curr)
 	candidate = cleanSnippet(candidate)
@@ -330,21 +375,6 @@ func selectBetterSnippet(curr, candidate string) string {
 		return candidate
 	}
 	return curr
-}
-
-func selectQueryAwareSnippet(query, curr, candidate string) string {
-	if strings.TrimSpace(query) == "" {
-		return selectBetterSnippet(curr, candidate)
-	}
-	currentScore, _ := QueryRelevance(query, "", curr)
-	candidateScore, _ := QueryRelevance(query, "", candidate)
-	if candidateScore > currentScore+1e-9 {
-		return cleanSnippet(candidate)
-	}
-	if currentScore > candidateScore+1e-9 {
-		return cleanSnippet(curr)
-	}
-	return selectBetterSnippet(curr, candidate)
 }
 
 func cleanSnippet(s string) string {

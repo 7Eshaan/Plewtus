@@ -174,3 +174,26 @@ func TestManager(t *testing.T) {
 		t.Fatal("expected duckduckgo healthy after reset")
 	}
 }
+
+// Regression: a half-open probe whose caller cancelled must free the probe
+// slot without recording a failure, so the breaker cannot get stuck.
+func TestCircuitBreaker_ReleaseFreesHalfOpenProbe(t *testing.T) {
+	cb := NewCircuitBreaker("p", BreakerOptions{FailureThreshold: 1, Cooldown: 10 * time.Millisecond})
+	cb.ReportFailure(errors.New("boom"))
+	time.Sleep(20 * time.Millisecond)
+
+	gen, err := cb.AllowWithGeneration()
+	if err != nil {
+		t.Fatalf("expected probe to be admitted: %v", err)
+	}
+	if _, err := cb.AllowWithGeneration(); err == nil {
+		t.Fatal("second concurrent probe must be rejected")
+	}
+	cb.ReleaseFor(gen)
+	if cb.State() != StateHalfOpen {
+		t.Fatalf("release must not change state, got %s", cb.State())
+	}
+	if _, err := cb.AllowWithGeneration(); err != nil {
+		t.Fatalf("a new probe should be admitted after release: %v", err)
+	}
+}

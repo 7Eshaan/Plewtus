@@ -26,7 +26,8 @@ type Provider struct {
 // New creates a new Yahoo Provider instance.
 func New(timeout time.Duration, userAgent string) *Provider {
 	return &Provider{
-		client: provider.NewHTTPClient(timeout, userAgent),
+		// Yahoo's edge drops HTTP/2 connections from Go's TLS stack (unexpected EOF).
+		client: provider.NewHTTPClient(timeout, userAgent, provider.WithHTTP1Only()),
 	}
 }
 
@@ -132,10 +133,9 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing yahoo response: %w", err)
 	}
-	if len(results) == 0 {
-		return nil, fmt.Errorf("yahoo response contained no parseable organic results")
-	}
-
+	// Zero organic results is a legitimate outcome (e.g. narrow site: filters)
+	// and must not count as a provider failure. Block pages are reported by the
+	// parser as ErrChallengeEncountered instead.
 	return &model.ProviderResponse{
 		Engine:  p.Name(),
 		Results: results,

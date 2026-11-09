@@ -55,7 +55,14 @@ Every `/search` response includes usage and rate limit status headers:
 
 ### 1. `POST /search`
 
-Executes federated search across multiple search engines with relevance filtering, hybrid relevance/consensus ranking, and deduplication. `score` remains the pure RRF consensus score; `relevance_score` and `ranking_score` expose the relevance estimate and final ordering score.
+Executes federated search across multiple search engines with relevance filtering, hybrid relevance/consensus ranking, and deduplication.
+
+How results are processed:
+
+1. **Normalize & deduplicate** — redirect wrappers are unwrapped, tracking parameters stripped, and identical pages merged (keeping every engine and its position).
+2. **Drop off-topic results** — results whose title/snippet do not cover the query (`relevance_rejected_count`) are removed. If *nothing* matches, the candidates are kept so the response is never empty for hard-to-match queries.
+3. **Discard poisoned engine responses** — when an engine's whole result page is off-topic (search engines sometimes serve decoy results to automated clients) while another engine returned on-topic results, that engine is reported under `metadata.providers.failed` and contributes no results.
+4. **Rank** — results are ordered by `ranking_score = 0.8 × relevance_score + 0.2 × normalized RRF consensus`. `score` is the raw RRF value (`Σ 1/(60 + position)` over engines).
 
 #### Request Headers
 
@@ -70,8 +77,8 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 |---|---|---|---|---|
 | `query` | `string` | **Yes** | — | Search query to execute. |
 | `limit` | `integer` | No | `10` | Max ranked results to return (max `50`). |
-| `offset` | `integer` | No | `0` | Offset for slicing results. `offset + limit` must be at most `50`, matching the provider fetch window. |
-| `providers` | `[]string` | No | `["duckduckgo", "bing", "yahoo"]` | Subset of search engines to query. |
+| `offset` | `integer` | No | `0` | Offset for slicing results. `offset + limit` must be at most `50`. When `limit` is omitted it shrinks to fit the window. |
+| `providers` | `[]string` | No | `["duckduckgo", "bing", "yahoo"]` | Subset of search engines to query. Unknown names are rejected with `400`. |
 | `freshness` | `string` | No | `""` | Discovery recency: `"day"`, `"week"`, `"month"`, or `"year"`. |
 | `include_domains` | `[]string` | No | `[]` | Only return results matching these hostnames/subdomains. |
 | `exclude_domains` | `[]string` | No | `[]` | Exclude any results matching these hostnames/subdomains. |
@@ -84,7 +91,7 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | `boolean` | `false` | When `true`, fetches and cleans content for top results. |
-| `mode` | `string` | `"highlights"` | Format: `"markdown"`, `"highlights"`, `"text"`, or `"metadata"`. |
+| `mode` | `string` | `"highlights"` | Format: `"markdown"` (fills `content.markdown`), `"highlights"` (fills `content.highlights`, falling back to `content.text`), `"text"` (fills `content.text`), or `"metadata"` (title/description/author/date). |
 | `max_pages` | `integer` | `3` | Maximum number of top results to extract (max `10`). |
 | `max_chars_per_page` | `integer` | `4000` | Maximum character length per extracted page (max `20000`). |
 
@@ -180,12 +187,15 @@ Standardized JSON error responses are returned on failures:
 | HTTP Status | Error Token | Cause |
 |---|---|---|
 | `400 Bad Request` | `invalid_json` | Malformed JSON in request payload |
-| `400 Bad Request` | `validation_error` | Missing query, invalid ISO codes, or invalid extract mode |
+| `400 Bad Request` | `validation_error` | Missing query, invalid ISO codes, unknown provider, or invalid extract mode |
 | `401 Unauthorized` | `unauthorized` | Missing API key when `PLEWTUS_AUTH_REQUIRED=true`, or invalid key |
-| `408 Request Timeout` | `request_timeout` | Query timed out or client cancelled context |
+| `408 Request Timeout` | `request_cancelled` | The client cancelled the request |
 | `429 Too Many Requests` | `rate_limit_exceeded` | Token bucket exhausted; check `Retry-After` header |
 | `429 Too Many Requests` | `quota_exceeded` | Daily request quota reached; resets at 00:00:00 UTC |
-| `500 Internal Error` | `search_error` | Unexpected orchestrator or downstream failure |
+| `500 Internal Error` | `search_error` | All providers failed, or an unexpected downstream failure |
+| `504 Gateway Timeout` | `request_timeout` | The search exceeded its time budget |
+
+Malformed or invalid requests are rejected before rate limits and quotas are charged; authentication is checked first.
 
 ---
 

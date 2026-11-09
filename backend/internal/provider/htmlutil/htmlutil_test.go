@@ -148,3 +148,11 @@ func TestUnwrapURL_SearchEngines(t *testing.T) {
 		})
 	}
 }
+
+// Regression: highlight markup inside words must not introduce spaces.
+func TestTextContent_InlineHighlightsJoinWords(t *testing.T) {
+	doc, _ := html.Parse(strings.NewReader(`<div><p>A write-<b>ahead</b> log for SQLITE_<b>ROW</b>.</p><p>Second</p></div>`))
+	if got := TextContent(doc); got != "A write-ahead log for SQLITE_ROW. Second" {
+		t.Fatalf("unexpected text: %q", got)
+	}
+}

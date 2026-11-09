@@ -21,6 +21,8 @@ Plewtus can be launched as an MCP stdio server in two equivalent ways:
 > [!NOTE]
 > All diagnostic logs in MCP mode are automatically routed to `stderr`. The `stdout` stream is strictly reserved for clean JSON-RPC 2.0 messages.
 
+**Protocol details:** the server negotiates MCP revisions `2025-06-18` (latest), `2025-03-26`, and `2024-11-05`. Tool calls run concurrently (up to 4 at a time), honor `notifications/cancelled`, and the process exits promptly on `SIGINT`/`SIGTERM` or when stdin closes.
+
 ---
 
 ## Configuration for AI Clients
@@ -71,7 +73,7 @@ Add Plewtus to your `claude_desktop_config.json`:
 }
 ```
 
-### 2. Cursor / VS Code MCP Extensions
+### 4. Cursor / VS Code MCP Extensions
 
 Add to your MCP settings:
 
@@ -90,26 +92,31 @@ Add to your MCP settings:
 ## Available MCP Tools
 
 ### 1. `search`
-Search the web across multiple search engines with query-relevance filtering, hybrid relevance/consensus ranking, deduplication, and optional content extraction.
+Searches DuckDuckGo, Bing, and Yahoo, removes duplicate and off-topic results, and ranks the rest by query relevance and cross-engine agreement. Can also extract content from the top results.
 
 **Parameters:**
 - `query` (`string`, **required**): The search query.
-- `limit` (`integer`, optional): Max results to return (default 10, max 50).
+- `limit` (`integer`, optional): Results to return (default `PLEWTUS_DEFAULT_LIMIT`, 10; max 50).
 - `offset` (`integer`, optional): Pagination offset (default 0); `offset + limit` cannot exceed 50.
+- `providers` (`array<string>`, optional): Subset of `duckduckgo`, `bing`, `yahoo` (default: all).
 - `freshness` (`string`, optional): Recency filter (`"day"`, `"week"`, `"month"`, `"year"`).
-- `include_domains` (`array<string>`, optional): Whitelist of hostnames/domains.
-- `exclude_domains` (`array<string>`, optional): Blacklist of hostnames/domains.
-- `country` (`string`, optional): 2-letter ISO country code (e.g. `"us"`).
-- `language` (`string`, optional): 2-letter ISO language code (e.g. `"en"`).
-- `extract_mode` (`string`, optional): Webpage extraction mode (`"markdown"`, `"highlights"`, `"text"`, `"metadata"`).
+- `include_domains` / `exclude_domains` (`array<string>`, optional): Domain allow/deny lists (subdomains included).
+- `country` / `language` (`string`, optional): 2-letter ISO codes (e.g. `"us"`, `"en"`).
+- `extract_mode` (`string`, optional): Extract page content as `"markdown"`, `"highlights"`, `"text"`, or `"metadata"`.
+- `max_pages` (`integer`, optional): Number of top results to extract (default 3, max 10).
+- `max_chars_per_page` (`integer`, optional): Characters per extracted page (default 4000, max 20000).
+- `format` (`string`, optional): `"text"` (default) for a compact, numbered listing that is cheap in tokens, or `"json"` for the full REST API response.
 
 ### 2. `extract`
-Extract clean text, Markdown, or highlights from one or more target URLs with SSRF protection and resource capping.
+Fetches specific URLs and returns clean content, with SSRF protection and size limits. Each URL is reported separately; failures (blocked address, non-HTML content, HTTP errors) include the reason.
 
 **Parameters:**
-- `urls` (`array<string>`, **required**): Array of HTTP/HTTPS URLs to scrape and extract (maximum 10 per call).
-- `mode` (`string`, optional): Extraction format: `"markdown"`, `"highlights"`, `"text"`, or `"metadata"` (default `"markdown"`).
-- `max_chars` (`integer`, optional): Character limit per extracted page (default 4000, maximum 20000).
+- `urls` (`array<string>`, **required**): HTTP/HTTPS URLs to fetch (maximum 10 per call).
+- `mode` (`string`, optional): `"markdown"` (default), `"highlights"`, `"text"`, or `"metadata"`.
+- `query` (`string`, optional): Focus for `"highlights"` mode.
+- `max_chars` (`integer`, optional): Character limit per page (default 4000, maximum 20000).
+
+Both tools are annotated `readOnlyHint: true` and `openWorldHint: true`.
 
 ---
 
@@ -132,7 +139,7 @@ Request sent by AI client on `stdin`:
 }
 ```
 
-Response emitted by Plewtus on `stdout`:
+Response emitted by Plewtus on `stdout` (text is abbreviated):
 ```json
 {
   "jsonrpc": "2.0",
@@ -141,7 +148,7 @@ Response emitted by Plewtus on `stdout`:
     "content": [
       {
         "type": "text",
-        "text": "{\n  \"query\": \"go net/http middleware patterns\",\n  \"results\": [...],\n  \"metadata\": {...}\n}"
+        "text": "Search results for \"go net/http middleware patterns\": 3 result(s) in 2140 ms · engines: bing, duckduckgo, yahoo\n\n1. Writing Middleware in Go\n   https://example.com/go-middleware\n   Found by: duckduckgo#1, yahoo#2\n   Middleware wraps an http.Handler...\n   Content (markdown):\n      # Writing Middleware in Go ..."
       }
     ]
   }

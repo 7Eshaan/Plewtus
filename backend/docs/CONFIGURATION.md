@@ -2,6 +2,8 @@
 
 Plewtus is configured via environment variables. Sane defaults are provided so the service operates out of the box with zero required configuration.
 
+For local development, Plewtus also reads an optional `.env` file from the working directory (or the path in `PLEWTUS_ENV_FILE`). Values from the real environment always take precedence, and container images exclude `.env` files.
+
 ---
 
 ## Environment Variables
@@ -14,9 +16,10 @@ Plewtus is configured via environment variables. Sane defaults are provided so t
 | `PLEWTUS_LOG_LEVEL` | `string` | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`). |
 | `PLEWTUS_DEFAULT_PROVIDERS` | `string` | `duckduckgo,bing,yahoo` | Comma-separated list of active providers queried by default. |
 | `PLEWTUS_DEFAULT_TIMEOUT_MS` | `integer` | `6000` | Per-provider scrape timeout in milliseconds (default 6s). |
+| `PLEWTUS_EXTRACT_TIMEOUT_MS` | `integer` | `8000` | Time budget for the page-extraction stage of a search, and per-page fetch timeout for extraction. |
 | `PLEWTUS_TRUSTED_PROXIES` | `string` | `""` | Comma-separated IP addresses/CIDRs allowed to supply `X-Forwarded-For`. When empty, forwarded headers are ignored and the socket peer identifies anonymous callers. |
 | `PLEWTUS_DEFAULT_LIMIT` | `integer` | `10` | Default results count when `limit` is omitted. |
-| `PLEWTUS_MAX_LIMIT` | `integer` | `50` | Maximum allowed results limit in a single request. |
+| `PLEWTUS_MAX_LIMIT` | `integer` | `50` | Maximum allowed results limit in a single request (capped at the 50-result window). |
 | `PLEWTUS_USER_AGENT` | `string` | Standard Chrome User-Agent | Polite desktop User-Agent string sent to search engines and extraction targets. |
 
 ---
@@ -65,6 +68,7 @@ PLEWTUS_LOG_LEVEL=info
 # Providers & Timeouts
 PLEWTUS_DEFAULT_PROVIDERS=duckduckgo,bing,yahoo
 PLEWTUS_DEFAULT_TIMEOUT_MS=6000
+PLEWTUS_EXTRACT_TIMEOUT_MS=8000
 PLEWTUS_TRUSTED_PROXIES=10.0.0.0/8
 PLEWTUS_DEFAULT_LIMIT=10
 PLEWTUS_MAX_LIMIT=50

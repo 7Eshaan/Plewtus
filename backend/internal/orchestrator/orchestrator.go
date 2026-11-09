@@ -24,10 +24,13 @@ type Orchestrator struct {
 	cache     cache.SearchCache
 	breakers  *reliability.Manager
 	timeout   time.Duration
-	userAgent string
-	logger    *slog.Logger
-	flightMu  sync.Mutex
-	flights   map[string]*searchFlight
+	// extractTimeout bounds the content-extraction stage separately from the
+	// provider stage so slow engines cannot starve page extraction.
+	extractTimeout time.Duration
+	userAgent      string
+	logger         *slog.Logger
+	flightMu       sync.Mutex
+	flights        map[string]*searchFlight
 }
 
 type searchFlight struct {
@@ -54,14 +57,54 @@ func New(registry *provider.Registry, timeout time.Duration, userAgent string, l
 		Cooldown:         30 * time.Second,
 	})
 	return &Orchestrator{
-		registry:  registry,
-		extractor: ext,
-		breakers:  breakers,
-		timeout:   timeout,
-		userAgent: userAgent,
-		logger:    logger,
-		flights:   make(map[string]*searchFlight),
+		registry:       registry,
+		extractor:      ext,
+		breakers:       breakers,
+		timeout:        timeout,
+		extractTimeout: timeout,
+		userAgent:      userAgent,
+		logger:         logger,
+		flights:        make(map[string]*searchFlight),
 	}
+}
+
+// WithExtractTimeout sets the time budget for the extraction stage.
+func (o *Orchestrator) WithExtractTimeout(d time.Duration) *Orchestrator {
+	if d > 0 {
+		o.extractTimeout = d
+	}
+	return o
+}
+
+// ProviderNames returns the registered provider names.
+func (o *Orchestrator) ProviderNames() []string {
+	return o.registry.Names()
+}
+
+// overallTimeout caps a whole search: provider stage, optional extraction
+// stage, and a small allowance for ranking and serialization.
+func (o *Orchestrator) overallTimeout(req *model.SearchRequest) time.Duration {
+	d := o.timeout + time.Second
+	if req.Extract != nil && req.Extract.Enabled {
+		d += o.extractTimeout
+	}
+	return d
+}
+
+// validateProviders rejects provider names that are not registered, before
+// any work (or circuit-breaker allocation) happens for them.
+func (o *Orchestrator) validateProviders(req *model.SearchRequest) error {
+	var unknown []string
+	for _, name := range req.Providers {
+		if _, ok := o.registry.Get(name); !ok {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		return model.InvalidRequestf("unknown provider(s) %s; available: %s",
+			strings.Join(unknown, ", "), strings.Join(o.registry.Names(), ", "))
+	}
+	return nil
 }
 
 // WithExtractor allows replacing the default extractor with a custom one (useful for testing).
@@ -99,8 +142,13 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (re
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
+	if err := o.validateProviders(req); err != nil {
+		return nil, err
+	}
 	if o.cache == nil {
-		return o.search(ctx, req, "")
+		searchCtx, cancel := context.WithTimeout(ctx, o.overallTimeout(req))
+		defer cancel()
+		return o.search(searchCtx, req, "")
 	}
 
 	cacheKey := o.cache.Key(req)
@@ -135,7 +183,7 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (re
 				o.flightMu.Unlock()
 			}()
 
-			flightCtx, cancel := context.WithTimeout(context.Background(), o.timeout)
+			flightCtx, cancel := context.WithTimeout(context.Background(), o.overallTimeout(req))
 			defer cancel()
 			resp, searchErr = o.search(flightCtx, req, cacheKey)
 		}()
@@ -240,7 +288,7 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 			p, ok := o.registry.Get(name)
 			if !ok {
 				if o.breakers != nil {
-					o.breakers.Get(name).ReportFailureFor(breakerGeneration, fmt.Errorf("provider %q not found or not registered", name))
+					o.breakers.Get(name).ReleaseFor(breakerGeneration)
 				}
 				ch <- providerOutcome{
 					name: name,
@@ -271,7 +319,13 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 			tookMs := time.Since(providerStart).Milliseconds()
 			if err != nil {
 				if o.breakers != nil {
-					o.breakers.Get(name).ReportFailureFor(breakerGeneration, err)
+					if ctx.Err() != nil {
+						// The caller went away (or the overall deadline hit); that
+						// says nothing about the provider's health.
+						o.breakers.Get(name).ReleaseFor(breakerGeneration)
+					} else {
+						o.breakers.Get(name).ReportFailureFor(breakerGeneration, err)
+					}
 				}
 				ch <- providerOutcome{
 					name:   name,
@@ -393,6 +447,20 @@ collectLoop:
 		ExcludeDomains: req.ExcludeDomains,
 	}
 	uniqueResults, dedupedCount, dedupStats := pipeline.DeduplicateDetailed(rawResponses, dedupOpts)
+
+	// Providers whose whole SERP was off-topic (anti-bot result poisoning) are
+	// reported as failed rather than successful.
+	for _, engine := range dedupStats.LowQualityEngines {
+		o.logger.Warn("discarding off-topic provider response", slog.String("engine", engine))
+		successful = removeProvider(successful, engine)
+		failed = append(failed, model.ProviderError{
+			Engine: engine,
+			Error:  "response discarded: results did not match the query (likely anti-bot result poisoning)",
+		})
+	}
+	if len(dedupStats.LowQualityEngines) > 0 {
+		sort.Slice(failed, func(i, j int) bool { return failed[i].Engine < failed[j].Engine })
+	}
 	if rawCount > 0 && len(uniqueResults) == 0 {
 		o.logger.Warn("all raw provider results were rejected or filtered",
 			slog.Int("raw_results", rawCount),
@@ -404,7 +472,9 @@ collectLoop:
 	if req.Extract != nil && req.Extract.Enabled && o.extractor != nil && len(uniqueResults) > 0 {
 		extractOpts := *req.Extract
 		extractOpts.Query = req.Query
-		uniqueResults = o.extractor.ExtractBatch(ctx, uniqueResults, &extractOpts)
+		extractCtx, cancelExtract := context.WithTimeout(ctx, o.extractTimeout)
+		uniqueResults = o.extractor.ExtractBatch(extractCtx, uniqueResults, &extractOpts)
+		cancelExtract()
 	}
 
 	// 9. Build the final unified response
@@ -458,6 +528,16 @@ func searchCandidateLimit(limit, offset int) int {
 		candidateLimit = 50
 	}
 	return candidateLimit
+}
+
+func removeProvider(providers []string, name string) []string {
+	out := providers[:0]
+	for _, p := range providers {
+		if p != name {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func containsProvider(providers []string, name string) bool {

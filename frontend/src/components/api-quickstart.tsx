@@ -51,7 +51,7 @@ const res = await fetch("http://localhost:8080/search", {
 const data: SearchResponse = await res.json();
 console.log(\`Aggregated \${data.results.length} results in \${data.metadata.took_ms}ms\`);
 for (const item of data.results) {
-  console.log(\`#\${item.rank} [RRF \${item.score.toFixed(4)}] \${item.title} -> \${item.url}\`);
+  console.log(\`#\${item.rank} [\${item.ranking_score.toFixed(2)}] \${item.title} -> \${item.url}\`);
 }`,
   },
   python: {
@@ -79,7 +79,7 @@ data = response.json()
 
 print(f"Aggregated {len(data['results'])} results in {data['metadata']['took_ms']}ms:")
 for r in data["results"]:
-    print(f"#{r['rank']} [RRF {r['score']:.4f}] {r['title']} -> {r['url']}")`,
+    print(f"#{r['rank']} [{r['ranking_score']:.2f}] {r['title']} -> {r['url']}")`,
   },
   go: {
     label: "Go",
@@ -127,7 +127,9 @@ const SAMPLE_RESPONSE = `{
     {
       "id": "res_1",
       "rank": 1,
-      "score": 0.04918,
+      "score": 0.048918,
+      "relevance_score": 1,
+      "ranking_score": 0.998919,
       "title": "In Search of an Understandable Consensus Algorithm",
       "url": "https://raft.github.io/",
       "snippet": "Raft is a consensus algorithm for managing a replicated log...",
@@ -138,8 +140,8 @@ const SAMPLE_RESPONSE = `{
       ],
       "published_date": "2024-03-15",
       "content": {
+        "title": "Raft Consensus Algorithm",
         "markdown": "# Raft\\n\\nRaft is a consensus algorithm...",
-        "text": "Raft is a consensus algorithm...",
         "extracted_at": "2026-11-05T09:00:00Z"
       }
     }
@@ -191,7 +193,7 @@ export function ApiQuickstart() {
     <section id="quickstart" className="w-full pt-8 pb-4 flex flex-col gap-6 scroll-mt-16">
       {/* Header */}
       <div className="flex flex-col gap-1.5 text-center sm:text-left">
-        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-[#8700ff] dark:text-[#a84dff] uppercase tracking-wider font-semibold">
+        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-brand dark:text-brand-light uppercase tracking-wider font-semibold">
           <span>API Quickstart &amp; Integration</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans">
@@ -206,7 +208,7 @@ export function ApiQuickstart() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
         <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-1 shadow-2xs">
           <div className="flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100 font-semibold">
-            <Globe className="w-3.5 h-3.5 text-[#8700ff] dark:text-[#a84dff]" />
+            <Globe className="w-3.5 h-3.5 text-brand dark:text-brand-light" />
             <span>POST /search</span>
           </div>
           <span className="text-[11px] text-zinc-500">Standard REST API</span>
@@ -214,7 +216,7 @@ export function ApiQuickstart() {
 
         <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-1 shadow-2xs">
           <div className="flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100 font-semibold">
-            <Cpu className="w-3.5 h-3.5 text-[#8700ff] dark:text-[#a84dff]" />
+            <Cpu className="w-3.5 h-3.5 text-brand dark:text-brand-light" />
             <span>Parallel Dispatch</span>
           </div>
           <span className="text-[11px] text-zinc-500">DDG, Bing &amp; Yahoo</span>
@@ -222,15 +224,15 @@ export function ApiQuickstart() {
 
         <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-1 shadow-2xs">
           <div className="flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100 font-semibold">
-            <Sparkles className="w-3.5 h-3.5 text-[#8700ff] dark:text-[#a84dff]" />
+            <Sparkles className="w-3.5 h-3.5 text-brand dark:text-brand-light" />
             <span>Relevance-aware ranking</span>
           </div>
-          <span className="text-[11px] text-zinc-500">0.6 relevance + 0.4 normalized RRF</span>
+          <span className="text-[11px] text-zinc-500">0.8 relevance + 0.2 normalized RRF</span>
         </div>
 
         <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-1 shadow-2xs">
           <div className="flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100 font-semibold">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#8700ff] dark:text-[#a84dff]" />
+            <ShieldCheck className="w-3.5 h-3.5 text-brand dark:text-brand-light" />
             <span>SSRF Protection</span>
           </div>
           <span className="text-[11px] text-zinc-500">Safe page extraction</span>
@@ -252,7 +254,7 @@ export function ApiQuickstart() {
                   : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
               }`}
             >
-              <Code2 className="w-3.5 h-3.5 text-[#8700ff] dark:text-[#a84dff]" />
+              <Code2 className="w-3.5 h-3.5 text-brand dark:text-brand-light" />
               <span>API Request</span>
             </button>
             <button
@@ -313,7 +315,7 @@ export function ApiQuickstart() {
 
         {/* Code Box */}
         <div className="p-4 bg-zinc-950 text-zinc-200 overflow-x-auto text-xs font-mono leading-relaxed min-h-[260px]">
-          <pre className="selection:bg-[#8700ff]/30">
+          <pre className="selection:bg-brand/30">
             {activeTab === "request" ? CODE_EXAMPLES[activeLang].code : SAMPLE_RESPONSE}
           </pre>
         </div>

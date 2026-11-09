@@ -409,6 +409,8 @@ export const AsciiHeroField = React.memo(function AsciiHeroField({
     let simDt = 0;
     let animId = 0;
     let lastTick = performance.now();
+    let visible = true;
+    let staticFrames = 0;
     let clearBounds = [0, 0, 0, 0]; // Normalized clearance rect for content
 
     // Encode word into uniform array
@@ -551,7 +553,12 @@ export const AsciiHeroField = React.memo(function AsciiHeroField({
       }
     }
 
-    const resizeObserver = new ResizeObserver(handleResize);
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+      // Resizing clears the canvas; redraw even when animation is paused.
+      staticFrames = 0;
+      ensureRunning();
+    });
     resizeObserver.observe(container);
     handleResize();
 
@@ -717,8 +724,30 @@ export const AsciiHeroField = React.memo(function AsciiHeroField({
       gl.bindTexture(gl.TEXTURE_2D, null);
     }
 
+    // Pause the simulation while the hero is off-screen, and render a
+    // static frame for visitors who prefer reduced motion.
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function ensureRunning() {
+      if (!animId && visible) {
+        lastTick = performance.now();
+        animId = requestAnimationFrame(render);
+      }
+    }
+
+    const visibilityObserver = new IntersectionObserver((entries) => {
+      visible = entries.some((entry) => entry.isIntersecting);
+      ensureRunning();
+    });
+    visibilityObserver.observe(container);
+
     // Main 60 FPS animation loop
     function render(now: number) {
+      if (!visible) {
+        animId = 0;
+        return;
+      }
       if (!gl || !cellsTarget || !atlasTex || width <= 0 || height <= 0) {
         animId = requestAnimationFrame(render);
         return;
@@ -799,6 +828,10 @@ export const AsciiHeroField = React.memo(function AsciiHeroField({
 
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
+      if (reduceMotion && ++staticFrames > 2) {
+        animId = 0;
+        return;
+      }
       animId = requestAnimationFrame(render);
     }
 
@@ -806,6 +839,7 @@ export const AsciiHeroField = React.memo(function AsciiHeroField({
 
     return () => {
       cancelAnimationFrame(animId);
+      visibilityObserver.disconnect();
       resizeObserver.disconnect();
       window.removeEventListener("pointermove", onPointerMove);
       document.removeEventListener("pointerleave", onPointerLeave);

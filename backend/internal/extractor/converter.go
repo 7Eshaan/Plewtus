@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"unicode"
@@ -12,8 +13,14 @@ import (
 
 // ToMarkdown converts an HTML node and its subtree into clean, formatted Markdown.
 func ToMarkdown(n *html.Node, maxChars int) string {
+	return ToMarkdownWithBase(n, maxChars, nil)
+}
+
+// ToMarkdownWithBase converts HTML to Markdown, resolving relative link and
+// image URLs against base so they remain usable outside the source page.
+func ToMarkdownWithBase(n *html.Node, maxChars int, base *url.URL) string {
 	var buf strings.Builder
-	renderMarkdownNode(n, &buf, &markdownState{})
+	renderMarkdownNode(n, &buf, &markdownState{base: base})
 
 	raw := buf.String()
 	cleaned := cleanMarkdownOutput(raw)
@@ -151,6 +158,32 @@ type markdownState struct {
 	listIndex   int
 	isOrdered   bool
 	inCodeBlock bool
+	base        *url.URL
+}
+
+// resolveURL makes href absolute against the page base. It returns "" for
+// links that are useless outside the page (javascript:, in-page fragments).
+func (s *markdownState) resolveURL(href string) string {
+	href = strings.TrimSpace(href)
+	lower := strings.ToLower(href)
+	if href == "" || strings.HasPrefix(href, "#") || strings.HasPrefix(lower, "javascript:") || strings.HasPrefix(lower, "data:") {
+		return ""
+	}
+	if s.base == nil {
+		return href
+	}
+	ref, err := url.Parse(href)
+	if err != nil {
+		return href
+	}
+	return s.base.ResolveReference(ref).String()
+}
+
+// renderInline renders a node's children to a single trimmed line.
+func renderInline(n *html.Node, state *markdownState) string {
+	var b strings.Builder
+	renderChildren(n, &b, state)
+	return strings.TrimSpace(normalizeInlineWhitespace(b.String()))
 }
 
 func renderMarkdownNode(n *html.Node, buf *strings.Builder, state *markdownState) {
@@ -169,25 +202,14 @@ func renderMarkdownNode(n *html.Node, buf *strings.Builder, state *markdownState
 
 	case html.ElementNode:
 		switch n.DataAtom {
-		case atom.H1:
-			buf.WriteString("\n\n# ")
-			renderChildren(n, buf, state)
-			buf.WriteString("\n\n")
-			return
-		case atom.H2:
-			buf.WriteString("\n\n## ")
-			renderChildren(n, buf, state)
-			buf.WriteString("\n\n")
-			return
-		case atom.H3:
-			buf.WriteString("\n\n### ")
-			renderChildren(n, buf, state)
-			buf.WriteString("\n\n")
-			return
-		case atom.H4, atom.H5, atom.H6:
-			buf.WriteString("\n\n#### ")
-			renderChildren(n, buf, state)
-			buf.WriteString("\n\n")
+		case atom.H1, atom.H2, atom.H3, atom.H4, atom.H5, atom.H6:
+			level := map[atom.Atom]int{atom.H1: 1, atom.H2: 2, atom.H3: 3}[n.DataAtom]
+			if level == 0 {
+				level = 4
+			}
+			if text := renderInline(n, state); text != "" {
+				buf.WriteString("\n\n" + strings.Repeat("#", level) + " " + text + "\n\n")
+			}
 			return
 		case atom.P:
 			buf.WriteString("\n\n")
@@ -228,6 +250,15 @@ func renderMarkdownNode(n *html.Node, buf *strings.Builder, state *markdownState
 			var itemBuf strings.Builder
 			renderChildren(n, &itemBuf, state)
 			itemText := strings.TrimSpace(itemBuf.String())
+			if !state.inCodeBlock {
+				var lines []string
+				for _, line := range strings.Split(itemText, "\n") {
+					if line = strings.TrimSpace(line); line != "" {
+						lines = append(lines, line)
+					}
+				}
+				itemText = strings.Join(lines, "\n")
+			}
 			if itemText == "" {
 				return
 			}
@@ -240,7 +271,7 @@ func renderMarkdownNode(n *html.Node, buf *strings.Builder, state *markdownState
 			return
 		case atom.Img:
 			alt := strings.TrimSpace(getAttr(n, "alt"))
-			src := strings.TrimSpace(getAttr(n, "src"))
+			src := state.resolveURL(getAttr(n, "src"))
 			if alt != "" && src != "" {
 				buf.WriteString(fmt.Sprintf("![%s](%s)", alt, src))
 			}
@@ -262,26 +293,25 @@ func renderMarkdownNode(n *html.Node, buf *strings.Builder, state *markdownState
 				buf.WriteString("`")
 			}
 			return
-		case atom.Strong, atom.B:
-			buf.WriteString("**")
-			renderChildren(n, buf, state)
-			buf.WriteString("**")
-			return
-		case atom.Em, atom.I:
-			buf.WriteString("*")
-			renderChildren(n, buf, state)
-			buf.WriteString("*")
+		case atom.Strong, atom.B, atom.Em, atom.I:
+			if state.inCodeBlock {
+				renderChildren(n, buf, state)
+				return
+			}
+			marker := "**"
+			if n.DataAtom == atom.Em || n.DataAtom == atom.I {
+				marker = "*"
+			}
+			if text := renderInline(n, state); text != "" {
+				buf.WriteString(marker + text + marker)
+			}
 			return
 		case atom.A:
-			href := strings.TrimSpace(getAttr(n, "href"))
-			var linkTextBuf strings.Builder
-			renderChildren(n, &linkTextBuf, state)
-			text := strings.TrimSpace(linkTextBuf.String())
-
+			text := renderInline(n, state)
 			if text == "" {
 				return
 			}
-			if href != "" && !strings.HasPrefix(strings.ToLower(href), "javascript:") {
+			if href := state.resolveURL(getAttr(n, "href")); href != "" && !state.inCodeBlock {
 				buf.WriteString(fmt.Sprintf("[%s](%s)", text, href))
 			} else {
 				buf.WriteString(text)
@@ -363,7 +393,7 @@ func renderTextNode(n *html.Node, buf *strings.Builder) {
 	}
 
 	if n.Type == html.TextNode {
-		text := normalizeInlineWhitespace(n.Data)
+		text := strings.TrimSpace(normalizeInlineWhitespace(n.Data))
 		if text != "" {
 			buf.WriteString(text)
 			buf.WriteString(" ")
@@ -402,18 +432,43 @@ func isBlockElement(a atom.Atom) bool {
 	}
 }
 
+// normalizeInlineWhitespace collapses runs of whitespace to a single space
+// while keeping one leading/trailing space, so text adjacent to inline
+// elements ("See <a>docs</a>") does not get glued together.
 func normalizeInlineWhitespace(s string) string {
-	fields := strings.Fields(s)
-	return strings.Join(fields, " ")
+	if s == "" {
+		return ""
+	}
+	inner := strings.Join(strings.Fields(s), " ")
+	if inner == "" {
+		return " "
+	}
+	runes := []rune(s)
+	if unicode.IsSpace(runes[0]) {
+		inner = " " + inner
+	}
+	if unicode.IsSpace(runes[len(runes)-1]) {
+		inner += " "
+	}
+	return inner
 }
 
 func cleanMarkdownOutput(s string) string {
 	lines := strings.Split(s, "\n")
 	var cleaned []string
 	consecutiveBlank := 0
+	inFence := false
 
 	for _, line := range lines {
 		trimmed := strings.TrimRightFunc(line, unicode.IsSpace)
+		if strings.HasPrefix(strings.TrimSpace(trimmed), "```") {
+			inFence = !inFence
+			trimmed = strings.TrimSpace(trimmed)
+		} else if !inFence {
+			// Leading spaces outside code blocks are artifacts of inline
+			// whitespace preservation; Markdown would read them as indentation.
+			trimmed = strings.TrimLeftFunc(trimmed, unicode.IsSpace)
+		}
 		if trimmed == "" {
 			consecutiveBlank++
 			if consecutiveBlank <= 2 {

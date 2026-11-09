@@ -2,8 +2,22 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
+
+// MaxResultWindow is the deepest result position (offset + limit) the
+// federated pipeline can serve; upstream engines return roughly one SERP page.
+const MaxResultWindow = 50
+
+// ErrInvalidRequest marks caller errors (HTTP 400) detected after decoding,
+// such as references to unknown providers.
+var ErrInvalidRequest = errors.New("invalid request")
+
+// InvalidRequestf builds an error that wraps ErrInvalidRequest.
+func InvalidRequestf(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", ErrInvalidRequest, fmt.Sprintf(format, args...))
+}
 
 // ExtractOptions specifies options for webpage extraction.
 type ExtractOptions struct {
@@ -32,14 +46,26 @@ type SearchRequest struct {
 func (r *SearchRequest) Normalize(defaultLimit, maxLimit int, defaultProviders []string) {
 	r.Query = strings.TrimSpace(r.Query)
 
-	if r.Limit <= 0 {
+	if maxLimit <= 0 || maxLimit > MaxResultWindow {
+		maxLimit = MaxResultWindow
+	}
+	if defaultLimit <= 0 || defaultLimit > maxLimit {
+		defaultLimit = maxLimit
+	}
+	if r.Offset < 0 {
+		r.Offset = 0
+	}
+
+	limitDefaulted := r.Limit <= 0
+	if limitDefaulted {
 		r.Limit = defaultLimit
 	} else if r.Limit > maxLimit {
 		r.Limit = maxLimit
 	}
-
-	if r.Offset < 0 {
-		r.Offset = 0
+	// When the caller only paginates (offset without limit), shrink the default
+	// page so it still fits inside the result window instead of failing.
+	if limitDefaulted && r.Offset < MaxResultWindow && r.Offset+r.Limit > MaxResultWindow {
+		r.Limit = MaxResultWindow - r.Offset
 	}
 
 	if len(r.Providers) == 0 {
@@ -127,8 +153,8 @@ func (r *SearchRequest) Validate() error {
 	if strings.TrimSpace(r.Query) == "" {
 		return errors.New("query parameter is required and cannot be empty")
 	}
-	if r.Offset+r.Limit > 50 {
-		return errors.New("offset + limit cannot exceed the 50-result provider window; reduce either value")
+	if r.Offset+r.Limit > MaxResultWindow {
+		return fmt.Errorf("offset + limit cannot exceed the %d-result provider window; reduce either value", MaxResultWindow)
 	}
 
 	if r.Freshness != "" {

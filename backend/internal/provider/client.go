@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,11 +17,31 @@ type HTTPClient struct {
 	userAgent string
 }
 
+// ClientOption customizes an HTTPClient.
+type ClientOption func(*http.Transport)
+
+// WithHTTP1Only disables HTTP/2 negotiation. Some search engines (notably
+// Yahoo) terminate HTTP/2 connections from non-browser TLS stacks with an
+// unexpected EOF while serving HTTP/1.1 normally.
+func WithHTTP1Only() ClientOption {
+	return func(t *http.Transport) {
+		t.ForceAttemptHTTP2 = false
+		t.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
+		if t.TLSClientConfig == nil {
+			t.TLSClientConfig = &tls.Config{}
+		}
+		t.TLSClientConfig.NextProtos = []string{"http/1.1"}
+	}
+}
+
 // NewHTTPClient creates a client configured with transport connection pooling and isolated cookie jars.
-func NewHTTPClient(timeout time.Duration, userAgent string) *HTTPClient {
-	var transport *http.Transport
+func NewHTTPClient(timeout time.Duration, userAgent string, opts ...ClientOption) *HTTPClient {
+	transport := &http.Transport{Proxy: http.ProxyFromEnvironment}
 	if defTr, ok := http.DefaultTransport.(*http.Transport); ok {
 		transport = defTr.Clone()
+	}
+	for _, opt := range opts {
+		opt(transport)
 	}
 
 	return &HTTPClient{

@@ -89,7 +89,7 @@ func TestQueryRelevancePreservesNegationAndProgrammingLanguageTokens(t *testing.
 	}
 }
 
-func TestDeduplicateWithOptions_RanksRelevantOnTop(t *testing.T) {
+func TestDeduplicateWithOptions_DropsOffTopicResults(t *testing.T) {
 	responses := []*model.ProviderResponse{
 		{
 			Engine: "bing",
@@ -110,18 +110,11 @@ func TestDeduplicateWithOptions_RanksRelevantOnTop(t *testing.T) {
 		Query: "model context protocol stdio",
 		Limit: 10,
 	})
-	if count != 3 || len(results) != 3 {
-		t.Fatalf("expected all fetched results retained, got count=%d results=%d", count, len(results))
+	if count != 1 || len(results) != 1 {
+		t.Fatalf("expected off-topic results to be dropped, got count=%d results=%d", count, len(results))
 	}
 	if results[0].Title != "Model Context Protocol Transports" {
-		t.Fatalf("expected most relevant result on top, got %q", results[0].Title)
-	}
-	// Less relevant results appear towards the bottom
-	if results[1].Title != "Orlando City" && results[1].Title != "Bokep Viral" {
-		t.Fatalf("expected noise result towards bottom, got %q", results[1].Title)
-	}
-	if results[2].Title != "Orlando City" && results[2].Title != "Bokep Viral" {
-		t.Fatalf("expected noise result towards bottom, got %q", results[2].Title)
+		t.Fatalf("expected the relevant result, got %q", results[0].Title)
 	}
 }
 

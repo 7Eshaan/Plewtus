@@ -25,7 +25,7 @@
 
 - **Zero Search API Keys Required** — Built-in resilient scrapers for DuckDuckGo, Bing, and Yahoo with automatic query escaping and anti-bot mitigation.
 - **Sub-Second Concurrent Search** — Fan-out queries across all providers in parallel with per-engine timeouts, circuit breakers, and graceful fallback.
-- **Reciprocal Rank Fusion (RRF)** — Merges multi-engine rankings into a consensus score ($k=60$) alongside domain-level canonical deduplication.
+- **Relevance + consensus ranking** — Removes off-topic results (including decoy result pages some engines serve to bots), then ranks by query relevance blended with Reciprocal Rank Fusion consensus ($k=60$), after canonical URL deduplication.
 - **On-The-Fly Web Extraction** — Automatically strips boilerplate, adverts, and scripts, converting target web pages into clean Markdown, Highlights, or plain text.
 - **Native Model Context Protocol (MCP)** — Seamless stdio MCP integration with ChatGPT Desktop, OpenAI Codex CLI, Claude Desktop, Cursor, and local LLM harnesses (DeepSeek Harness, Ollama).
 - **Production-Grade Reliability** — Full SSRF protection (loopback and private IP blocking), thread-safe in-memory TTL caching, token bucket rate limits, and zero external database dependencies.
@@ -105,15 +105,19 @@ docker compose up --build -d
 ### Option 2: Native Binary / Local Development
 
 ```bash
-# Run backend
+# Run backend (reads backend/.env if present; real env vars take precedence)
 cd backend
-go run ./cmd/plewtus serve
+cp .env.example .env         # defines the demo API key the frontend uses
+go run ./cmd/plewtus serve   # or just: go run ./cmd/plewtus
 
 # In another terminal, run frontend
 cd frontend
+cp .env.example .env.local   # points at http://localhost:8080 with the same demo key
 npm install
 npm run dev
 ```
+
+The frontend authenticates to the backend with `PLEWTUS_API_KEY`, which must appear in the backend's `PLEWTUS_API_KEYS`; the two example files are already paired.
 
 ---
 
@@ -186,8 +190,10 @@ Add to your workspace `.cursor/mcp.json` or MCP Extension config:
 ```
 
 ### Available MCP Tools
-- **`search`**: Multi-engine search with freshness filtering, domain whitelisting/blacklisting, and optional on-the-fly webpage extraction (`markdown`, `highlights`, `text`).
-- **`extract`**: Direct SSRF-safe content extraction from any list of target URLs.
+- **`search`**: Multi-engine search with provider selection, freshness and domain filters, and optional extraction of the top pages (`markdown`, `highlights`, `text`, `metadata`). Returns a compact text listing by default, or full JSON with `format: "json"`.
+- **`extract`**: SSRF-safe content extraction from up to 10 URLs, with a per-URL error when a page can't be read.
+
+See [backend/docs/MCP.md](backend/docs/MCP.md) for all parameters.
 
 ---
 
@@ -261,6 +267,21 @@ Plewtus is configured via environment variables:
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
+| `PLEWTUS_PORT` (or `PORT`) | `8080` | HTTP listening port for the REST API |
+| `PLEWTUS_AUTH_REQUIRED` | `false` | When `true`, rejects requests lacking a valid API key |
+| `PLEWTUS_API_KEYS` | `""` | Comma-delimited list of authorized keys with tiers (e.g. `key1:free,key2:pro`) |
+| `PLEWTUS_DEFAULT_PROVIDERS` | `duckduckgo,bing,yahoo` | Default providers queried per search |
+| `PLEWTUS_DEFAULT_LIMIT` | `10` | Results returned when `limit` is omitted |
+| `PLEWTUS_CACHE_ENABLED` | `true` | Enables the in-memory LRU search cache |
+| `PLEWTUS_CACHE_TTL_SECONDS` | `600` | Search result cache expiration in seconds |
+| `PLEWTUS_DEFAULT_TIMEOUT_MS` | `6000` | Max duration per upstream search provider request |
+| `PLEWTUS_EXTRACT_TIMEOUT_MS` | `8000` | Time budget for page extraction |
+| `PLEWTUS_FREE_TIER_RATE_LIMIT` | `10` | Free tier requests allowed per minute |
+| `PLEWTUS_FREE_TIER_DAILY_QUOTA` | `100` | Free tier requests allowed per UTC day |
+
+The full list is in [backend/docs/CONFIGURATION.md](backend/docs/CONFIGURATION.md).
+
+--- | :--- | :--- |
 | `PORT` | `8080` | HTTP listening port for the REST API |
 | `PLEWTUS_AUTH_REQUIRED` | `false` | When `true`, rejects requests lacking a valid Bearer token |
 | `PLEWTUS_API_KEYS` | `""` | Comma-delimited list of authorized keys (e.g. `key1:free,key2:pro`) |
