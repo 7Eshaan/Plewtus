@@ -38,6 +38,9 @@ type DeduplicationStats struct {
 	DomainRejected    int
 	InvalidURL        int
 	Duplicates        int
+	// ProviderDiscarded counts raw results dropped because their whole provider
+	// response was discarded (see LowQualityEngines).
+	ProviderDiscarded int
 	// LowQualityEngines lists providers whose whole response was discarded
 	// because almost none of it matched the query (anti-bot result poisoning).
 	LowQualityEngines []string
@@ -50,6 +53,13 @@ const (
 	// Responses where fewer than this fraction of candidates match the query
 	// are treated as poisoned/off-topic SERPs.
 	lowQualityRelevantFraction = 0.25
+	// A low-quality response is discarded even when no other provider can vouch
+	// for the query if its results cover, on average, less than this fraction of
+	// the query terms and the query is specific enough (lowQualityMinTerms) for
+	// that to be meaningful. Short queries stay untouched: engines legitimately
+	// answer typos and one- or two-word queries with lexically different pages.
+	lowQualityMeanCoverage = 0.34
+	lowQualityMinTerms     = 3
 )
 
 type candidate struct {
@@ -60,31 +70,11 @@ type candidate struct {
 	relevant  bool
 }
 
-// Deduplicate takes raw provider responses from multiple search engines,
-// canonicalizes and deduplicates URLs, merges engine positions, titles,
-// and snippets, applies ranking (defaulting to RRFRanker if no custom ranker is passed),
-// and returns the unified list of ranked results along with the total count
-// of unique results before limit truncation.
-func Deduplicate(responses []*model.ProviderResponse, limit int, rankers ...Ranker) (results []model.SearchResult, dedupedCount int) {
-	var ranker Ranker
-	if len(rankers) > 0 {
-		ranker = rankers[0]
-	}
-	return DeduplicateWithOptions(responses, DeduplicateOptions{
-		Limit:  limit,
-		Ranker: ranker,
-	})
-}
-
-// DeduplicateWithOptions performs deduplication, domain inclusion/exclusion filtering,
-// query-aware consensus ranking, and offset/limit pagination over raw provider responses.
-func DeduplicateWithOptions(responses []*model.ProviderResponse, opts DeduplicateOptions) (results []model.SearchResult, dedupedCount int) {
-	results, dedupedCount, _ = DeduplicateDetailed(responses, opts)
-	return results, dedupedCount
-}
-
-// DeduplicateDetailed performs the complete candidate pipeline and also
-// reports why raw results were rejected or merged, for production diagnostics.
+// DeduplicateDetailed canonicalizes and deduplicates raw provider responses,
+// applies domain and relevance filtering, discards poisoned provider
+// responses, ranks (RRFRanker unless opts.Ranker is set), and paginates. It
+// returns the page of results, the number of unique results before pagination,
+// and why raw results were rejected or merged.
 func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOptions) (results []model.SearchResult, dedupedCount int, stats DeduplicationStats) {
 	if len(responses) == 0 {
 		return []model.SearchResult{}, 0, stats
@@ -105,9 +95,11 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 	query := newQueryProfile(opts.Query)
 	perResponse := make([][]candidate, len(sortedResponses))
 	lowQuality := make([]bool, len(sortedResponses))
+	meanCoverage := make([]float64, len(sortedResponses))
 	healthyResponses := 0
 	for i, resp := range sortedResponses {
 		relevantCount := 0
+		coverageSum := 0.0
 		for _, raw := range resp.Results {
 			if strings.TrimSpace(raw.URL) == "" {
 				stats.InvalidURL++
@@ -122,13 +114,17 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 				stats.DomainRejected++
 				continue
 			}
-			relevance, relevant := query.relevance(raw.Title, raw.Snippet)
+			relevance, relevant, coverage := query.match(raw.Title, raw.Snippet)
 			if relevant {
 				relevantCount++
 			}
+			coverageSum += coverage
 			perResponse[i] = append(perResponse[i], candidate{raw: raw, cleanURL: cleanURL, key: key, relevance: relevance, relevant: relevant})
 		}
 		n := len(perResponse[i])
+		if n > 0 {
+			meanCoverage[i] = coverageSum / float64(n)
+		}
 		if query.hasTerms() && n >= lowQualityMinCandidates && float64(relevantCount)/float64(n) < lowQualityRelevantFraction {
 			lowQuality[i] = true
 		} else if relevantCount > 0 {
@@ -136,14 +132,17 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 		}
 	}
 
-	// 2. Discard poisoned provider responses, but only when at least one other
-	// provider produced on-topic results (otherwise the query itself is simply
-	// hard to match lexically, e.g. non-Latin scripts or typos).
+	// 2. Discard poisoned provider responses: when another provider produced
+	// on-topic results, or when the response barely touches a specific query at
+	// all. Otherwise the query is simply hard to match lexically (typos, short
+	// queries, other scripts) and the response is kept.
 	seen := make(map[string]*mergedResult)
 	var list []*mergedResult
 	for i, resp := range sortedResponses {
-		if lowQuality[i] && healthyResponses > 0 {
+		unrelated := len(query.terms) >= lowQualityMinTerms && meanCoverage[i] < lowQualityMeanCoverage
+		if lowQuality[i] && (healthyResponses > 0 || unrelated) {
 			stats.LowQualityEngines = append(stats.LowQualityEngines, resp.Engine)
+			stats.ProviderDiscarded += len(perResponse[i])
 			continue
 		}
 		for _, c := range perResponse[i] {
@@ -327,60 +326,39 @@ func matchesDomainFilters(rawURL string, includeDomains, excludeDomains []string
 	return true
 }
 
-func selectBetterTitle(curr, candidate string) string {
-	curr = strings.TrimSpace(curr)
-	candidate = strings.TrimSpace(candidate)
+// preferComplete picks the more complete of two texts: a non-truncated one
+// over a truncated one, otherwise the longer.
+func preferComplete(curr, candidate string) string {
 	if curr == "" {
 		return candidate
 	}
 	if candidate == "" {
 		return curr
 	}
-
 	currTrunc := strings.HasSuffix(curr, "...") || strings.HasSuffix(curr, "…")
 	candTrunc := strings.HasSuffix(candidate, "...") || strings.HasSuffix(candidate, "…")
-	if currTrunc && !candTrunc {
-		return candidate
-	}
-	if candTrunc && !currTrunc {
+	if currTrunc != candTrunc {
+		if currTrunc {
+			return candidate
+		}
 		return curr
 	}
-
 	if len(candidate) > len(curr) {
 		return candidate
 	}
 	return curr
 }
 
+func selectBetterTitle(curr, candidate string) string {
+	return preferComplete(strings.TrimSpace(curr), strings.TrimSpace(candidate))
+}
+
 func selectBetterSnippet(curr, candidate string) string {
-	curr = cleanSnippet(curr)
-	candidate = cleanSnippet(candidate)
-	if curr == "" {
-		return candidate
-	}
-	if candidate == "" {
-		return curr
-	}
-
-	currTrunc := strings.HasSuffix(curr, "...") || strings.HasSuffix(curr, "…")
-	candTrunc := strings.HasSuffix(candidate, "...") || strings.HasSuffix(candidate, "…")
-	if currTrunc && !candTrunc {
-		return candidate
-	}
-	if candTrunc && !currTrunc {
-		return curr
-	}
-
-	if len(candidate) > len(curr) {
-		return candidate
-	}
-	return curr
+	return preferComplete(cleanSnippet(curr), cleanSnippet(candidate))
 }
 
 func cleanSnippet(s string) string {
 	s = strings.TrimSpace(s)
-	s = strings.TrimSuffix(s, "Read more")
-	s = strings.TrimSuffix(s, "… Read more")
-	s = strings.TrimSuffix(s, "... Read more")
-	return strings.TrimSpace(s)
+	s = strings.TrimSpace(strings.TrimSuffix(s, "Read more"))
+	return s
 }

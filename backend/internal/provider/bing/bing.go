@@ -33,24 +33,47 @@ func (p *Provider) Name() string {
 	return "bing"
 }
 
-// Search executes a search query against Bing.
+// Search executes a search query against Bing, fetching further result
+// pages while the request wants more results than have been collected.
 func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*model.ProviderResponse, error) {
 	start := time.Now()
+	want, maxPages := provider.PageBudget(req)
 
-	query := provider.BuildSearchQuery(req)
+	var all []model.RawSearchResult
+	seen := make(map[string]bool)
+	for page := 0; page < maxPages && len(all) < want; page++ {
+		results, err := p.fetchPage(ctx, req, page)
+		if err != nil {
+			if page == 0 {
+				return nil, err
+			}
+			break // keep what earlier pages returned
+		}
+		var added int
+		if all, added = provider.AppendPage(all, seen, results); added == 0 {
+			break
+		}
+	}
+	if len(all) > want {
+		all = all[:want]
+	}
+
+	// Zero organic results is a legitimate outcome (e.g. narrow site: filters)
+	// and must not count as a provider failure. Block pages are reported by the
+	// parser as ErrChallengeEncountered instead.
+	return &model.ProviderResponse{Engine: p.Name(), Results: all, Took: time.Since(start)}, nil
+}
+
+// fetchPage requests a zero-based result page. Bing numbers pages in steps of
+// ten regardless of how many organic results a page actually showed.
+func (p *Provider) fetchPage(ctx context.Context, req model.ProviderRequest, page int) ([]model.RawSearchResult, error) {
 	params := url.Values{}
-	params.Set("q", query)
+	params.Set("q", provider.BuildSearchQuery(req))
+	if page > 0 {
+		params.Set("first", strconv.Itoa(page*10+1))
+		params.Set("FORM", "PERE")
+	}
 
-	fetchCount := req.Limit
-	if req.Offset > 0 {
-		fetchCount = req.Limit + req.Offset
-	}
-	if fetchCount > 50 {
-		fetchCount = 50
-	}
-	if fetchCount > 0 {
-		params.Set("count", strconv.Itoa(fetchCount))
-	}
 	lang := req.Language
 	if lang == "" {
 		lang = "en"
@@ -68,13 +91,10 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 		params.Set("filters", filter)
 	}
 
-	searchURL := BaseURL + "?" + params.Encode()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, BaseURL+"?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
-
-	httpReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
 	httpReq.Header.Set("Accept-Language", provider.AcceptLanguage(lang))
 	httpReq.Header.Set("Referer", "https://www.bing.com/")
 
@@ -95,19 +115,11 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if err != nil {
 		return nil, fmt.Errorf("failed reading bing response body: %w", err)
 	}
-
-	results, err := ParseHTMLResponse(bytes.NewReader(bodyBytes), req.Limit)
+	results, err := ParseHTMLResponse(bytes.NewReader(bodyBytes), 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing bing response: %w", err)
 	}
-	// Zero organic results is a legitimate outcome (e.g. narrow site: filters)
-	// and must not count as a provider failure. Block pages are reported by the
-	// parser as ErrChallengeEncountered instead.
-	return &model.ProviderResponse{
-		Engine:  p.Name(),
-		Results: results,
-		Took:    time.Since(start),
-	}, nil
+	return results, nil
 }
 
 func mapFreshness(freshness string) string {

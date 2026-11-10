@@ -137,3 +137,28 @@ func TestRegression_TransitionRangesBlocked(t *testing.T) {
 		t.Error("public IPv6 must not be blocked")
 	}
 }
+
+// Regression: truncating inside a code block must not leave the fence open.
+func TestRegression_TruncationClosesCodeFence(t *testing.T) {
+	page := "<html><body><article><h1>Title</h1><p>" + regressionBody + "</p><pre><code>" + strings.Repeat("line of code here\n", 60) + "</code></pre><p>after</p></article></body></html>"
+	p, err := ParseHTML([]byte(page))
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := ToMarkdownWithBase(p.MainNode, len(regressionBody)+300, nil)
+	if n := strings.Count(md, "```"); n == 0 || n%2 != 0 {
+		t.Fatalf("expected balanced code fences after truncation, got %d", n)
+	}
+}
+
+// Regression: a failed page extraction is reported on the result instead of
+// silently leaving it without content.
+func TestRegression_BatchReportsPerResultErrors(t *testing.T) {
+	ext := New(ExtractorOptions{})
+	results := ext.ExtractBatch(context.Background(),
+		[]model.SearchResult{{URL: "http://127.0.0.1/private"}},
+		&model.ExtractOptions{Enabled: true, Mode: "markdown", MaxPages: 1})
+	if results[0].Content != nil || !strings.Contains(results[0].ContentError, "blocked") {
+		t.Fatalf("expected a content_error explaining the block, got %+v", results[0])
+	}
+}

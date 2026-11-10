@@ -1,5 +1,3 @@
-"use client";
-
 export function ResultSkeleton() {
   return (
     <div className="flex flex-col gap-2 animate-pulse" aria-busy="true" aria-label="Loading search results">

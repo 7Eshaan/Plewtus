@@ -117,7 +117,7 @@ func TestToMarkdown(t *testing.T) {
 		t.Fatalf("ParseHTML failed: %v", err)
 	}
 
-	md := ToMarkdown(parsed.MainNode, 0)
+	md := ToMarkdownWithBase(parsed.MainNode, 0, nil)
 
 	// Check headings
 	if !strings.Contains(md, "# Understanding Go Concurrency") {
@@ -168,7 +168,7 @@ func TestToMarkdown_Table(t *testing.T) {
 		t.Fatalf("ParseHTML failed: %v", err)
 	}
 
-	md := ToMarkdown(parsed.MainNode, 0)
+	md := ToMarkdownWithBase(parsed.MainNode, 0, nil)
 	if !strings.Contains(md, "| Engine | Status |") {
 		t.Errorf("expected table header in markdown, got:\n%s", md)
 	}

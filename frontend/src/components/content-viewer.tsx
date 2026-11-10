@@ -2,7 +2,9 @@
 
 import { useId, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ChevronDown, Copy, Check, Sparkles, FileText, User, Clock, AlignLeft } from "lucide-react";
+import { ChevronDown, Sparkles, FileText, User, Clock, AlignLeft } from "lucide-react";
+import { CopyButton } from "./ui/copy-button";
+import { SegmentedControl } from "./ui/segmented-control";
 import type { components } from "@/types/api";
 
 type ExtractedContent = components["schemas"]["ExtractedContent"];
@@ -22,7 +24,6 @@ const KIND_LABELS: Record<ContentKind, string> = {
 
 export function ContentViewer({ content, title }: ContentViewerProps) {
   const [expanded, setExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [viewMode, setViewMode] = useState<"rendered" | "raw">("rendered");
   const drawerId = useId();
 
@@ -44,16 +45,6 @@ export function ContentViewer({ content, title }: ContentViewerProps) {
   const sizeKb = (new Blob([copyText]).size / 1024).toFixed(1);
   const Icon = kind === "markdown" ? FileText : kind === "highlights" ? Sparkles : AlignLeft;
 
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(copyText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard access can be blocked (e.g. insecure context); nothing to do.
-    }
-  }
-
   return (
     <div className="mt-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 overflow-hidden">
       <div className="flex items-center justify-between gap-2 pr-2 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/50 transition-colors">
@@ -73,24 +64,7 @@ export function ContentViewer({ content, title }: ContentViewerProps) {
             className={`ml-auto w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500 transition-transform ${expanded ? "rotate-180" : ""}`}
           />
         </button>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:border-zinc-400 dark:hover:border-zinc-500 transition-colors cursor-pointer shrink-0"
-          aria-label="Copy extracted content"
-        >
-          {copied ? (
-            <>
-              <Check className="w-3 h-3 text-emerald-500" />
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Copied</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-3 h-3" />
-              <span>Copy</span>
-            </>
-          )}
-        </button>
+        <CopyButton getText={() => copyText} ariaLabel="Copy extracted content" size="sm" />
       </div>
 
       {expanded && (
@@ -98,28 +72,16 @@ export function ContentViewer({ content, title }: ContentViewerProps) {
           {kind === "markdown" && (
             <div className="flex items-center justify-between gap-2 text-xs pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
               <span className="font-mono text-[11px] text-zinc-500 truncate">Source: {content.title || title}</span>
-              <div
-                className="inline-flex items-center p-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 font-mono text-[11px] shrink-0"
-                role="radiogroup"
-                aria-label="Markdown view"
-              >
-                {(["rendered", "raw"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    role="radio"
-                    aria-checked={viewMode === mode}
-                    onClick={() => setViewMode(mode)}
-                    className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
-                      viewMode === mode
-                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50 shadow-2xs font-medium"
-                        : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
-                    }`}
-                  >
-                    {mode === "rendered" ? "Rendered" : "Raw"}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                ariaLabel="Markdown view"
+                size="sm"
+                value={viewMode}
+                onChange={setViewMode}
+                options={[
+                  { value: "rendered", label: "Rendered" },
+                  { value: "raw", label: "Raw" },
+                ]}
+              />
             </div>
           )}
 

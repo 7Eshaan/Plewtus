@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Terminal, Copy, Check, Info } from "lucide-react";
+import { Terminal, Info } from "lucide-react";
+import { CopyButton } from "./ui/copy-button";
+import { SegmentedControl } from "./ui/segmented-control";
 import { buildSearchRequest } from "@/lib/build-request";
 import {
   EXAMPLE_QUERIES,
@@ -40,7 +42,6 @@ export function CodeSnippets({
   advancedOptions,
 }: CodeSnippetsProps) {
   const [activeLang, setActiveLang] = useState<SnippetLang>("curl");
-  const [copied, setCopied] = useState(false);
 
   const payload = buildSearchRequest(query.trim() || EXAMPLE_QUERIES[1], providers, extractionMode, advancedOptions);
   const jsonPayloadString = JSON.stringify(payload, null, 2);
@@ -96,16 +97,6 @@ for item in data["results"]:
 
   const currentCode = getCode(activeLang);
 
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(currentCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback if blocked
-    }
-  }
-
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-2 text-left">
       {/* Header Bar */}
@@ -119,61 +110,18 @@ for item in data["results"]:
 
         {/* Language Tabs & Copy Button */}
         <div className="flex items-center gap-1.5">
-          <div className="inline-flex items-center p-0.5 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 font-mono text-xs">
-            <button
-              type="button"
-              onClick={() => setActiveLang("curl")}
-              className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
-                activeLang === "curl"
-                  ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-              }`}
-            >
-              cURL
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveLang("javascript")}
-              className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
-                activeLang === "javascript"
-                  ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-              }`}
-            >
-              JavaScript
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveLang("python")}
-              className={`px-2 py-0.5 rounded transition-all cursor-pointer ${
-                activeLang === "python"
-                  ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-              }`}
-            >
-              Python
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-600 text-xs font-mono transition-colors cursor-pointer shadow-2xs"
-            aria-label="Copy snippet to clipboard"
-            title="Copy code snippet"
-          >
-            {copied ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-emerald-500" />
-                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3.5 h-3.5" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
+          <SegmentedControl
+            ariaLabel="Snippet language"
+            size="sm"
+            value={activeLang}
+            onChange={setActiveLang}
+            options={[
+              { value: "curl", label: "cURL" },
+              { value: "javascript", label: "JavaScript" },
+              { value: "python", label: "Python" },
+            ]}
+          />
+          <CopyButton getText={() => currentCode} ariaLabel="Copy snippet to clipboard" />
         </div>
       </div>
 

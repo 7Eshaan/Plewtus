@@ -23,11 +23,6 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 		return nil, err
 	}
 
-	bodyStr := string(bodyBytes)
-	if isBlockedOrChallenge(bodyStr) {
-		return nil, ErrChallengeEncountered
-	}
-
 	doc, err := html.Parse(bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, err
@@ -143,12 +138,17 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 		position++
 	}
 
+	// A block page has no organic results. Checking only then avoids treating a
+	// real result that merely quotes the block-page wording as a challenge.
+	if len(results) == 0 && isBlockedOrChallenge(bodyBytes) {
+		return nil, ErrChallengeEncountered
+	}
 	return results, nil
 }
 
-func isBlockedOrChallenge(htmlContent string) bool {
-	lower := strings.ToLower(htmlContent)
-	return strings.Contains(lower, "robot check") ||
-		strings.Contains(lower, "will be unblocked shortly") ||
-		strings.Contains(lower, "verify you are human")
+func isBlockedOrChallenge(body []byte) bool {
+	lower := bytes.ToLower(body)
+	return bytes.Contains(lower, []byte("robot check")) ||
+		bytes.Contains(lower, []byte("will be unblocked shortly")) ||
+		bytes.Contains(lower, []byte("verify you are human"))
 }

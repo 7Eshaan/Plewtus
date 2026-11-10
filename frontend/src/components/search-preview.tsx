@@ -30,10 +30,12 @@ import { ResultSkeleton } from "./result-skeleton";
 import { EmptyState } from "./empty-state";
 import { ErrorState } from "./error-state";
 import { JsonViewer } from "./json-viewer";
+import { handleArrowNav } from "@/lib/arrow-nav";
 import { CodeSnippets } from "./code-snippets";
 import type { components } from "@/types/api";
 
 type SearchResponse = components["schemas"]["SearchResponse"];
+type SearchResult = components["schemas"]["SearchResult"];
 type ErrorResponse = components["schemas"]["ErrorResponse"];
 export type ActiveTab = "results" | "json" | "code";
 
@@ -50,7 +52,17 @@ interface SearchPreviewProps {
   onAdvancedOptionsChange: (options: AdvancedOptions) => void;
   activeTab: ActiveTab;
   onTabChange: (tab: ActiveTab) => void;
+  /** The most recent API response (the last page when more were loaded). */
   response: SearchResponse | null;
+  /** Results from every page loaded so far. */
+  results: SearchResult[];
+  /** The query the results on screen belong to. */
+  searchedQuery: string;
+  /** True when the controls changed since the results were fetched. */
+  stale: boolean;
+  canLoadMore: boolean;
+  loadingMore: boolean;
+  onLoadMore: () => void;
   error: ErrorResponse | null;
   onSelectSuggestion: (suggestion: string) => void;
 }
@@ -59,6 +71,7 @@ const EXTRACTION_OPTIONS: { value: ExtractionMode; label: string; hint: string }
   { value: "none", label: "None", hint: "Snippets only (fastest)" },
   { value: "highlights", label: "Highlights", hint: "Key sentences from each page" },
   { value: "markdown", label: "Markdown", hint: "Full cleaned page as Markdown" },
+  { value: "text", label: "Text", hint: "Full cleaned page as plain text" },
 ];
 
 const FRESHNESS_OPTIONS: { value: Freshness; label: string }[] = [
@@ -103,9 +116,10 @@ function OptionButton({
       role={role}
       aria-pressed={role === "button" ? selected : undefined}
       aria-checked={role === "radio" ? selected : undefined}
+      tabIndex={role === "radio" && !selected ? -1 : undefined}
       onClick={onClick}
       title={title}
-      className={`py-1.5 px-2.5 rounded-lg border text-center text-xs font-mono transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+      className={`py-1.5 px-2 rounded-lg border text-center whitespace-nowrap text-xs font-mono transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
         selected
           ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 border-zinc-300 dark:border-zinc-700 font-semibold shadow-xs"
           : "bg-zinc-100/60 dark:bg-zinc-900/60 text-zinc-500 dark:text-zinc-400 border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-800 dark:hover:text-zinc-200"
@@ -148,6 +162,38 @@ function TextField({
   );
 }
 
+/** One chip per queried engine: how long it took, or why it contributed nothing. */
+function EngineStatus({ response }: { response: SearchResponse }) {
+  const { queried, failed, timing_ms: timing } = response.metadata.providers;
+  const failures = new Map(failed.map((f) => [f.engine, f.error]));
+  const engines = [...new Set([...queried, ...failures.keys()])];
+  if (engines.length === 0) return null;
+  return (
+    <ul className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono shrink-0" aria-label="Engine status">
+      {engines.map((engine) => {
+        const failure = failures.get(engine);
+        const label = PROVIDER_LABELS[engine as ProviderName] ?? engine;
+        const ms = timing?.[engine];
+        return (
+          <li
+            key={engine}
+            title={failure ? `${label}: ${failure}` : `${label} answered in ${ms ?? "?"} ms`}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${
+              failure
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400"
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${failure ? "bg-amber-500" : "bg-emerald-500"}`} aria-hidden="true" />
+            <span>{label}</span>
+            <span className="text-zinc-400 dark:text-zinc-500">{failure ? "no results used" : ms !== undefined ? `${ms} ms` : ""}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function SearchPreview({
   query,
   onQueryChange,
@@ -162,11 +208,19 @@ export function SearchPreview({
   activeTab,
   onTabChange,
   response,
+  results,
+  searchedQuery,
+  stale,
+  canLoadMore,
+  loadingMore,
+  onLoadMore,
   error,
   onSelectSuggestion,
 }: SearchPreviewProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // On small screens the options are collapsed so results sit right under the search bar.
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const baseId = useId();
   const panelId = `${baseId}-panel`;
 
@@ -202,6 +256,11 @@ export function SearchPreview({
   }
 
   const allProviders = providers.length === ALL_PROVIDERS.length;
+  const optionsSummary = [
+    allProviders ? "All engines" : providers.map((p) => PROVIDER_LABELS[p]).join(", "),
+    FRESHNESS_OPTIONS.find((o) => o.value === advancedOptions.freshness)?.label ?? "Anytime",
+    extractionMode === "none" ? "Snippets only" : EXTRACTION_OPTIONS.find((o) => o.value === extractionMode)?.label,
+  ].join(" · ");
   const advancedActive =
     advancedOptions.limit !== DEFAULT_ADVANCED_OPTIONS.limit ||
     Boolean(advancedOptions.country || advancedOptions.language || advancedOptions.includeDomains || advancedOptions.excludeDomains);
@@ -257,10 +316,25 @@ export function SearchPreview({
           className="w-full md:w-64 lg:w-72 border-b md:border-b-0 md:border-r border-zinc-200 dark:border-zinc-800/80 p-3.5 sm:p-4 flex flex-col justify-between gap-3 bg-zinc-50/50 dark:bg-zinc-950/20 overflow-y-auto shrink-0"
           aria-label="Search options"
         >
-          <div className="flex flex-col gap-3.5">
-            <div className="flex flex-col gap-1.5" role="radiogroup" aria-labelledby={`${baseId}-extract`}>
+          <button
+            type="button"
+            onClick={() => setOptionsOpen((open) => !open)}
+            aria-expanded={optionsOpen}
+            aria-controls={`${baseId}-options`}
+            className="md:hidden flex items-center justify-between gap-2 text-left text-xs font-mono text-zinc-600 dark:text-zinc-400 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded"
+          >
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+              <span className="font-semibold text-zinc-800 dark:text-zinc-200 shrink-0">Options</span>
+              <span className="truncate text-zinc-500">{optionsSummary}</span>
+            </span>
+            <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${optionsOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          <div id={`${baseId}-options`} className={`${optionsOpen ? "flex" : "hidden"} md:flex flex-col gap-3.5`}>
+            <div className="flex flex-col gap-1.5" role="radiogroup" aria-labelledby={`${baseId}-extract`} onKeyDown={handleArrowNav}>
               <SectionLabel id={`${baseId}-extract`}>Extraction</SectionLabel>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 gap-1.5">
                 {EXTRACTION_OPTIONS.map((opt) => (
                   <OptionButton
                     key={opt.value}
@@ -293,7 +367,7 @@ export function SearchPreview({
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5" role="radiogroup" aria-labelledby={`${baseId}-fresh`}>
+            <div className="flex flex-col gap-1.5" role="radiogroup" aria-labelledby={`${baseId}-fresh`} onKeyDown={handleArrowNav}>
               <SectionLabel id={`${baseId}-fresh`}>Freshness</SectionLabel>
               <div className="flex flex-wrap gap-1.5">
                 {FRESHNESS_OPTIONS.map((opt) => (
@@ -342,7 +416,7 @@ export function SearchPreview({
                     </button>
                   </div>
 
-                  <div className="flex flex-col gap-1" role="radiogroup" aria-label="Number of results">
+                  <div className="flex flex-col gap-1" role="radiogroup" aria-label="Number of results" onKeyDown={handleArrowNav}>
                     <span className="text-[10px] font-mono text-zinc-500">Results</span>
                     <div className="grid grid-cols-4 gap-1">
                       {LIMIT_CHOICES.map((n) => (
@@ -388,7 +462,7 @@ export function SearchPreview({
 
           <a
             href="#quickstart"
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs font-mono text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-950 dark:hover:text-white transition-colors select-none"
+            className="hidden md:inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs font-mono text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-950 dark:hover:text-white transition-colors select-none"
           >
             <BookOpen className="w-3 h-3 text-zinc-400" />
             Use it from your code
@@ -402,6 +476,7 @@ export function SearchPreview({
               className="inline-flex items-center p-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-mono select-none"
               role="tablist"
               aria-label="Output view"
+              onKeyDown={handleArrowNav}
             >
               {TABS.map(({ value, label, icon: Icon }) => (
                 <button
@@ -411,6 +486,7 @@ export function SearchPreview({
                   id={`${baseId}-tab-${value}`}
                   aria-selected={activeTab === value}
                   aria-controls={panelId}
+                  tabIndex={activeTab === value ? 0 : -1}
                   onClick={() => onTabChange(value)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
                     activeTab === value
@@ -420,9 +496,9 @@ export function SearchPreview({
                 >
                   <Icon className="w-3.5 h-3.5" />
                   <span>{label}</span>
-                  {value === "results" && response && response.results.length > 0 && (
+                  {value === "results" && results.length > 0 && (
                     <span className="text-[10px] font-bold px-1.5 rounded-full bg-brand/10 text-brand dark:text-brand-light border border-brand/20">
-                      {response.results.length}
+                      {results.length}
                     </span>
                   )}
                 </button>
@@ -455,24 +531,57 @@ export function SearchPreview({
             {activeTab === "results" && (
               <>
                 {loading && <ResultSkeleton />}
-                {!loading && error && <ErrorState error={error} onRetry={() => onSearch()} />}
-                {!loading && !error && response && (
+                {!loading && error && (
+                  <div className={response ? "mb-2 shrink-0" : ""}>
+                    <ErrorState error={error} onRetry={response ? undefined : () => onSearch()} />
+                  </div>
+                )}
+                {!loading && response && (
                   <>
-                    {response.metadata.providers.failed.length > 0 && (
-                      <p className="text-[11px] font-mono text-amber-700 dark:text-amber-400/90 mb-2 truncate" title={response.metadata.providers.failed.map((f) => `${f.engine}: ${f.error}`).join("\n")}>
-                        Unavailable: {response.metadata.providers.failed.map((f) => PROVIDER_LABELS[f.engine as ProviderName] ?? f.engine).join(", ")}
-                      </p>
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mb-2 shrink-0">
+                      <EngineStatus response={response} />
+                      {results.length > 0 && (
+                        <span className="text-[10px] font-mono text-zinc-500">
+                          {results.length} {results.length === 1 ? "result" : "results"}
+                        </span>
+                      )}
+                    </div>
+                    {stale && (
+                      <div className="flex items-center justify-between gap-2 mb-2 px-2.5 py-1.5 rounded-lg border border-brand/20 bg-brand/5 text-[11px] font-mono text-zinc-600 dark:text-zinc-300 shrink-0">
+                        <span>Options changed since this search.</span>
+                        <button
+                          type="button"
+                          onClick={() => onSearch(searchedQuery)}
+                          className="inline-flex items-center gap-1 text-brand dark:text-brand-light font-semibold hover:underline cursor-pointer focus-visible:outline-none focus-visible:underline"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          Update results
+                        </button>
+                      </div>
                     )}
-                    {response.results.length > 0 ? (
+                    {results.length > 0 ? (
                       <ol className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto pr-1">
-                        {response.results.map((result) => (
+                        {results.map((result) => (
                           <li key={result.id}>
                             <ResultCard result={result} />
                           </li>
                         ))}
+                        {canLoadMore && (
+                          <li className="flex justify-center py-1">
+                            <button
+                              type="button"
+                              onClick={onLoadMore}
+                              disabled={loadingMore}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs font-mono text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-600 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                            >
+                              {loadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                              {loadingMore ? "Loading…" : "Load more results"}
+                            </button>
+                          </li>
+                        )}
                       </ol>
                     ) : (
-                      <EmptyState query={response.query} />
+                      !error && <EmptyState query={response.query} />
                     )}
                   </>
                 )}
@@ -496,7 +605,7 @@ export function SearchPreview({
               </>
             )}
 
-            {activeTab === "json" && <JsonViewer response={response} loading={loading} />}
+            {activeTab === "json" && <JsonViewer response={response} error={error} loading={loading} />}
 
             {activeTab === "code" && (
               <CodeSnippets

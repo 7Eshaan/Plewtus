@@ -2,8 +2,10 @@ package extractor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -167,6 +169,7 @@ func (e *Extractor) ExtractBatch(ctx context.Context, results []model.SearchResu
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
 			case <-ctx.Done():
+				results[idx].ContentError = describeExtractError(ctx.Err())
 				return
 			}
 
@@ -176,6 +179,7 @@ func (e *Extractor) ExtractBatch(ctx context.Context, results []model.SearchResu
 					slog.String("url", targetURL),
 					slog.Any("error", err),
 				)
+				results[idx].ContentError = describeExtractError(err)
 				return
 			}
 
@@ -188,4 +192,24 @@ func (e *Extractor) ExtractBatch(ctx context.Context, results []model.SearchResu
 
 	wg.Wait()
 	return results
+}
+
+// describeExtractError turns an extraction failure into a short reason that is
+// safe to show API callers.
+func describeExtractError(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timed out while fetching the page"
+	case errors.Is(err, context.Canceled):
+		return "extraction was cancelled"
+	}
+	msg := err.Error()
+	// Drop the "fetch failed for <url>: " prefix; the result already has the URL.
+	if _, rest, found := strings.Cut(msg, ": "); found && strings.HasPrefix(msg, "fetch failed for ") {
+		msg = rest
+	}
+	if len(msg) > 200 {
+		msg = msg[:200]
+	}
+	return msg
 }

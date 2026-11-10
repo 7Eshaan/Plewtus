@@ -136,15 +136,17 @@ func TestOrchestrator_CoalescesConcurrentCacheMisses(t *testing.T) {
 	}
 }
 
-func TestSearchCandidateLimitOverfetchesWithinProviderWindow(t *testing.T) {
-	for _, tc := range []struct{ limit, offset, want int }{
-		{limit: 10, offset: 0, want: 30},
-		{limit: 1, offset: 0, want: 30},
-		{limit: 10, offset: 40, want: 50},
-		{limit: 50, offset: 0, want: 50},
+func TestProviderBudgetFetchesPagesOnlyForDeepWindows(t *testing.T) {
+	for _, tc := range []struct{ limit, offset, want, pages int }{
+		{limit: 10, offset: 0, want: 10, pages: 1},
+		{limit: 1, offset: 0, want: 10, pages: 1},
+		{limit: 10, offset: 10, want: 20, pages: 2},
+		{limit: 10, offset: 40, want: 50, pages: 3},
+		{limit: 50, offset: 0, want: 50, pages: 3},
 	} {
-		if got := searchCandidateLimit(tc.limit, tc.offset); got != tc.want {
-			t.Errorf("searchCandidateLimit(%d, %d) = %d, want %d", tc.limit, tc.offset, got, tc.want)
+		want, pages := providerBudget(tc.limit, tc.offset)
+		if want != tc.want || pages != tc.pages {
+			t.Errorf("providerBudget(%d, %d) = (%d, %d), want (%d, %d)", tc.limit, tc.offset, want, pages, tc.want, tc.pages)
 		}
 	}
 }

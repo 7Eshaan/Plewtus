@@ -22,7 +22,59 @@ type queryProfile struct {
 }
 
 func newQueryProfile(query string) queryProfile {
+	query = stripSearchOperators(query)
 	return queryProfile{terms: meaningfulTokens(query), phrase: normalizedPhrase(query)}
+}
+
+// stripSearchOperators removes query syntax that must not be treated as
+// required words: negated terms (-car, -"used cars", -site:x), field operators
+// (site:, filetype:, inurl:), Boolean keywords, and quotes. Field operators that
+// carry content words (intitle:foo) keep the word.
+func stripSearchOperators(query string) string {
+	var kept []string
+	inNegatedPhrase := false
+	for _, field := range strings.Fields(query) {
+		if inNegatedPhrase {
+			if strings.HasSuffix(field, `"`) {
+				inNegatedPhrase = false
+			}
+			continue
+		}
+		if strings.HasPrefix(field, "-") && len(field) > 1 {
+			if strings.HasPrefix(field, `-"`) && !strings.HasSuffix(field[2:], `"`) {
+				inNegatedPhrase = true
+			}
+			continue
+		}
+		if field == "OR" || field == "AND" {
+			continue
+		}
+		lower := strings.ToLower(field)
+		skip := false
+		for _, op := range []string{"site:", "filetype:", "ext:", "inurl:", "allinurl:"} {
+			if strings.HasPrefix(lower, op) {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
+		}
+		for _, op := range []string{"intitle:", "allintitle:", "intext:", "allintext:", "inbody:"} {
+			if strings.HasPrefix(lower, op) {
+				field = field[len(op):]
+				break
+			}
+		}
+		field = strings.Trim(field, `"()`)
+		if field != "" {
+			kept = append(kept, field)
+		}
+	}
+	if len(kept) == 0 {
+		return query // nothing but operators; fall back to the literal text
+	}
+	return strings.Join(kept, " ")
 }
 
 func (q queryProfile) hasTerms() bool { return len(q.terms) > 0 }
@@ -36,9 +88,16 @@ func QueryRelevance(query, title, snippet string) (score float64, relevant bool)
 }
 
 func (q queryProfile) relevance(title, snippet string) (score float64, relevant bool) {
+	score, relevant, _ = q.match(title, snippet)
+	return score, relevant
+}
+
+// match scores a result and also reports coverage: the fraction of query
+// terms found anywhere in the title or snippet.
+func (q queryProfile) match(title, snippet string) (score float64, relevant bool, coverage float64) {
 	queryTerms := q.terms
 	if len(queryTerms) == 0 {
-		return 1, true
+		return 1, true, 1
 	}
 
 	titleTokens := tokenSet(title)
@@ -66,7 +125,7 @@ func (q queryProfile) relevance(title, snippet string) (score float64, relevant 
 		}
 	}
 	n := float64(len(queryTerms))
-	coverage := float64(matched) / n
+	coverage = float64(matched) / n
 	titleCoverage := float64(titleMatched) / n
 	snippetCoverage := float64(snippetMatched) / n
 	phraseMatch := q.containsPhrase(title) || q.containsPhrase(snippet)
@@ -82,7 +141,7 @@ func (q queryProfile) relevance(title, snippet string) (score float64, relevant 
 			minimumCoverage = 2
 		}
 	}
-	return score, !missingCompoundIdentifier && (phraseMatch || matched >= minimumCoverage)
+	return score, !missingCompoundIdentifier && (phraseMatch || matched >= minimumCoverage), coverage
 }
 
 func (q queryProfile) containsPhrase(text string) bool {
@@ -192,7 +251,7 @@ func tokenSet(value string) map[string]struct{} {
 		if normalized == "golang" {
 			normalized = "go"
 		}
-		tokens[normalized] = struct{}{}
+		tokens[stem(normalized)] = struct{}{}
 		token.Reset()
 	}
 	for _, r := range value {
@@ -214,4 +273,58 @@ func tokenSet(value string) map[string]struct{} {
 
 func isCJK(r rune) bool {
 	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
+}
+
+// stemExceptions are words whose trailing "s" is not a plural marker.
+var stemExceptions = map[string]struct{}{
+	"news": {}, "series": {}, "species": {}, "always": {}, "across": {}, "perhaps": {}, "towards": {}, "physics": {}, "mathematics": {},
+}
+
+// stem reduces common English inflections so "laptops" matches "laptop" and
+// "caching" matches "cache". It is deliberately light: it only needs to map
+// the query and the result text to the same form, not produce real words.
+func stem(token string) string {
+	if len(token) <= 3 {
+		return token
+	}
+	for i := 0; i < len(token); i++ {
+		if c := token[i]; c < 'a' || c > 'z' {
+			return token // digits, non-ASCII scripts, identifiers
+		}
+	}
+	if _, keep := stemExceptions[token]; keep {
+		return token
+	}
+	switch {
+	case strings.HasSuffix(token, "ies") && len(token) > 4:
+		token = token[:len(token)-3] + "y"
+	case strings.HasSuffix(token, "sses"), strings.HasSuffix(token, "xes"), strings.HasSuffix(token, "ches"), strings.HasSuffix(token, "shes"):
+		token = token[:len(token)-2]
+	case strings.HasSuffix(token, "s") && !strings.HasSuffix(token, "ss") && !strings.HasSuffix(token, "us") && !strings.HasSuffix(token, "is"):
+		token = token[:len(token)-1]
+	}
+	switch {
+	case strings.HasSuffix(token, "ing") && len(token) > 5:
+		token = undouble(token[:len(token)-3])
+	case strings.HasSuffix(token, "ed") && len(token) > 4:
+		token = undouble(token[:len(token)-2])
+	}
+	if len(token) > 3 && strings.HasSuffix(token, "e") {
+		token = token[:len(token)-1]
+	}
+	return token
+}
+
+// undouble collapses a doubled final consonant left by suffix removal
+// ("runn" -> "run"), except for letters that are commonly doubled in stems.
+func undouble(token string) string {
+	n := len(token)
+	if n < 3 || token[n-1] != token[n-2] {
+		return token
+	}
+	switch token[n-1] {
+	case 'l', 's', 'z', 'a', 'e', 'i', 'o', 'u':
+		return token
+	}
+	return token[:n-1]
 }

@@ -11,11 +11,6 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// ToMarkdown converts an HTML node and its subtree into clean, formatted Markdown.
-func ToMarkdown(n *html.Node, maxChars int) string {
-	return ToMarkdownWithBase(n, maxChars, nil)
-}
-
 // ToMarkdownWithBase converts HTML to Markdown, resolving relative link and
 // image URLs against base so they remain usable outside the source page.
 func ToMarkdownWithBase(n *html.Node, maxChars int, base *url.URL) string {
@@ -26,10 +21,25 @@ func ToMarkdownWithBase(n *html.Node, maxChars int, base *url.URL) string {
 	cleaned := cleanMarkdownOutput(raw)
 
 	if maxChars > 0 && len(cleaned) > maxChars {
-		return truncateCleanly(cleaned, maxChars)
+		return closeOpenFence(truncateCleanly(cleaned, maxChars))
 	}
 
 	return cleaned
+}
+
+// closeOpenFence terminates a code block that truncation cut in half, so the
+// rest of whatever the Markdown is embedded in is not swallowed as code.
+func closeOpenFence(markdown string) string {
+	open := false
+	for _, line := range strings.Split(markdown, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			open = !open
+		}
+	}
+	if open {
+		return strings.TrimRight(markdown, "\n") + "\n```"
+	}
+	return markdown
 }
 
 // ToText converts an HTML node and its subtree into clean, normalized plain text.

@@ -129,3 +129,141 @@ func TestRegression_PoisonedProviderReportedAsFailed(t *testing.T) {
 		}
 	}
 }
+
+func junkResults(n int) []model.RawSearchResult {
+	var junk []model.RawSearchResult
+	for i := 1; i <= n; i++ {
+		junk = append(junk, model.RawSearchResult{Title: fmt.Sprintf("PayPoint page %d", i), URL: fmt.Sprintf("https://junk.example/%d", i), Snippet: "login", Position: i})
+	}
+	return junk
+}
+
+// Regression: a lone provider serving an unrelated page for a specific query
+// yields no results (not the junk), and repeated junk opens its breaker.
+func TestRegression_LonePoisonedProviderReturnsNothingAndTripsBreaker(t *testing.T) {
+	reg := provider.NewRegistry()
+	reg.Register(&fixedProvider{name: "bing", results: junkResults(6)})
+	breakers := reliability.NewManager(reliability.BreakerOptions{FailureThreshold: 2, Cooldown: time.Minute})
+	o := New(reg, time.Second, "ua", testLogger()).WithBreakers(breakers)
+	req := func() *model.SearchRequest {
+		return &model.SearchRequest{Query: "rust ownership borrow checker", Limit: 10, Providers: []string{"bing"}}
+	}
+	for i := 0; i < 2; i++ {
+		resp, err := o.Search(context.Background(), req())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.Results) != 0 || len(resp.Metadata.Providers.Failed) != 1 || resp.Metadata.Stats.ProviderDiscardedCount != 6 {
+			t.Fatalf("expected junk discarded, got results=%d meta=%+v", len(resp.Results), resp.Metadata)
+		}
+	}
+	if breakers.Get("bing").State() != reliability.StateOpen {
+		t.Fatalf("expected breaker open after repeated off-topic responses, got %s", breakers.Get("bing").State())
+	}
+}
+
+// Regression: a healthy response closes the breaker (verdicts are reported
+// after the quality gate, so this path must still report success).
+func TestRegression_HealthyResponseReportsSuccess(t *testing.T) {
+	reg := provider.NewRegistry()
+	reg.Register(&fixedProvider{name: "duckduckgo", results: relevantResults()})
+	breakers := reliability.NewManager(reliability.BreakerOptions{FailureThreshold: 2, Cooldown: time.Minute})
+	breakers.Get("duckduckgo").ReportFailure(fmt.Errorf("earlier failure"))
+	o := New(reg, time.Second, "ua", testLogger()).WithBreakers(breakers)
+	if _, err := o.Search(context.Background(), &model.SearchRequest{Query: "golang concurrency", Limit: 10, Providers: []string{"duckduckgo"}}); err != nil {
+		t.Fatal(err)
+	}
+	// One more failure must not trip the breaker: the success reset the count.
+	breakers.Get("duckduckgo").ReportFailure(fmt.Errorf("later failure"))
+	if breakers.Get("duckduckgo").State() != reliability.StateClosed {
+		t.Fatal("expected success to reset the failure count")
+	}
+}
+
+// Regression: a response missing a provider is cached only briefly.
+func TestRegression_DegradedResponsesAreCachedBriefly(t *testing.T) {
+	reg := provider.NewRegistry()
+	reg.Register(&fixedProvider{name: "duckduckgo", results: relevantResults()})
+	reg.Register(&mockProvider{name: "yahoo", err: fmt.Errorf("upstream down")})
+	c := &ttlRecordingCache{MemoryCache: cache.New(cache.Options{TTL: 10 * time.Minute})}
+	o := New(reg, time.Second, "ua", testLogger()).WithCache(c)
+	if _, err := o.Search(context.Background(), &model.SearchRequest{Query: "golang concurrency", Limit: 10, Providers: []string{"duckduckgo", "yahoo"}}); err != nil {
+		t.Fatal(err)
+	}
+	if c.lastTTL != degradedCacheTTL {
+		t.Fatalf("expected degraded response cached for %s, got %s", degradedCacheTTL, c.lastTTL)
+	}
+}
+
+type ttlRecordingCache struct {
+	*cache.MemoryCache
+	lastTTL time.Duration
+}
+
+func (c *ttlRecordingCache) Set(key string, resp *model.SearchResponse) {
+	c.lastTTL = -1
+	c.MemoryCache.Set(key, resp)
+}
+
+func (c *ttlRecordingCache) SetWithTTL(key string, resp *model.SearchResponse, ttl time.Duration) {
+	c.lastTTL = ttl
+	c.MemoryCache.SetWithTTL(key, resp, ttl)
+}
+
+// Regression: once the other engines have answered, a hung engine is cut off
+// after the grace period instead of holding the response for its full timeout.
+func TestRegression_StragglerIsCutOffAfterGrace(t *testing.T) {
+	reg := provider.NewRegistry()
+	reg.Register(&fixedProvider{name: "bing", results: relevantResults()})
+	reg.Register(&fixedProvider{name: "duckduckgo", results: relevantResults()})
+	reg.Register(&mockProvider{name: "yahoo", delay: 3 * time.Second, results: relevantResults()})
+	breakers := reliability.NewManager(reliability.BreakerOptions{FailureThreshold: 1, Cooldown: time.Minute})
+	o := New(reg, 5*time.Second, "ua", testLogger()).WithBreakers(breakers).WithStragglerGrace(50 * time.Millisecond)
+
+	started := time.Now()
+	resp, err := o.Search(context.Background(), &model.SearchRequest{Query: "golang concurrency", Limit: 10, Providers: []string{"bing", "duckduckgo", "yahoo"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("expected the straggler to be cut off, search took %s", elapsed)
+	}
+	if len(resp.Metadata.Providers.Successful) != 2 || len(resp.Metadata.Providers.Failed) != 1 || resp.Metadata.Providers.Failed[0].Engine != "yahoo" {
+		t.Fatalf("unexpected provider metadata: %+v", resp.Metadata.Providers)
+	}
+	time.Sleep(50 * time.Millisecond) // let the cancelled provider report
+	if breakers.Get("yahoo").State() != reliability.StateClosed {
+		t.Fatal("a cut-off straggler must not count as a provider failure")
+	}
+}
+
+// Regression: providers are asked for further pages only for deep windows.
+func TestRegression_DeepWindowsRequestMorePages(t *testing.T) {
+	seen := make(chan model.ProviderRequest, 2)
+	reg := provider.NewRegistry()
+	reg.Register(&recordingProvider{seen: seen})
+	o := New(reg, time.Second, "ua", testLogger())
+	for _, req := range []*model.SearchRequest{
+		{Query: "golang concurrency", Limit: 10, Providers: []string{"rec"}},
+		{Query: "golang concurrency", Limit: 10, Offset: 20, Providers: []string{"rec"}},
+	} {
+		if _, err := o.Search(context.Background(), req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, deep := <-seen, <-seen
+	if first.MaxPages != 1 || first.Limit != 10 {
+		t.Fatalf("default page should cost one request per engine, got %+v", first)
+	}
+	if deep.MaxPages != 3 || deep.Limit != 30 {
+		t.Fatalf("offset 20 + limit 10 should request 30 results over 3 pages, got %+v", deep)
+	}
+}
+
+type recordingProvider struct{ seen chan model.ProviderRequest }
+
+func (p *recordingProvider) Name() string { return "rec" }
+func (p *recordingProvider) Search(ctx context.Context, req model.ProviderRequest) (*model.ProviderResponse, error) {
+	p.seen <- req
+	return &model.ProviderResponse{Engine: "rec", Results: relevantResults()}, nil
+}

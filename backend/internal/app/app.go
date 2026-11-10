@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"plewtus/internal/cache"
 	"plewtus/internal/config"
@@ -14,6 +15,9 @@ import (
 	"plewtus/internal/provider/all"
 	"plewtus/internal/reliability"
 )
+
+// maxPageFetchTimeout caps how long one page fetch may take during extraction.
+const maxPageFetchTimeout = 5 * time.Second
 
 // Components are the long-lived engine services built from configuration.
 type Components struct {
@@ -25,8 +29,14 @@ type Components struct {
 // and orchestrator from configuration.
 func Build(cfg *config.Config, logger *slog.Logger) *Components {
 	registry := all.NewRegistry(cfg.DefaultTimeout, cfg.UserAgent)
+	// A single page gets less than the whole extraction stage, so one slow
+	// site cannot hold back the pages that already finished.
+	pageTimeout := cfg.ExtractTimeout
+	if pageTimeout > maxPageFetchTimeout {
+		pageTimeout = maxPageFetchTimeout
+	}
 	ext := extractor.New(extractor.ExtractorOptions{
-		Timeout:   cfg.ExtractTimeout,
+		Timeout:   pageTimeout,
 		UserAgent: cfg.UserAgent,
 		Logger:    logger,
 	})
@@ -34,6 +44,7 @@ func Build(cfg *config.Config, logger *slog.Logger) *Components {
 	orch := orchestrator.New(registry, cfg.DefaultTimeout, cfg.UserAgent, logger).
 		WithExtractor(ext).
 		WithExtractTimeout(cfg.ExtractTimeout).
+		WithStragglerGrace(cfg.StragglerGrace).
 		WithBreakers(reliability.NewManager(reliability.BreakerOptions{
 			FailureThreshold: cfg.CircuitBreakerThreshold,
 			Cooldown:         cfg.CircuitBreakerCooldown,

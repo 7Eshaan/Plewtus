@@ -24,8 +24,8 @@
 ## Key Capabilities
 
 - **Zero Search API Keys Required** — Built-in resilient scrapers for DuckDuckGo, Bing, and Yahoo with automatic query escaping and anti-bot mitigation.
-- **Sub-Second Concurrent Search** — Fan-out queries across all providers in parallel with per-engine timeouts, circuit breakers, and graceful fallback.
-- **Relevance + consensus ranking** — Removes off-topic results (including decoy result pages some engines serve to bots), then ranks by query relevance blended with Reciprocal Rank Fusion consensus ($k=60$), after canonical URL deduplication.
+- **Concurrent Search** — Fan-out queries across all providers in parallel (typically 1–2.5 s uncached, milliseconds from cache) with per-engine timeouts, circuit breakers, a cut-off for one hung engine, and graceful fallback.
+- **Consensus ranking** — Deduplicates by canonical URL, removes off-topic results (including decoy result pages some engines serve to bots), then ranks with Reciprocal Rank Fusion ($k=60$): agreement between engines decides the order, and query relevance only separates near-ties.
 - **On-The-Fly Web Extraction** — Automatically strips boilerplate, adverts, and scripts, converting target web pages into clean Markdown, Highlights, or plain text.
 - **Native Model Context Protocol (MCP)** — Seamless stdio MCP integration with ChatGPT Desktop, OpenAI Codex CLI, Claude Desktop, Cursor, and local LLM harnesses (DeepSeek Harness, Ollama).
 - **Production-Grade Reliability** — Full SSRF protection (loopback and private IP blocking), thread-safe in-memory TTL caching, token bucket rate limits, and zero external database dependencies.
@@ -84,8 +84,8 @@ Run the full stack (Go Search API + Next.js Playground) with a single command:
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-username/PlewtusV1.git
-cd PlewtusV1
+git clone https://github.com/7Eshaan/Plewtus.git
+cd Plewtus
 
 # 2. Configure environment
 cp .env.example .env
@@ -130,6 +130,8 @@ Plewtus includes a native [Model Context Protocol](https://modelcontextprotocol.
 cd backend
 go build -o bin/plewtus-mcp ./cmd/plewtus-mcp
 ```
+
+Rebuild after pulling changes: MCP clients launch this binary, not the source.
 
 ### 1. ChatGPT Desktop (GUI)
 Under **Settings → MCP Servers → Connect to a custom MCP**:
@@ -228,7 +230,7 @@ curl -sS http://localhost:8080/search \
       "url": "https://go.dev/blog/pipelines",
       "snippet": "Go's concurrency primitives make it easy to construct streaming data pipelines...",
       "score": 0.032787,
-      "ranking_score": 0.9412,
+      "ranking_score": 0.6667,
       "engines": [
         {"name": "duckduckgo", "position": 1},
         {"name": "yahoo", "position": 1}
@@ -275,22 +277,12 @@ Plewtus is configured via environment variables:
 | `PLEWTUS_CACHE_ENABLED` | `true` | Enables the in-memory LRU search cache |
 | `PLEWTUS_CACHE_TTL_SECONDS` | `600` | Search result cache expiration in seconds |
 | `PLEWTUS_DEFAULT_TIMEOUT_MS` | `6000` | Max duration per upstream search provider request |
-| `PLEWTUS_EXTRACT_TIMEOUT_MS` | `8000` | Time budget for page extraction |
+| `PLEWTUS_EXTRACT_TIMEOUT_MS` | `8000` | Time budget for page extraction (each page is capped at 5 s) |
+| `PLEWTUS_STRAGGLER_GRACE_MS` | `1500` | How long the last engine may take once the others have answered (`0` disables) |
 | `PLEWTUS_FREE_TIER_RATE_LIMIT` | `10` | Free tier requests allowed per minute |
 | `PLEWTUS_FREE_TIER_DAILY_QUOTA` | `100` | Free tier requests allowed per UTC day |
 
 The full list is in [backend/docs/CONFIGURATION.md](backend/docs/CONFIGURATION.md).
-
---- | :--- | :--- |
-| `PORT` | `8080` | HTTP listening port for the REST API |
-| `PLEWTUS_AUTH_REQUIRED` | `false` | When `true`, rejects requests lacking a valid Bearer token |
-| `PLEWTUS_API_KEYS` | `""` | Comma-delimited list of authorized keys (e.g. `key1:free,key2:pro`) |
-| `PLEWTUS_PROVIDERS` | `duckduckgo,bing,yahoo` | Default providers queried per search |
-| `PLEWTUS_CACHE_ENABLED` | `true` | Enables in-memory LRU search cache |
-| `PLEWTUS_CACHE_TTL_SECONDS` | `300` | Search result cache expiration in seconds |
-| `PLEWTUS_DEFAULT_TIMEOUT` | `5s` | Max duration per upstream provider request |
-| `PLEWTUS_RATE_LIMIT_FREE` | `10` | Free tier requests allowed per minute |
-| `PLEWTUS_QUOTA_FREE` | `100` | Free tier requests allowed per day |
 
 ---
 
@@ -303,17 +295,23 @@ PlewtusV1/
 │   │   ├── plewtus/         # Unified server & CLI binary
 │   │   └── plewtus-mcp/     # Dedicated stdio MCP server binary
 │   ├── internal/
-│   │   ├── cache/           # Thread-safe in-memory TTL caching
-│   │   ├── extractor/       # HTML parser, readability & markdown formatter
-│   │   ├── mcp/             # Model Context Protocol JSON-RPC 2.0 handler
-│   │   ├── orchestrator/    # Concurrent execution & RRF rank fusion
+│   │   ├── app/             # Wiring shared by the HTTP and MCP servers
+│   │   ├── cache/           # Thread-safe in-memory LRU cache with TTL
+│   │   ├── config/          # Environment configuration
+│   │   ├── extractor/       # SSRF-safe fetcher, HTML cleaner & Markdown converter
+│   │   ├── mcp/             # Model Context Protocol JSON-RPC 2.0 server
+│   │   ├── model/           # Request and response types
+│   │   ├── orchestrator/    # Concurrent provider dispatch and response assembly
+│   │   ├── pipeline/        # URL normalization, deduplication, relevance, RRF ranking
 │   │   ├── provider/        # DuckDuckGo, Bing, and Yahoo scrapers
-│   │   └── reliability/     # Circuit breakers, retries, and SSRF guards
+│   │   ├── reliability/     # Circuit breakers
+│   │   ├── server/          # HTTP routes and middleware
+│   │   └── usage/           # API keys, rate limits, daily quotas
 │   └── docs/                # OpenAPI specification and API manuals
 ├── frontend/
 │   ├── src/app/             # Next.js 16 App Router UI & API proxy
 │   └── src/components/      # Playground, filters, and JSON viewer
-└── docker-compose.yml       # Production-ready container orchestration
+└── docker-compose.yml       # Runs the API and the playground together
 ```
 
 ---

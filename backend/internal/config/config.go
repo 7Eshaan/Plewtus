@@ -17,6 +17,7 @@ type Config struct {
 	TrustedProxies          []string
 	DefaultTimeout          time.Duration
 	ExtractTimeout          time.Duration
+	StragglerGrace          time.Duration
 	MaxLimit                int
 	DefaultLimit            int
 	UserAgent               string
@@ -48,6 +49,7 @@ func Load() *Config {
 		TrustedProxies:   getEnvAsSlice("PLEWTUS_TRUSTED_PROXIES", nil),
 		DefaultTimeout:   getEnvAsDurationMs("PLEWTUS_DEFAULT_TIMEOUT_MS", 6000),
 		ExtractTimeout:   getEnvAsDurationMs("PLEWTUS_EXTRACT_TIMEOUT_MS", 8000),
+		StragglerGrace:   getEnvAsDurationMs("PLEWTUS_STRAGGLER_GRACE_MS", 1500),
 		MaxLimit:         getEnvAsInt("PLEWTUS_MAX_LIMIT", 50),
 		DefaultLimit:     getEnvAsInt("PLEWTUS_DEFAULT_LIMIT", 10),
 		UserAgent: getEnv(

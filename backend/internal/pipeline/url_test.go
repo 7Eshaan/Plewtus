@@ -24,15 +24,15 @@ func TestNormalizeURL_TrackingParameters(t *testing.T) {
 			expectedKey: "example.com/products/shoes",
 		},
 		{
-			name:        "Semantic query params preserved while tracking stripped",
+			name:        "Semantic query params preserved while tracking stripped; referral params only ignored for matching",
 			input:       "https://pkg.go.dev/net/http?utm_source=ddg&tab=doc&ref=newsletter",
-			expectedURL: "https://pkg.go.dev/net/http?tab=doc",
+			expectedURL: "https://pkg.go.dev/net/http?tab=doc&ref=newsletter",
 			expectedKey: "pkg.go.dev/net/http?tab=doc",
 		},
 		{
-			name:        "Query parameters deterministically sorted",
+			name:        "Query order kept for display, sorted for matching",
 			input:       "https://example.com/search?z=3&a=1&m=2",
-			expectedURL: "https://example.com/search?a=1&m=2&z=3",
+			expectedURL: "https://example.com/search?z=3&a=1&m=2",
 			expectedKey: "example.com/search?a=1&m=2&z=3",
 		},
 	}
@@ -129,5 +129,24 @@ func TestNormalizeURL_PreservesCaseSensitivePathAndQuery(t *testing.T) {
 	}
 	if pathUpper == pathLower || pathUpper == queryLower {
 		t.Fatalf("case-sensitive path/query variants were merged: %q %q %q", pathUpper, pathLower, queryLower)
+	}
+}
+
+// Regression: the displayed URL must still open the same page.
+func TestNormalizeURL_DisplayURLIsNotRewritten(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://example.com/a%2Fb/c":               "https://example.com/a%2Fb/c",
+		"https://example.com/page?v":                "https://example.com/page?v",
+		"https://example.com/search?q=a%20b&z=1":    "https://example.com/search?q=a%20b&z=1",
+		"https://example.com/docs/":                 "https://example.com/docs/",
+		"https://github.com/o/r/blob/x?ref=main":    "https://github.com/o/r/blob/x?ref=main",
+		"HTTP://Example.com:80/Index.HTML#frag":     "http://example.com/Index.HTML",
+		"https://example.com/x?utm_source=a&id=7#y": "https://example.com/x?id=7",
+		"https://en.wikipedia.org/wiki/C++":         "https://en.wikipedia.org/wiki/C++",
+	} {
+		got, _, err := NormalizeURL(in)
+		if err != nil || got != want {
+			t.Errorf("NormalizeURL(%q) = %q, %v; want %q", in, got, err, want)
+		}
 	}
 }

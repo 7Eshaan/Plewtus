@@ -36,24 +36,45 @@ func (p *Provider) Name() string {
 	return "yahoo"
 }
 
-// Search executes a search query against Yahoo.
+// Search executes a search query against Yahoo, fetching further result
+// pages while the request wants more results than have been collected.
 func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*model.ProviderResponse, error) {
 	start := time.Now()
+	want, maxPages := provider.PageBudget(req)
 
-	query := provider.BuildSearchQuery(req)
+	var all []model.RawSearchResult
+	seen := make(map[string]bool)
+	for page := 0; page < maxPages && len(all) < want; page++ {
+		results, err := p.fetchPage(ctx, req, len(all))
+		if err != nil {
+			if page == 0 {
+				return nil, err
+			}
+			break // keep what earlier pages returned
+		}
+		var added int
+		if all, added = provider.AppendPage(all, seen, results); added == 0 {
+			break
+		}
+	}
+	if len(all) > want {
+		all = all[:want]
+	}
+
+	// Zero organic results is a legitimate outcome (e.g. narrow site: filters)
+	// and must not count as a provider failure. Block pages are reported by the
+	// parser as ErrChallengeEncountered instead.
+	return &model.ProviderResponse{Engine: p.Name(), Results: all, Took: time.Since(start)}, nil
+}
+
+// fetchPage requests the result page that starts after `collected` results.
+func (p *Provider) fetchPage(ctx context.Context, req model.ProviderRequest, collected int) ([]model.RawSearchResult, error) {
 	params := url.Values{}
-	params.Set("p", query)
+	params.Set("p", provider.BuildSearchQuery(req))
+	if collected > 0 {
+		params.Set("b", strconv.Itoa(collected+1)) // 1-based index of the first result
+	}
 
-	fetchCount := req.Limit
-	if req.Offset > 0 {
-		fetchCount = req.Limit + req.Offset
-	}
-	if fetchCount > 50 {
-		fetchCount = 50
-	}
-	if fetchCount > 0 {
-		params.Set("n", strconv.Itoa(fetchCount))
-	}
 	lang := req.Language
 	if lang == "" {
 		lang = "en"
@@ -92,8 +113,6 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 		if err != nil {
 			return nil, err
 		}
-
-		httpReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
 		httpReq.Header.Set("Accept-Language", provider.AcceptLanguage(lang))
 		httpReq.Header.Set("Referer", "https://search.yahoo.com/")
 
@@ -128,19 +147,11 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 	if err != nil {
 		return nil, fmt.Errorf("failed reading yahoo response body: %w", err)
 	}
-
-	results, err := ParseHTMLResponse(bytes.NewReader(bodyBytes), req.Limit)
+	results, err := ParseHTMLResponse(bytes.NewReader(bodyBytes), 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing yahoo response: %w", err)
 	}
-	// Zero organic results is a legitimate outcome (e.g. narrow site: filters)
-	// and must not count as a provider failure. Block pages are reported by the
-	// parser as ErrChallengeEncountered instead.
-	return &model.ProviderResponse{
-		Engine:  p.Name(),
-		Results: results,
-		Took:    time.Since(start),
-	}, nil
+	return results, nil
 }
 
 func isRetryable(err error) bool {

@@ -4,15 +4,17 @@ import "time"
 
 // ProviderRequest is the internal request passed to search provider scrapers.
 type ProviderRequest struct {
-	Query          string
+	Query string
+	// Limit is how many results the caller wants from this provider. Engines
+	// return roughly one page (7-10 results) per request, so providers fetch
+	// further pages, up to MaxPages, until Limit is reached.
 	Limit          int
-	Offset         int
+	MaxPages       int
 	Freshness      string
 	Country        string
 	Language       string
 	IncludeDomains []string
 	ExcludeDomains []string
-	UserAgent      string
 	Timeout        time.Duration
 }
 

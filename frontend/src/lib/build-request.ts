@@ -22,7 +22,8 @@ export function buildSearchRequest(
   query: string,
   providers: ProviderName[],
   extractionMode: ExtractionMode,
-  options: AdvancedOptions
+  options: AdvancedOptions,
+  offset = 0
 ): SearchRequest {
   const payload: SearchRequest = { query: query.trim() };
 
@@ -41,12 +42,8 @@ export function buildSearchRequest(
   if (exclude.length) payload.exclude_domains = exclude;
 
   if (extractionMode !== "none") {
-    payload.extract = {
-      enabled: true,
-      mode: extractionMode,
-      max_pages: options.maxPages,
-      max_chars_per_page: options.maxCharsPerPage,
-    };
+    payload.extract = { enabled: true, mode: extractionMode };
   }
+  if (offset > 0) payload.offset = offset;
   return payload;
 }

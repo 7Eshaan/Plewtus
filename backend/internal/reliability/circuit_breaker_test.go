@@ -168,11 +168,6 @@ func TestManager(t *testing.T) {
 	if !mgr.IsHealthy("bing") {
 		t.Fatal("expected bing to remain healthy")
 	}
-
-	mgr.ResetAll()
-	if !mgr.IsHealthy("duckduckgo") {
-		t.Fatal("expected duckduckgo healthy after reset")
-	}
 }
 
 // Regression: a half-open probe whose caller cancelled must free the probe

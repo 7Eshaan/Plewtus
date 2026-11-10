@@ -50,3 +50,34 @@ func NormalizeCountryCode(country string) string {
 	}
 	return country
 }
+
+// PageBudget returns how many results a provider should collect and how many
+// result pages it may fetch for a request.
+func PageBudget(req model.ProviderRequest) (want, maxPages int) {
+	want = req.Limit
+	if want <= 0 {
+		want = 10
+	}
+	maxPages = req.MaxPages
+	if maxPages < 1 {
+		maxPages = 1
+	}
+	return want, maxPages
+}
+
+// AppendPage appends a newly fetched result page to all, skipping URLs already
+// collected from earlier pages and renumbering positions so they continue
+// across pages. It reports how many results were new.
+func AppendPage(all []model.RawSearchResult, seen map[string]bool, page []model.RawSearchResult) ([]model.RawSearchResult, int) {
+	added := 0
+	for _, r := range page {
+		if seen[r.URL] {
+			continue
+		}
+		seen[r.URL] = true
+		r.Position = len(all) + 1
+		all = append(all, r)
+		added++
+	}
+	return all, added
+}

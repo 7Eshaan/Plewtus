@@ -43,6 +43,7 @@ var trackingParams = map[string]bool{
 
 	// Microsoft / Bing
 	"msclkid": true,
+	"msockid": true,
 	"cvid":    true,
 
 	// Yahoo
@@ -68,12 +69,23 @@ var trackingParams = map[string]bool{
 	"ttclid": true,
 	"igshid": true,
 
-	// Generic referral & click tracking
-	"ref":       true,
-	"ref_":      true,
-	"referrer":  true,
+	// Generic click tracking
 	"spm":       true,
 	"_openstat": true,
+}
+
+// referralParams usually carry a referrer and do not change the page, so they
+// are ignored when comparing URLs. They stay in the displayed URL because some
+// sites give them meaning (for example ?ref=<branch> on code hosts).
+var referralParams = map[string]bool{
+	"ref":      true,
+	"ref_":     true,
+	"referrer": true,
+}
+
+func isTrackingParam(name string) bool {
+	name = strings.ToLower(name)
+	return trackingParams[name] || strings.HasPrefix(name, "utm_")
 }
 
 var defaultIndexFiles = []string{
@@ -84,8 +96,16 @@ var defaultIndexFiles = []string{
 	"/default.aspx",
 }
 
-// NormalizeURL canonicalizes a raw URL by stripping tracking parameters, normalizing scheme/host,
-// removing fragments, and producing both a clean URL and a normalized comparison key for deduplication.
+// NormalizeURL returns a clean display URL and a canonical comparison key.
+//
+// The display URL changes as little as possible so it still opens the same
+// page: scheme and host are lowercased, default ports, fragments, and tracking
+// parameters are removed, and everything else (path, encoding, parameter
+// order) is left exactly as the engine reported it.
+//
+// The canonical key is aggressive, because it only decides whether two results
+// are the same page: it ignores the scheme, a leading "www.", trailing slashes,
+// default index files, referral parameters, and parameter order.
 func NormalizeURL(rawURL string) (cleanURL string, canonicalKey string, err error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
@@ -110,80 +130,77 @@ func NormalizeURL(rawURL string) (cleanURL string, canonicalKey string, err erro
 		return "", "", fmt.Errorf("invalid url %q: embedded credentials are not allowed", rawURL)
 	}
 
-	// 1. Normalize Scheme
 	scheme := strings.ToLower(parsed.Scheme)
 	if scheme != "http" && scheme != "https" {
 		scheme = "https"
 	}
-	parsed.Scheme = scheme
-
-	// 2. Normalize Host (lowercased, strip default port)
 	host := strings.ToLower(parsed.Host)
-	if scheme == "http" && strings.HasSuffix(host, ":80") {
+	if scheme == "http" {
 		host = strings.TrimSuffix(host, ":80")
-	} else if scheme == "https" && strings.HasSuffix(host, ":443") {
+	} else {
 		host = strings.TrimSuffix(host, ":443")
 	}
-	parsed.Host = host
 
-	// 3. Strip Fragments (client-side anchors)
-	parsed.Fragment = ""
-	parsed.RawFragment = ""
+	// Split the query once: displayed pairs keep their original text and order.
+	var displayPairs []string
+	keyValues := url.Values{}
+	for _, pair := range strings.Split(parsed.RawQuery, "&") {
+		if pair == "" {
+			continue
+		}
+		rawName, rawValue, _ := strings.Cut(pair, "=")
+		name, nameErr := url.QueryUnescape(rawName)
+		if nameErr != nil {
+			name = rawName
+		}
+		if isTrackingParam(name) {
+			continue
+		}
+		displayPairs = append(displayPairs, pair)
+		if referralParams[strings.ToLower(name)] {
+			continue
+		}
+		value, valueErr := url.QueryUnescape(rawValue)
+		if valueErr != nil {
+			value = rawValue
+		}
+		keyValues.Add(name, value)
+	}
 
-	// 4. Normalize Path (clean slashes, strip index.html)
-	uPath := parsed.Path
-	if uPath == "" || uPath == "/" {
-		uPath = "/"
+	displayPath := parsed.EscapedPath()
+	if displayPath == "" {
+		displayPath = "/"
+	}
+	cleanURL = scheme + "://" + host + displayPath
+	if len(displayPairs) > 0 {
+		cleanURL += "?" + strings.Join(displayPairs, "&")
+	}
+
+	// Canonical key: cleaned path without index files or a trailing slash.
+	keyPath := parsed.Path
+	if keyPath == "" || keyPath == "/" {
+		keyPath = "/"
 	} else {
-		uPath = path.Clean(uPath)
-		// Check for default index files
-		lowPath := strings.ToLower(uPath)
+		keyPath = path.Clean(keyPath)
+		lowPath := strings.ToLower(keyPath)
 		for _, idx := range defaultIndexFiles {
 			if strings.HasSuffix(lowPath, idx) {
-				uPath = uPath[:len(uPath)-len(idx)]
-				if uPath == "" {
-					uPath = "/"
-				}
+				keyPath = keyPath[:len(keyPath)-len(idx)]
 				break
 			}
 		}
-	}
-	parsed.Path = uPath
-
-	// 5. Filter Query Parameters (strip analytics/tracking parameters)
-	q := parsed.Query()
-	for k := range q {
-		lowK := strings.ToLower(k)
-		if trackingParams[lowK] || strings.HasPrefix(lowK, "utm_") {
-			q.Del(k)
+		if keyPath == "" {
+			keyPath = "/"
+		}
+		if !strings.HasPrefix(keyPath, "/") {
+			keyPath = "/" + keyPath
 		}
 	}
 
-	if len(q) == 0 {
-		parsed.RawQuery = ""
-	} else {
-		// url.Values.Encode() sorts keys deterministically
-		parsed.RawQuery = q.Encode()
-	}
-
-	cleanURL = parsed.String()
-
-	// 6. Build Canonical Comparison Key (used to detect duplicate pages)
-	// Strip www. prefix for canonical key comparison
-	canonHost := strings.TrimPrefix(host, "www.")
-
-	canonPath := uPath
-	if canonPath != "/" {
-		canonPath = strings.TrimSuffix(canonPath, "/")
-	}
-	if canonPath != "" && !strings.HasPrefix(canonPath, "/") {
-		canonPath = "/" + canonPath
-	}
-
 	// Hosts are case-insensitive, but URL paths and query values may not be.
-	canonicalKey = canonHost + canonPath
-	if parsed.RawQuery != "" {
-		canonicalKey += "?" + parsed.RawQuery
+	canonicalKey = strings.TrimPrefix(host, "www.") + keyPath
+	if len(keyValues) > 0 {
+		canonicalKey += "?" + keyValues.Encode() // Encode sorts by key
 	}
 
 	return cleanURL, canonicalKey, nil

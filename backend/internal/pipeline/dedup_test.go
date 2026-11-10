@@ -51,7 +51,7 @@ func TestDeduplicate_IdenticalURLsAcrossEngines(t *testing.T) {
 		},
 	}
 
-	results, dedupedCount := Deduplicate(responses, 10)
+	results, dedupedCount, _ := DeduplicateDetailed(responses, DeduplicateOptions{Limit: 10})
 
 	if dedupedCount != 2 {
 		t.Fatalf("expected 2 unique pages, got %d", dedupedCount)
@@ -123,7 +123,7 @@ func TestDeduplicate_EngineConsensusRanking(t *testing.T) {
 		},
 	}
 
-	results, dedupedCount := Deduplicate(responses, 10)
+	results, dedupedCount, _ := DeduplicateDetailed(responses, DeduplicateOptions{Limit: 10})
 
 	if dedupedCount != 3 {
 		t.Fatalf("expected 3 unique pages, got %d", dedupedCount)
@@ -178,7 +178,7 @@ func TestDeduplicate_TitleTruncationSelection(t *testing.T) {
 		},
 	}
 
-	results, _ := Deduplicate(responses, 10)
+	results, _, _ := DeduplicateDetailed(responses, DeduplicateOptions{Limit: 10})
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -202,7 +202,7 @@ func TestDeduplicate_LimitEnforcement(t *testing.T) {
 		},
 	}
 
-	results, dedupedCount := Deduplicate(responses, 2)
+	results, dedupedCount, _ := DeduplicateDetailed(responses, DeduplicateOptions{Limit: 2})
 
 	if dedupedCount != 5 {
 		t.Errorf("expected dedupedCount 5 before limit truncation, got %d", dedupedCount)
@@ -214,12 +214,12 @@ func TestDeduplicate_LimitEnforcement(t *testing.T) {
 }
 
 func TestDeduplicate_EmptyResponses(t *testing.T) {
-	results, count := Deduplicate(nil, 10)
+	results, count, _ := DeduplicateDetailed(nil, DeduplicateOptions{Limit: 10})
 	if len(results) != 0 || count != 0 {
 		t.Errorf("expected empty results on nil input")
 	}
 
-	results, count = Deduplicate([]*model.ProviderResponse{}, 10)
+	results, count, _ = DeduplicateDetailed([]*model.ProviderResponse{}, DeduplicateOptions{Limit: 10})
 	if len(results) != 0 || count != 0 {
 		t.Errorf("expected empty results on empty input")
 	}
@@ -238,7 +238,7 @@ func TestDeduplicate_IncludeDomainsFilter(t *testing.T) {
 		},
 	}
 
-	results, count := DeduplicateWithOptions(responses, DeduplicateOptions{
+	results, count, _ := DeduplicateDetailed(responses, DeduplicateOptions{
 		Limit:          10,
 		IncludeDomains: []string{"go.dev"},
 	})
@@ -271,7 +271,7 @@ func TestDeduplicate_ExcludeDomainsFilter(t *testing.T) {
 		},
 	}
 
-	results, count := DeduplicateWithOptions(responses, DeduplicateOptions{
+	results, count, _ := DeduplicateDetailed(responses, DeduplicateOptions{
 		Limit:          10,
 		ExcludeDomains: []string{"spam.com"},
 	})
@@ -302,7 +302,7 @@ func TestDeduplicate_OffsetAndLimit(t *testing.T) {
 	}
 
 	// Offset 2, Limit 2 -> returns items at index 2 and 3 (P3 and P4)
-	results, count := DeduplicateWithOptions(responses, DeduplicateOptions{
+	results, count, _ := DeduplicateDetailed(responses, DeduplicateOptions{
 		Limit:  2,
 		Offset: 2,
 	})
@@ -320,7 +320,7 @@ func TestDeduplicate_OffsetAndLimit(t *testing.T) {
 	}
 
 	// Offset beyond total -> empty slice
-	beyondResults, _ := DeduplicateWithOptions(responses, DeduplicateOptions{
+	beyondResults, _, _ := DeduplicateDetailed(responses, DeduplicateOptions{
 		Limit:  2,
 		Offset: 10,
 	})
@@ -366,7 +366,7 @@ func TestDeduplicateMergesTitleAndSnippetByQueryFit(t *testing.T) {
 			Snippet: "Lando Norris is a British racing driver competing in Formula One.", Position: 2,
 		}}},
 	}
-	results, _ := DeduplicateWithOptions(responses, DeduplicateOptions{Query: "Lando Norris", Limit: 10})
+	results, _, _ := DeduplicateDetailed(responses, DeduplicateOptions{Query: "Lando Norris", Limit: 10})
 	if len(results) != 1 {
 		t.Fatalf("expected one merged result, got %d", len(results))
 	}

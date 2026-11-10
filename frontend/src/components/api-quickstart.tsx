@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Check, Code2, Globe, Cpu, ShieldCheck, Sparkles, FileJson } from "lucide-react";
+import { Code2, Globe, Cpu, ShieldCheck, Sparkles, FileJson } from "lucide-react";
+import { CopyButton } from "./ui/copy-button";
+import { SegmentedControl } from "./ui/segmented-control";
 
 type CodeLang = "curl" | "typescript" | "python" | "go";
 
@@ -129,7 +131,7 @@ const SAMPLE_RESPONSE = `{
       "rank": 1,
       "score": 0.048918,
       "relevance_score": 1,
-      "ranking_score": 0.998919,
+      "ranking_score": 0.994667,
       "title": "In Search of an Understandable Consensus Algorithm",
       "url": "https://raft.github.io/",
       "snippet": "Raft is a consensus algorithm for managing a replicated log...",
@@ -148,46 +150,29 @@ const SAMPLE_RESPONSE = `{
   ],
   "metadata": {
     "total_results": 1,
-    "took_ms": 142,
+    "took_ms": 1420,
     "providers": {
       "queried": ["duckduckgo", "bing", "yahoo"],
-      "successful": ["duckduckgo", "bing", "yahoo"],
-      "failed": []
+      "successful": ["bing", "duckduckgo", "yahoo"],
+      "failed": [],
+      "timing_ms": { "bing": 410, "duckduckgo": 780, "yahoo": 1390 }
     },
     "stats": {
       "raw_count": 3,
-      "deduped_count": 1
+      "deduped_count": 1,
+      "relevance_rejected_count": 0,
+      "domain_rejected_count": 0,
+      "invalid_url_count": 0,
+      "duplicate_count": 2,
+      "provider_discarded_count": 0
     },
-    "cached": false,
     "timestamp": "2026-11-05T09:00:00Z"
   }
 }`;
 
 export function ApiQuickstart() {
   const [activeLang, setActiveLang] = useState<CodeLang>("curl");
-  const [copiedCode, setCopiedCode] = useState(false);
-  const [copiedResponse, setCopiedResponse] = useState(false);
   const [activeTab, setActiveTab] = useState<"request" | "response">("request");
-
-  async function handleCopyCode() {
-    try {
-      await navigator.clipboard.writeText(CODE_EXAMPLES[activeLang].code);
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
-    } catch {
-      // Fallback
-    }
-  }
-
-  async function handleCopyResponse() {
-    try {
-      await navigator.clipboard.writeText(SAMPLE_RESPONSE);
-      setCopiedResponse(true);
-      setTimeout(() => setCopiedResponse(false), 2000);
-    } catch {
-      // Fallback
-    }
-  }
 
   return (
     <section id="quickstart" className="w-full pt-8 pb-4 flex flex-col gap-6 scroll-mt-16">
@@ -200,7 +185,7 @@ export function ApiQuickstart() {
           Direct HTTP &amp; Code Integration
         </h2>
         <p className="text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl leading-relaxed">
-          Plewtus exposes a unified JSON endpoint. Send a single POST request to query DuckDuckGo, Bing, and Yahoo simultaneously with relevance-aware consensus ranking, canonical deduplication, and optional content extraction.
+          Plewtus exposes a unified JSON endpoint. Send a single POST request to query DuckDuckGo, Bing, and Yahoo simultaneously, with canonical deduplication, consensus ranking, and optional content extraction.
         </p>
       </div>
 
@@ -225,9 +210,9 @@ export function ApiQuickstart() {
         <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-1 shadow-2xs">
           <div className="flex items-center gap-1.5 text-zinc-900 dark:text-zinc-100 font-semibold">
             <Sparkles className="w-3.5 h-3.5 text-brand dark:text-brand-light" />
-            <span>Relevance-aware ranking</span>
+            <span>Consensus ranking</span>
           </div>
-          <span className="text-[11px] text-zinc-500">0.8 relevance + 0.2 normalized RRF</span>
+          <span className="text-[11px] text-zinc-500">RRF with a small relevance boost</span>
         </div>
 
         <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-1 shadow-2xs">
@@ -243,73 +228,48 @@ export function ApiQuickstart() {
       <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] overflow-hidden shadow-2xs flex flex-col">
         {/* Editor Toolbar */}
         <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 bg-zinc-50/60 dark:bg-zinc-900/40">
-          {/* Main Request / Response Switcher */}
-          <div className="inline-flex items-center p-0.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 font-mono text-xs">
-            <button
-              type="button"
-              onClick={() => setActiveTab("request")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md transition-all cursor-pointer ${
-                activeTab === "request"
-                  ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-              }`}
-            >
-              <Code2 className="w-3.5 h-3.5 text-brand dark:text-brand-light" />
-              <span>API Request</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("response")}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md transition-all cursor-pointer ${
-                activeTab === "response"
-                  ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-              }`}
-            >
-              <FileJson className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Response JSON</span>
-            </button>
-          </div>
+          <SegmentedControl
+            ariaLabel="Example"
+            value={activeTab}
+            onChange={setActiveTab}
+            options={[
+              {
+                value: "request",
+                label: (
+                  <>
+                    <Code2 className="w-3.5 h-3.5 text-brand dark:text-brand-light" />
+                    API Request
+                  </>
+                ),
+              },
+              {
+                value: "response",
+                label: (
+                  <>
+                    <FileJson className="w-3.5 h-3.5 text-emerald-500" />
+                    Response JSON
+                  </>
+                ),
+              },
+            ]}
+          />
 
-          {/* Sub-actions: Languages or Copy */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {activeTab === "request" && (
-              <div className="inline-flex items-center p-0.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 font-mono text-xs">
-                {(Object.keys(CODE_EXAMPLES) as CodeLang[]).map((lang) => (
-                  <button
-                    key={lang}
-                    type="button"
-                    onClick={() => setActiveLang(lang)}
-                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                      activeLang === lang
-                        ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                        : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                    }`}
-                  >
-                    {CODE_EXAMPLES[lang].label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                ariaLabel="Language"
+                value={activeLang}
+                onChange={setActiveLang}
+                options={(Object.keys(CODE_EXAMPLES) as CodeLang[]).map((lang) => ({
+                  value: lang,
+                  label: CODE_EXAMPLES[lang].label,
+                }))}
+              />
             )}
-
-            <button
-              type="button"
-              onClick={activeTab === "request" ? handleCopyCode : handleCopyResponse}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:border-zinc-400 dark:hover:border-zinc-500 text-xs font-mono transition-colors cursor-pointer"
-              aria-label="Copy snippet to clipboard"
-            >
-              {(activeTab === "request" ? copiedCode : copiedResponse) ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
+            <CopyButton
+              getText={() => (activeTab === "request" ? CODE_EXAMPLES[activeLang].code : SAMPLE_RESPONSE)}
+              ariaLabel="Copy snippet to clipboard"
+            />
           </div>
         </div>
 

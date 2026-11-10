@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 const description =
-  "Federated metasearch for AI agents: DuckDuckGo, Bing, and Yahoo in one API, with deduplication, relevance-aware consensus ranking, page extraction, and MCP support.";
+  "Federated metasearch for AI agents: DuckDuckGo, Bing, and Yahoo in one API, with deduplication, consensus ranking, page extraction, and MCP support.";
 
 export const metadata: Metadata = {
   title: "Plewtus | Federated Search for AI Agents",

@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -27,6 +28,10 @@ type Orchestrator struct {
 	// extractTimeout bounds the content-extraction stage separately from the
 	// provider stage so slow engines cannot starve page extraction.
 	extractTimeout time.Duration
+	// stragglerGrace, when positive, is how long the last outstanding provider
+	// is given once every other provider has returned results (three or more
+	// providers only). It bounds tail latency when one engine hangs.
+	stragglerGrace time.Duration
 	userAgent      string
 	logger         *slog.Logger
 	flightMu       sync.Mutex
@@ -72,6 +77,15 @@ func New(registry *provider.Registry, timeout time.Duration, userAgent string, l
 func (o *Orchestrator) WithExtractTimeout(d time.Duration) *Orchestrator {
 	if d > 0 {
 		o.extractTimeout = d
+	}
+	return o
+}
+
+// WithStragglerGrace sets how long the last outstanding provider may take
+// after all the others have returned results. Zero disables the cut-off.
+func (o *Orchestrator) WithStragglerGrace(d time.Duration) *Orchestrator {
+	if d >= 0 {
+		o.stragglerGrace = d
 	}
 	return o
 }
@@ -266,9 +280,13 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 		}
 	}
 
-	// 4. Dispatch queries to active providers concurrently
+	// 4. Dispatch queries to active providers concurrently. provCtx lets the
+	// collector cancel a straggler without cancelling the whole search.
+	provCtx, cancelProviders := context.WithCancel(ctx)
+	defer cancelProviders()
+
 	ch := make(chan providerOutcome, len(providersToQuery))
-	candidateLimit := searchCandidateLimit(req.Limit, req.Offset)
+	want, maxPages := providerBudget(req.Limit, req.Offset)
 
 	for _, pName := range providersToQuery {
 		generation := breakerGenerations[pName]
@@ -298,46 +316,37 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 			}
 
 			// Per-provider timeout bounded by parent context
-			pCtx, cancel := context.WithTimeout(ctx, o.timeout)
+			pCtx, cancel := context.WithTimeout(provCtx, o.timeout)
 			defer cancel()
 
 			pReq := model.ProviderRequest{
 				Query:          req.Query,
-				Limit:          candidateLimit,
-				Offset:         0,
+				Limit:          want,
+				MaxPages:       maxPages,
 				Freshness:      req.Freshness,
 				Country:        req.Country,
 				Language:       req.Language,
 				IncludeDomains: req.IncludeDomains,
 				ExcludeDomains: req.ExcludeDomains,
-				UserAgent:      o.userAgent,
 				Timeout:        o.timeout,
 			}
 
 			providerStart := time.Now()
 			resp, err := p.Search(pCtx, pReq)
 			tookMs := time.Since(providerStart).Milliseconds()
+			if err == nil && resp == nil {
+				err = fmt.Errorf("provider %s returned an empty response", name)
+			}
 			if err != nil {
 				if o.breakers != nil {
-					if ctx.Err() != nil {
-						// The caller went away (or the overall deadline hit); that
-						// says nothing about the provider's health.
+					if provCtx.Err() != nil {
+						// The caller went away, the overall deadline hit, or this
+						// provider was cut off as a straggler; none of that says
+						// anything about the provider's health.
 						o.breakers.Get(name).ReleaseFor(breakerGeneration)
 					} else {
 						o.breakers.Get(name).ReportFailureFor(breakerGeneration, err)
 					}
-				}
-				ch <- providerOutcome{
-					name:   name,
-					err:    err,
-					tookMs: tookMs,
-				}
-				return
-			}
-			if resp == nil {
-				err := fmt.Errorf("provider %s returned an empty response", name)
-				if o.breakers != nil {
-					o.breakers.Get(name).ReportFailureFor(breakerGeneration, err)
 				}
 				ch <- providerOutcome{name: name, err: err, tookMs: tookMs}
 				return
@@ -349,14 +358,9 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 				)
 			}
 
-			if o.breakers != nil {
-				o.breakers.Get(name).ReportSuccessFor(breakerGeneration)
-			}
-			ch <- providerOutcome{
-				name:     name,
-				response: resp,
-				tookMs:   tookMs,
-			}
+			// The circuit breaker verdict for a successful fetch is reported by
+			// the collector, after the response has passed the quality gate.
+			ch <- providerOutcome{name: name, response: resp, tookMs: tookMs}
 		}(pName, generation)
 	}
 
@@ -367,50 +371,82 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 	providerTimings := make(map[string]int64, len(providersToQuery))
 	rawCount := 0
 	replied := make(map[string]bool)
+	received, withResults := 0, 0
 
+	record := func(out providerOutcome) {
+		received++
+		replied[out.name] = true
+		providerTimings[out.name] = out.tookMs
+		if out.err != nil {
+			o.logger.Warn("provider search failed",
+				slog.String("engine", out.name),
+				slog.Any("error", out.err),
+			)
+			failed = append(failed, model.ProviderError{Engine: out.name, Error: out.err.Error()})
+			return
+		}
+		successful = append(successful, out.name)
+		rawResponses = append(rawResponses, out.response)
+		rawCount += len(out.response.Results)
+		if len(out.response.Results) > 0 {
+			withResults++
+		}
+	}
+	markUnreplied := func(reason string) {
+		for _, pName := range providersToQuery {
+			if !replied[pName] {
+				providerTimings[pName] = time.Since(start).Milliseconds()
+				failed = append(failed, model.ProviderError{Engine: pName, Error: reason})
+			}
+		}
+	}
+
+	var graceTimer *time.Timer
+	var grace <-chan time.Time
 collectLoop:
-	for i := 0; i < len(providersToQuery); i++ {
+	for received < len(providersToQuery) {
 		select {
 		case out := <-ch:
-			replied[out.name] = true
-			providerTimings[out.name] = out.tookMs
-			if out.err != nil {
-				o.logger.Warn("provider search failed",
-					slog.String("engine", out.name),
-					slog.Any("error", out.err),
-				)
-				failed = append(failed, model.ProviderError{
-					Engine: out.name,
-					Error:  out.err.Error(),
-				})
-			} else {
-				successful = append(successful, out.name)
-				if out.response != nil {
-					rawResponses = append(rawResponses, out.response)
-					rawCount += len(out.response.Results)
-				}
+			record(out)
+			outstanding := len(providersToQuery) - received
+			if grace == nil && o.stragglerGrace > 0 && len(providersToQuery) >= 3 &&
+				outstanding > 0 && withResults >= len(providersToQuery)-1 {
+				graceTimer = time.NewTimer(o.stragglerGrace)
+				grace = graceTimer.C
 			}
+		case <-grace:
+			o.logger.Warn("cutting off slow provider after the others returned results",
+				slog.Duration("grace", o.stragglerGrace),
+			)
+			cancelProviders()
+			markUnreplied("skipped: still waiting after the other engines had returned results")
+			break collectLoop
 		case <-ctx.Done():
 			// Request context cancelled or timed out
 			o.logger.Warn("search request context terminated before all providers completed",
 				slog.Any("error", ctx.Err()),
 			)
-
-			// Drain any immediately available responses
-			drainResponses(ch, replied, &successful, &failed, &rawResponses, &rawCount, providerTimings)
-
-			// Mark remaining unreplied providers as failed due to context termination
-			for _, pName := range providersToQuery {
-				if !replied[pName] {
-					providerTimings[pName] = time.Since(start).Milliseconds()
-					failed = append(failed, model.ProviderError{
-						Engine: pName,
-						Error:  ctx.Err().Error(),
-					})
+			// Take any responses that are already available.
+		drain:
+			for {
+				select {
+				case out := <-ch:
+					record(out)
+				default:
+					break drain
 				}
 			}
+			markUnreplied(ctx.Err().Error())
 			break collectLoop
 		}
+	}
+	if graceTimer != nil {
+		graceTimer.Stop()
+	}
+	if late := len(providersToQuery) - received; late > 0 {
+		// Providers that are still running report their own failures. A late
+		// success has nobody left to judge it, so settle its breaker here.
+		go o.settleLateOutcomes(ch, late, breakerGenerations)
 	}
 
 	// If the parent context was cancelled and we have no successful results, return the context error
@@ -447,6 +483,24 @@ collectLoop:
 		ExcludeDomains: req.ExcludeDomains,
 	}
 	uniqueResults, dedupedCount, dedupStats := pipeline.DeduplicateDetailed(rawResponses, dedupOpts)
+
+	// Report circuit breaker verdicts now that the quality gate has run: a
+	// provider that keeps serving off-topic pages is as unhealthy as one that
+	// errors, and should be skipped for a while rather than queried every time.
+	if o.breakers != nil {
+		discarded := make(map[string]bool, len(dedupStats.LowQualityEngines))
+		for _, engine := range dedupStats.LowQualityEngines {
+			discarded[engine] = true
+		}
+		for _, name := range successful {
+			breaker := o.breakers.Get(name)
+			if discarded[name] {
+				breaker.ReportFailureFor(breakerGenerations[name], errOffTopicResponse)
+			} else {
+				breaker.ReportSuccessFor(breakerGenerations[name])
+			}
+		}
+	}
 
 	// Providers whose whole SERP was off-topic (anti-bot result poisoning) are
 	// reported as failed rather than successful.
@@ -492,6 +546,7 @@ collectLoop:
 	resp.Metadata.Stats.DomainRejectedCount = dedupStats.DomainRejected
 	resp.Metadata.Stats.InvalidURLCount = dedupStats.InvalidURL
 	resp.Metadata.Stats.DuplicateCount = dedupStats.Duplicates
+	resp.Metadata.Stats.ProviderDiscardedCount = dedupStats.ProviderDiscarded
 
 	// Populate applied filters in metadata if any filters were active
 	if req.Freshness != "" || len(req.IncludeDomains) > 0 || len(req.ExcludeDomains) > 0 ||
@@ -507,27 +562,60 @@ collectLoop:
 		}
 	}
 
-	// 10. Cache the response for future queries if cache is enabled and we have valid results
+	// 10. Cache the response if we have results. A response missing one or
+	// more providers is kept only briefly, so a transient failure does not pin
+	// degraded results for the full TTL.
 	if o.cache != nil && cacheKey != "" && len(resp.Results) > 0 {
-		o.cache.Set(cacheKey, resp)
+		if len(failed) > 0 {
+			o.cache.SetWithTTL(cacheKey, resp, degradedCacheTTL)
+		} else {
+			o.cache.Set(cacheKey, resp)
+		}
 	}
 
 	return resp, nil
 }
 
-// searchCandidateLimit fetches a wider first-page pool for post-retrieval
-// relevance filtering and hybrid reranking, while respecting the public
-// provider window and keeping response sizes bounded.
-func searchCandidateLimit(limit, offset int) int {
-	requestedWindow := limit + offset
-	candidateLimit := requestedWindow
-	if candidateLimit < 30 {
-		candidateLimit = 30
+// degradedCacheTTL bounds how long a response with failed providers is cached.
+const degradedCacheTTL = time.Minute
+
+var errOffTopicResponse = errors.New("response did not match the query")
+
+// resultsPerPage is roughly what one engine result page yields.
+const resultsPerPage = 10
+
+// maxProviderPages caps how many pages a provider fetches for one search.
+const maxProviderPages = 3
+
+// providerBudget returns how many results each provider should collect and
+// how many pages it may fetch to cover the requested window (limit + offset).
+// The default first page costs one request per engine; deeper windows fetch
+// further pages because engines ignore requests for longer pages.
+func providerBudget(limit, offset int) (want, maxPages int) {
+	want = limit + offset
+	if want < resultsPerPage {
+		want = resultsPerPage
 	}
-	if candidateLimit > 50 {
-		candidateLimit = 50
+	if want > model.MaxResultWindow {
+		want = model.MaxResultWindow
 	}
-	return candidateLimit
+	maxPages = (want + resultsPerPage - 1) / resultsPerPage
+	if maxPages > maxProviderPages {
+		maxPages = maxProviderPages
+	}
+	return want, maxPages
+}
+
+// settleLateOutcomes consumes outcomes that arrive after the collector stopped
+// waiting and closes the breaker for late successes, so a half-open probe
+// slot is never left occupied.
+func (o *Orchestrator) settleLateOutcomes(ch <-chan providerOutcome, n int, generations map[string]uint64) {
+	for i := 0; i < n; i++ {
+		out := <-ch
+		if out.err == nil && o.breakers != nil {
+			o.breakers.Get(out.name).ReportSuccessFor(generations[out.name])
+		}
+	}
 }
 
 func removeProvider(providers []string, name string) []string {
@@ -564,37 +652,4 @@ func (o *Orchestrator) resolveProviders(requested []string) []string {
 		}
 	}
 	return providers
-}
-
-// drainResponses drains non-blocking outcomes from the channel.
-func drainResponses(
-	ch <-chan providerOutcome,
-	replied map[string]bool,
-	successful *[]string,
-	failed *[]model.ProviderError,
-	rawResponses *[]*model.ProviderResponse,
-	rawCount *int,
-	providerTimings map[string]int64,
-) {
-	for {
-		select {
-		case out := <-ch:
-			replied[out.name] = true
-			providerTimings[out.name] = out.tookMs
-			if out.err != nil {
-				*failed = append(*failed, model.ProviderError{
-					Engine: out.name,
-					Error:  out.err.Error(),
-				})
-			} else {
-				*successful = append(*successful, out.name)
-				if out.response != nil {
-					*rawResponses = append(*rawResponses, out.response)
-					*rawCount += len(out.response.Results)
-				}
-			}
-		default:
-			return
-		}
-	}
 }

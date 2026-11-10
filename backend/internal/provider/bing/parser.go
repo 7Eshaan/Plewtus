@@ -21,11 +21,6 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 		return nil, err
 	}
 
-	bodyStr := string(bodyBytes)
-	if isBlockedOrChallenge(bodyStr) {
-		return nil, ErrChallengeEncountered
-	}
-
 	doc, err := html.Parse(bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, err
@@ -69,21 +64,6 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 
 		href, _ := htmlutil.GetAttr(aNode, "href")
 		targetURL := htmlutil.UnwrapURL(href)
-		if targetURL == "" || !strings.HasPrefix(targetURL, "http") {
-			// Fallback: check .b_attribution cite
-			citeNode := htmlutil.FindOne(node, func(n *html.Node) bool {
-				return n.Type == html.ElementNode && n.Data == "cite"
-			})
-			if citeNode != nil {
-				citeText := strings.TrimSpace(htmlutil.TextContent(citeNode))
-				// cite might be like "https://go.dev › wiki"
-				citeParts := strings.Fields(citeText)
-				if len(citeParts) > 0 && strings.HasPrefix(citeParts[0], "http") {
-					targetURL = citeParts[0]
-				}
-			}
-		}
-
 		if targetURL == "" || !strings.HasPrefix(targetURL, "http") {
 			continue
 		}
@@ -131,12 +111,17 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 		position++
 	}
 
+	// A block page has no organic results. Checking only then avoids treating a
+	// real result that merely quotes the block-page wording as a challenge.
+	if len(results) == 0 && isBlockedOrChallenge(bodyBytes) {
+		return nil, ErrChallengeEncountered
+	}
 	return results, nil
 }
 
-func isBlockedOrChallenge(htmlContent string) bool {
-	lower := strings.ToLower(htmlContent)
-	return strings.Contains(lower, "please verify you are a human") ||
-		strings.Contains(lower, "unusual traffic from your computer network") ||
-		strings.Contains(lower, "our systems have detected unusual traffic")
+func isBlockedOrChallenge(body []byte) bool {
+	lower := bytes.ToLower(body)
+	return bytes.Contains(lower, []byte("please verify you are a human")) ||
+		bytes.Contains(lower, []byte("unusual traffic from your computer network")) ||
+		bytes.Contains(lower, []byte("our systems have detected unusual traffic"))
 }

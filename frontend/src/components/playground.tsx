@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SearchPreview, type ActiveTab } from "@/components/search-preview";
 import { buildSearchRequest } from "@/lib/build-request";
 import {
   ALL_PROVIDERS,
   DEFAULT_ADVANCED_OPTIONS,
   EXAMPLE_QUERIES,
+  MAX_RESULT_WINDOW,
   type AdvancedOptions,
   type ExtractionMode,
   type ProviderName,
@@ -18,8 +19,38 @@ type ErrorResponse = components["schemas"]["ErrorResponse"];
 
 const SESSION_KEY = "plewtus:last-search";
 
+/** What a completed search was run with, to tell when the controls have since changed. */
+interface SearchSnapshot {
+  query: string;
+  /** Serialized request (without offset); compared against the current controls. */
+  signature: string;
+  /** One API response per page fetched so far ("Load more" appends pages). */
+  pages: SearchResponse[];
+}
+
 function isErrorResponse(value: unknown): value is ErrorResponse {
   return Boolean(value && typeof value === "object" && "error" in value && "message" in value);
+}
+
+async function postSearch(body: unknown, signal: AbortSignal): Promise<SearchResponse | ErrorResponse> {
+  const res = await fetch("/api/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  let data: unknown = null;
+  try {
+    data = await res.json();
+  } catch {
+    // Non-JSON body; handled below.
+  }
+  if (!res.ok || !data) {
+    return isErrorResponse(data)
+      ? data
+      : { error: "unexpected_response", message: `The search proxy returned HTTP ${res.status}.`, code: res.status };
+  }
+  return data as SearchResponse;
 }
 
 export function Playground() {
@@ -29,7 +60,8 @@ export function Playground() {
   const [advancedOptions, setAdvancedOptions] = useState<AdvancedOptions>({ ...DEFAULT_ADVANCED_OPTIONS });
   const [activeTab, setActiveTab] = useState<ActiveTab>("results");
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<SearchResponse | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [snapshot, setSnapshot] = useState<SearchSnapshot | null>(null);
   const [error, setError] = useState<ErrorResponse | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -51,37 +83,21 @@ export function Playground() {
       abortRef.current = controller;
 
       setLoading(true);
+      setLoadingMore(false);
       setError(null);
 
+      const request = buildSearchRequest(q, providers, extractionMode, advancedOptions);
       try {
-        const res = await fetch("/api/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildSearchRequest(q, providers, extractionMode, advancedOptions)),
-          signal: controller.signal,
-        });
-
-        let data: unknown;
-        try {
-          data = await res.json();
-        } catch {
-          data = null;
-        }
-
-        if (!res.ok || !data) {
-          setError(
-            isErrorResponse(data)
-              ? data
-              : { error: "unexpected_response", message: `The search proxy returned HTTP ${res.status}.`, code: res.status }
-          );
-          setResponse(null);
+        const result = await postSearch(request, controller.signal);
+        if (isErrorResponse(result)) {
+          setError(result);
+          setSnapshot(null);
           return;
         }
-
-        const result = data as SearchResponse;
-        setResponse(result);
+        const next: SearchSnapshot = { query: q, signature: JSON.stringify(request), pages: [result] };
+        setSnapshot(next);
         try {
-          sessionStorage.setItem(SESSION_KEY, JSON.stringify({ query: q, response: result }));
+          sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
         } catch {
           // Storage may be full or disabled; restoring is best-effort.
         }
@@ -92,7 +108,7 @@ export function Playground() {
           message: err instanceof Error ? err.message : "Failed to reach the search proxy.",
           code: 0,
         });
-        setResponse(null);
+        setSnapshot(null);
       } finally {
         if (abortRef.current === controller) {
           abortRef.current = null;
@@ -103,6 +119,52 @@ export function Playground() {
     [query, providers, extractionMode, advancedOptions]
   );
 
+  const results = useMemo(() => snapshot?.pages.flatMap((page) => page.results) ?? [], [snapshot]);
+  const lastPage = snapshot ? snapshot.pages[snapshot.pages.length - 1] : null;
+
+  // The controls no longer describe the results on screen.
+  const currentSignature = snapshot
+    ? JSON.stringify(buildSearchRequest(snapshot.query, providers, extractionMode, advancedOptions))
+    : "";
+  const stale = Boolean(snapshot) && currentSignature !== snapshot?.signature;
+
+  const pageSize = advancedOptions.limit;
+  // Engines return more on deeper pages than the first page reveals, so offer
+  // more until a page comes back empty or the result window is exhausted.
+  const canLoadMore =
+    Boolean(lastPage) && !stale && lastPage!.results.length > 0 && results.length < MAX_RESULT_WINDOW;
+
+  const loadMore = useCallback(async () => {
+    if (!snapshot || loading || loadingMore) return;
+    const offset = snapshot.pages.reduce((n, page) => n + page.results.length, 0);
+    const limit = Math.min(pageSize, MAX_RESULT_WINDOW - offset);
+    if (limit <= 0) return;
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const request = { ...buildSearchRequest(snapshot.query, providers, extractionMode, advancedOptions, offset), limit };
+      const result = await postSearch(request, controller.signal);
+      if (isErrorResponse(result)) {
+        setError(result);
+        return;
+      }
+      setSnapshot((prev) => (prev ? { ...prev, pages: [...prev.pages, result] } : prev));
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setError({
+        error: "network_error",
+        message: err instanceof Error ? err.message : "Failed to reach the search proxy.",
+        code: 0,
+      });
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setLoadingMore(false);
+    }
+  }, [snapshot, loading, loadingMore, pageSize, providers, extractionMode, advancedOptions]);
+
   // On first load, restore this tab's last search; otherwise run one example
   // query so the playground shows live results without a search per reload.
   useEffect(() => {
@@ -111,11 +173,12 @@ export function Playground() {
     try {
       const saved = sessionStorage.getItem(SESSION_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved) as { query: string; response: SearchResponse };
-        if (parsed?.query && parsed.response?.results) {
+        const parsed = JSON.parse(saved) as SearchSnapshot;
+        if (parsed?.query && Array.isArray(parsed.pages) && parsed.pages[0]?.results) {
           // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from storage
           setQuery(parsed.query);
-          setResponse(parsed.response);
+          // Only the first page is restored; its signature matches the default controls.
+          setSnapshot({ ...parsed, pages: [parsed.pages[0]] });
           return;
         }
       }
@@ -151,7 +214,13 @@ export function Playground() {
       onAdvancedOptionsChange={setAdvancedOptions}
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      response={response}
+      response={lastPage}
+      results={results}
+      searchedQuery={snapshot?.query ?? ""}
+      stale={stale}
+      canLoadMore={canLoadMore}
+      loadingMore={loadingMore}
+      onLoadMore={loadMore}
       error={error}
       onSelectSuggestion={runSuggestion}
     />

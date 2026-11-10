@@ -8,7 +8,7 @@ export const PROVIDER_LABELS: Record<ProviderName, string> = {
   yahoo: "Yahoo",
 };
 
-export type ExtractionMode = "none" | "highlights" | "markdown";
+export type ExtractionMode = "none" | "highlights" | "markdown" | "text";
 
 export type Freshness = "" | "day" | "week" | "month" | "year";
 
@@ -19,8 +19,6 @@ export interface AdvancedOptions {
   language: string;
   includeDomains: string;
   excludeDomains: string;
-  maxPages: number;
-  maxCharsPerPage: number;
 }
 
 export const DEFAULT_ADVANCED_OPTIONS: AdvancedOptions = {
@@ -30,11 +28,12 @@ export const DEFAULT_ADVANCED_OPTIONS: AdvancedOptions = {
   language: "",
   includeDomains: "",
   excludeDomains: "",
-  maxPages: 3,
-  maxCharsPerPage: 4000,
 };
 
 export const LIMIT_CHOICES = [5, 10, 20, 50] as const;
+
+/** Deepest result position the API serves (offset + limit). */
+export const MAX_RESULT_WINDOW = 50;
 
 /** Example queries used for the initial search and empty-state suggestions. */
 export const EXAMPLE_QUERIES = [

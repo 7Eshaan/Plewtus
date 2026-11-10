@@ -94,7 +94,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
     - Transparent Metadata: Echoes active search constraints in `metadata.filters` (`freshness`, `include_domains`, `exclude_domains`, `country`, `language`, `offset`, `limit`).
 11. **Multi-Tier Usage Management, In-Memory Caching & Circuit Breaking (`internal/cache`, `internal/usage`, `internal/reliability`):**
     - In-Memory LRU Cache: Canonical query + filter + extract key hashing with SHA-256. Deep-cloned cache retrieval with transparent `metadata.cached: true` flag. Configurable TTL and max entry bounds.
-    - Usage Management & Configurable Free Tier: Token bucket rate limiting and UTC daily quota tracking per identity (`api_key:<token>` or anonymous `ip:<addr>`). Standard rate limit and quota response headers (`X-RateLimit-*`, `X-Quota-*`, `Retry-After`). 401 Unauthorized on invalid/missing keys when auth is required, 429 Too Many Requests on rate limit or daily quota exhaustion.
+    - Usage Management & Configurable Free Tier: Token bucket rate limiting and UTC daily quota tracking per identity (`key:<token>` or anonymous `ip:<addr>`). Standard rate limit and quota response headers (`X-RateLimit-*`, `X-Quota-*`, `Retry-After`). 401 Unauthorized on invalid/missing keys when auth is required, 429 Too Many Requests on rate limit or daily quota exhaustion.
     - Provider Circuit Breaking & Fallback: Automatic failure tracking per upstream provider with Closed, Open, and Half-Open probe states. Degraded providers fast-fail during cooldown without network latency; orchestrator automatically queries alternative healthy registered engines when primary providers trip.
 12. **Native Model Context Protocol (MCP) Support (`internal/mcp`, `cmd/plewtus-mcp`):**
     - Direct AI Agent Integration: Exposes `search` and `extract` tools over standard JSON-RPC 2.0 stdio protocol (`protocolVersion: 2024-11-05`), compatible out-of-the-box with Claude Desktop, Cursor, and custom agent frameworks.
@@ -135,7 +135,7 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - **npm:** `11.20.0`
 - **Next.js:** `16.4.4` (App Router)
 - **React / React DOM:** `19.3.1` (React 19)
-- **Tailwind CSS:** `4.3.4` with `@tailwindcss/postcss`
+- **Tailwind CSS:** `4.3.4` with the `@tailwindcss/turbopack` loader (see `next.config.ts`)
 - **openapi-typescript:** `7.13.0`
 - **next-themes:** `0.4.6`
 - **lucide-react:** `1.67.0`
@@ -193,6 +193,21 @@ Plewtus is an AI-agent search API backend that aggregates search results across 
 - **Extractor:** no `<form>` pruning, token-based noise matching that spares layout wrappers enclosing `<main>/<article>`, `<header>` kept inside articles, inline whitespace preserved, links/images resolved against `<base>`/page URL, one representation per mode, `content.title`, per-fetch cookie jars, dial fallback across resolved IPs, NAT64/6to4/Teredo/discard ranges blocked. SERP text no longer splits words around `<b>` highlights.
 - **Frontend:** server-rendered page with a `Playground` client island (abortable searches, session restore instead of a live query per reload), proxy request sanitizer and trust-aware client IP (`PLEWTUS_TRUST_PROXY_HEADERS`), brand Tailwind tokens, reusable option controls, ARIA tabs/radios/labels, limit/language/past-year options, ranking score display, fixed content viewer, metadata/viewport, reduced-motion and off-screen pausing for the hero animation. `npm run verify` runs static and proxy checks.
 - **Tests:** regression tests in `pipeline/ranking_regression_test.go`, `orchestrator/regression_test.go`, `model/regression_test.go`, `extractor/regression_test.go`, `mcp/regression_test.go`, `server/regression_test.go`, `provider/client_test.go`, breaker and htmlutil tests, and `frontend/scripts/verify-proxy.ts`.
+
+## Audit Fixes (2026-11-10)
+These supersede earlier notes above where they conflict (ranking weights, candidate over-fetch, display URL normalization).
+- **Ranking:** `ranking_score = normalized RRF x (0.98 + 0.02 x relevance)`. Engine agreement and engine order decide the ranking; relevance only separates results the engines rank equally. (The earlier 0.8 relevance weight let keyword overlap override the engines.)
+- **Relevance matching:** search operators (`-term`, `site:`, quotes, `intitle:`) are stripped before scoring; light stemming (plurals, -ing, -ed).
+- **Poisoned responses:** an off-topic provider page is discarded even when it is the only provider, if the query has 3+ terms and the page's mean term coverage is under 0.34. Discards count as circuit-breaker failures (verdicts are reported after the quality gate) and are counted in `stats.provider_discarded_count`.
+- **Depth:** providers fetch one page by default and up to 3 pages when `offset + limit` exceeds 10 (Bing `first=`, Yahoo `b=`, DuckDuckGo's Next form with its `vqd` token). `count`/`n` parameters were dropped; engines ignore them.
+- **Providers:** DuckDuckGo redirect targets are decoded once (was twice, corrupting `+`/`%`); challenge detection only applies to pages with no organic results; site-relative Bing redirects are unwrapped; DuckDuckGo's hard 3 s cap was removed and the lite fallback is skipped for a genuine "no results" page.
+- **URLs:** the display URL keeps the engine's path, encoding, parameter order, and `ref` parameters; only the canonical comparison key is aggressively normalized.
+- **Orchestrator:** responses with a failed provider are cached for 1 minute; `PLEWTUS_STRAGGLER_GRACE_MS` (default 1500) cuts off the last engine once the others have answered; per-page extraction fetches are capped at 5 s; extraction failures are reported per result as `content_error`.
+- **API:** queries over 500 characters are rejected; 404/405 return the JSON error shape.
+- **MCP:** JSON-RPC batch arrays are supported. `backend/bin` binaries must be rebuilt after source changes (they were stale).
+- **Frontend:** shared `CopyButton`/`SegmentedControl` (`src/components/ui`), per-engine status chips, "Load more", stale-options notice, Text extraction mode, collapsed options and a menu on mobile, hero glyphs cleared behind the heading (`data-hero-clear`), favicons proxied through `/api/favicon`, errors shown in the JSON tab, arrow-key navigation for radio groups and tabs. `scripts/verify-phase5.ts` was removed.
+- **Removed:** `MultiRanker`, `RRFRanker.K`, `Deduplicate`/`DeduplicateWithOptions` wrappers, `usage.Stats`, `Registry.All`, breaker `Reset`/`ResetAll`/`Name`, cache `Clear`, `ToMarkdown`, `ProviderRequest.Offset`/`UserAgent`.
+- **Known limits:** Bing frequently serves decoy pages to this kind of client and DuckDuckGo starts returning captchas after a burst of queries; both are detected and reported, not fixed.
 
 ## Next Step
 - Optional: charset decoding for non-UTF-8 pages (needs `golang.org/x/text`).

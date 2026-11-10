@@ -62,7 +62,7 @@ export function HowItWorks() {
           </div>
         </div>
 
-        {/* Step 3: Query-aware rank fusion */}
+        {/* Step 3: Consensus rank fusion */}
         <div className="p-5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-3 shadow-2xs hover:border-brand/40 dark:hover:border-brand/40 transition-colors">
           <div className="w-8 h-8 rounded-lg bg-brand/10 dark:bg-brand/20 border border-brand/30 flex items-center justify-center text-brand dark:text-brand-light">
             <Award className="w-4 h-4" />
@@ -71,15 +71,15 @@ export function HowItWorks() {
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs text-brand dark:text-brand-light font-semibold">03</span>
               <h3 className="text-sm font-semibold text-zinc-950 dark:text-zinc-100">
-                Query-aware rank fusion
+                Consensus rank fusion
               </h3>
             </div>
             <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Removes off-topic results (and discards decoy result pages some engines serve to bots), then blends query relevance with multi-engine consensus. Relevance favors query coverage, title matches, and exact phrases; RRF combines provider positions with <code className="text-[11px] font-mono">k = 60</code>.
+              Removes off-topic results (and discards decoy result pages some engines serve to bots), then ranks by agreement between engines: Reciprocal Rank Fusion combines each engine&apos;s positions with <code className="text-[11px] font-mono">k = 60</code>. Query relevance only nudges near-ties.
             </p>
           </div>
           <div className="mt-auto pt-3 border-t border-zinc-100 dark:border-zinc-800/80 font-mono text-[10px] text-brand dark:text-brand-light bg-brand/5 dark:bg-brand/10 border border-brand/15 p-2 rounded">
-            rank = 0.8 &times; relevance + 0.2 &times; normalized RRF
+            rank = normalized RRF &times; (0.98 + 0.02 &times; relevance)
           </div>
         </div>
       </div>

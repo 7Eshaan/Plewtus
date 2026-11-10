@@ -1,11 +1,6 @@
 import { ThemeToggle } from "./theme-toggle";
-
-const NAV_LINKS = [
-  { href: "#demo", label: "Search Demo" },
-  { href: "#how-it-works", label: "How It Works" },
-  { href: "#mcp", label: "MCP Setup" },
-  { href: "#quickstart", label: "API Quickstart" },
-];
+import { MobileNav } from "./mobile-nav";
+import { REPO_URL, SECTION_LINKS } from "@/lib/site";
 
 export function Header() {
   return (
@@ -27,7 +22,7 @@ export function Header() {
 
         {/* Center navigation links */}
         <nav className="hidden md:flex items-center gap-6 text-xs font-mono text-zinc-600 dark:text-zinc-400" aria-label="Page sections">
-          {NAV_LINKS.map((link) => (
+          {SECTION_LINKS.map((link) => (
             <a key={link.href} href={link.href} className="hover:text-brand dark:hover:text-brand-light transition-colors">
               {link.label}
             </a>
@@ -35,8 +30,17 @@ export function Header() {
         </nav>
 
         {/* Right side controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden sm:inline-flex items-center h-8 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-800 text-xs font-mono text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+          >
+            GitHub
+          </a>
           <ThemeToggle />
+          <MobileNav />
         </div>
       </div>
     </header>

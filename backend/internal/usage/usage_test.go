@@ -242,11 +242,16 @@ func TestUsage_ConcurrencyAndStats(t *testing.T) {
 	}
 	wg.Wait()
 
-	stats := mgr.Stats()
-	if stats.TotalRequests != 1000 {
-		t.Fatalf("expected 1000 total requests, got %d", stats.TotalRequests)
+	// Every concurrent request must have been counted exactly once.
+	req := httptest.NewRequest(http.MethodPost, "/search", nil)
+	req.RemoteAddr = "10.0.0.100:1234"
+	// The bucket (1000/min) is now empty, so this call is rate limited and
+	// reports the quota without consuming it.
+	res, err := mgr.Check(req)
+	if !errors.Is(err, ErrRateLimitExceeded) || res == nil {
+		t.Fatalf("expected the 1001st request to be rate limited, got %v", err)
 	}
-	if stats.AllowedRequests != 1000 {
-		t.Fatalf("expected 1000 allowed requests, got %d", stats.AllowedRequests)
+	if res.QuotaRemaining != 10000-1000 {
+		t.Fatalf("expected exactly 1000 requests counted against the quota, got %d", 10000-res.QuotaRemaining)
 	}
 }

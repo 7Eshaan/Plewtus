@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"plewtus/internal/model"
@@ -59,6 +60,42 @@ func RecoveryMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 			}
 		}()
 		next.ServeHTTP(w, r)
+	})
+}
+
+// jsonErrorWriter rewrites the router's plain-text 404 and 405 responses as
+// the API's standard JSON error payload.
+type jsonErrorWriter struct {
+	http.ResponseWriter
+	intercepted bool
+}
+
+func (w *jsonErrorWriter) WriteHeader(code int) {
+	isJSON := strings.HasPrefix(w.Header().Get("Content-Type"), "application/json")
+	if (code == http.StatusNotFound || code == http.StatusMethodNotAllowed) && !isJSON {
+		w.intercepted = true
+		w.Header().Del("X-Content-Type-Options")
+		token, message := "not_found", "No such endpoint. Available: POST /search, GET /health."
+		if code == http.StatusMethodNotAllowed {
+			token, message = "method_not_allowed", "Method not allowed for this endpoint."
+		}
+		WriteJSON(w.ResponseWriter, code, model.ErrorResponse{Error: token, Message: message, Code: code})
+		return
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *jsonErrorWriter) Write(b []byte) (int, error) {
+	if w.intercepted {
+		return len(b), nil // drop the router's plain-text body
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+// JSONErrorMiddleware makes unknown routes and methods return JSON errors.
+func JSONErrorMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&jsonErrorWriter{ResponseWriter: w}, r)
 	})
 }
 

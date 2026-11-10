@@ -68,11 +68,6 @@ func NewCircuitBreaker(name string, opts BreakerOptions) *CircuitBreaker {
 	}
 }
 
-// Name returns the provider name for this breaker.
-func (cb *CircuitBreaker) Name() string {
-	return cb.name
-}
-
 // State returns the current circuit state.
 func (cb *CircuitBreaker) State() State {
 	cb.mu.Lock()
@@ -197,16 +192,6 @@ func (cb *CircuitBreaker) ReleaseFor(generation uint64) {
 	}
 }
 
-// Reset restores the breaker to closed state.
-func (cb *CircuitBreaker) Reset() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	cb.state = StateClosed
-	cb.failures = 0
-	cb.halfOpenProbing = false
-	cb.generation++
-}
-
 func (cb *CircuitBreaker) updateStateLocked(now time.Time) {
 	if cb.state == StateOpen {
 		if now.Sub(cb.lastTrippedAt) >= cb.cooldown {
@@ -248,15 +233,6 @@ func (m *Manager) Get(name string) *CircuitBreaker {
 func (m *Manager) IsHealthy(name string) bool {
 	cb := m.Get(name)
 	return cb.State() != StateOpen
-}
-
-// ResetAll resets all circuit breakers to closed state.
-func (m *Manager) ResetAll() {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	for _, cb := range m.breakers {
-		cb.Reset()
-	}
 }
 
 // Names returns the providers that currently have a breaker allocated.

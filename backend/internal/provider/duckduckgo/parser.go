@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net/url"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -19,11 +20,6 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 	bodyBytes, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
-	}
-
-	bodyStr := string(bodyBytes)
-	if isChallengeResponse(bodyStr) {
-		return nil, ErrChallengeEncountered
 	}
 
 	doc, err := html.Parse(bytes.NewReader(bodyBytes))
@@ -100,6 +96,11 @@ func ParseHTMLResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 		position++
 	}
 
+	// A challenge page has no organic results. Checking only then avoids
+	// treating a real result that quotes the challenge wording as a block.
+	if len(results) == 0 && isChallengeResponse(bodyBytes) {
+		return nil, ErrChallengeEncountered
+	}
 	return results, nil
 }
 
@@ -108,11 +109,6 @@ func ParseLiteResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 	bodyBytes, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
-	}
-
-	bodyStr := string(bodyBytes)
-	if isChallengeResponse(bodyStr) {
-		return nil, ErrChallengeEncountered
 	}
 
 	doc, err := html.Parse(bytes.NewReader(bodyBytes))
@@ -165,6 +161,11 @@ func ParseLiteResponse(r io.Reader, limit int) ([]model.RawSearchResult, error) 
 		position++
 	}
 
+	// A challenge page has no organic results. Checking only then avoids
+	// treating a real result that quotes the challenge wording as a block.
+	if len(results) == 0 && isChallengeResponse(bodyBytes) {
+		return nil, ErrChallengeEncountered
+	}
 	return results, nil
 }
 
@@ -205,9 +206,49 @@ func findLiteSnippet(linkNode *html.Node) string {
 	return ""
 }
 
-func isChallengeResponse(htmlContent string) bool {
-	return strings.Contains(htmlContent, "anomaly-modal") ||
-		strings.Contains(htmlContent, "anomaly.js") ||
-		strings.Contains(htmlContent, "Select all squares containing a duck") ||
-		strings.Contains(htmlContent, "Unfortunately, bots use DuckDuckGo too")
+func isChallengeResponse(body []byte) bool {
+	return bytes.Contains(body, []byte("anomaly-modal")) ||
+		bytes.Contains(body, []byte("anomaly.js")) ||
+		bytes.Contains(body, []byte("Select all squares containing a duck")) ||
+		bytes.Contains(body, []byte("Unfortunately, bots use DuckDuckGo too"))
+}
+
+// isNoResultsPage reports whether DuckDuckGo answered with its genuine
+// "no results" page, as opposed to markup the parser failed to understand.
+func isNoResultsPage(body []byte) bool {
+	return bytes.Contains(body, []byte("no-results")) || bytes.Contains(body, []byte("No results"))
+}
+
+// ParseNextPageForm extracts the hidden fields of the "Next" pagination form
+// (present on both the /html/ and /lite/ endpoints). DuckDuckGo needs these,
+// including a per-query vqd token, to serve the following page.
+func ParseNextPageForm(body []byte) (url.Values, bool) {
+	doc, err := html.Parse(bytes.NewReader(body))
+	if err != nil {
+		return nil, false
+	}
+	forms := htmlutil.FindAll(doc, func(n *html.Node) bool {
+		return n.Type == html.ElementNode && n.Data == "form"
+	})
+	for _, form := range forms {
+		values := url.Values{}
+		isNext := false
+		for _, input := range htmlutil.FindAll(form, func(n *html.Node) bool {
+			return n.Type == html.ElementNode && n.Data == "input"
+		}) {
+			typ, _ := htmlutil.GetAttr(input, "type")
+			name, _ := htmlutil.GetAttr(input, "name")
+			value, _ := htmlutil.GetAttr(input, "value")
+			if strings.EqualFold(typ, "submit") && strings.HasPrefix(value, "Next") {
+				isNext = true
+			}
+			if strings.EqualFold(typ, "hidden") && name != "" {
+				values.Set(name, value)
+			}
+		}
+		if isNext && values.Get("vqd") != "" && values.Get("s") != "" && values.Get("s") != "0" {
+			return values, true
+		}
+	}
+	return nil, false
 }

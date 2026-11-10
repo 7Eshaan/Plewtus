@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -30,8 +31,10 @@ type Options struct {
 type SearchCache interface {
 	Get(key string) (*model.SearchResponse, bool)
 	Set(key string, resp *model.SearchResponse)
+	// SetWithTTL stores a response for at most ttl (never longer than the
+	// cache's configured TTL).
+	SetWithTTL(key string, resp *model.SearchResponse, ttl time.Duration)
 	Len() int
-	Clear()
 	Key(req *model.SearchRequest) string
 }
 
@@ -67,9 +70,9 @@ func (c *MemoryCache) Key(req *model.SearchRequest) string {
 	sb.WriteString("q:")
 	sb.WriteString(strings.ToLower(strings.TrimSpace(req.Query)))
 	sb.WriteString("|l:")
-	sb.WriteString(fmt.Sprintf("%d", req.Limit))
+	sb.WriteString(strconv.Itoa(req.Limit))
 	sb.WriteString("|o:")
-	sb.WriteString(fmt.Sprintf("%d", req.Offset))
+	sb.WriteString(strconv.Itoa(req.Offset))
 
 	// Providers (sorted)
 	var provs []string
@@ -146,28 +149,36 @@ func (c *MemoryCache) Get(key string) (*model.SearchResponse, bool) {
 	c.evictList.MoveToFront(elem)
 
 	// Return a clone marked as cached so mutations don't alter the cache
-	cloned := cloneSearchResponse(ent.response)
+	cloned := ent.response.Clone()
 	cloned.Metadata.Cached = true
 	return cloned, true
 }
 
 // Set stores a response in the cache with the configured TTL.
 func (c *MemoryCache) Set(key string, resp *model.SearchResponse) {
-	if c.ttl <= 0 || key == "" || resp == nil {
+	c.SetWithTTL(key, resp, c.ttl)
+}
+
+// SetWithTTL stores a response for at most ttl, capped at the configured TTL.
+func (c *MemoryCache) SetWithTTL(key string, resp *model.SearchResponse, ttl time.Duration) {
+	if c.ttl <= 0 || ttl <= 0 || key == "" || resp == nil {
 		return
+	}
+	if ttl > c.ttl {
+		ttl = c.ttl
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	now := time.Now()
-	expiresAt := now.Add(c.ttl)
+	expiresAt := now.Add(ttl)
 
 	// If entry already exists, update it and move to front
 	if elem, found := c.items[key]; found {
 		c.evictList.MoveToFront(elem)
 		ent := elem.Value.(*entry)
-		ent.response = cloneSearchResponse(resp)
+		ent.response = resp.Clone()
 		ent.expiresAt = expiresAt
 		return
 	}
@@ -180,7 +191,7 @@ func (c *MemoryCache) Set(key string, resp *model.SearchResponse) {
 	// Add new entry
 	ent := &entry{
 		key:       key,
-		response:  cloneSearchResponse(resp),
+		response:  resp.Clone(),
 		expiresAt: expiresAt,
 	}
 	elem := c.evictList.PushFront(ent)
@@ -194,14 +205,6 @@ func (c *MemoryCache) Len() int {
 	return c.evictList.Len()
 }
 
-// Clear flushes all entries from the cache.
-func (c *MemoryCache) Clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.evictList.Init()
-	c.items = make(map[string]*list.Element)
-}
-
 func (c *MemoryCache) removeElement(elem *list.Element) {
 	c.evictList.Remove(elem)
 	ent := elem.Value.(*entry)
@@ -213,9 +216,4 @@ func (c *MemoryCache) removeOldest() {
 	if elem != nil {
 		c.removeElement(elem)
 	}
-}
-
-// cloneSearchResponse creates a deep copy of a SearchResponse.
-func cloneSearchResponse(src *model.SearchResponse) *model.SearchResponse {
-	return src.Clone()
 }

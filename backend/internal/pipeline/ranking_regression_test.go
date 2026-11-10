@@ -18,7 +18,7 @@ func TestRanking_ConsensusBeatsKeywordStuffing(t *testing.T) {
 			Snippet: "raft consensus algorithm raft consensus algorithm", Position: 40,
 		}}},
 	}
-	results, _ := DeduplicateWithOptions(responses, DeduplicateOptions{Query: "raft consensus algorithm", Limit: 10})
+	results, _, _ := DeduplicateDetailed(responses, DeduplicateOptions{Query: "raft consensus algorithm", Limit: 10})
 	if len(results) != 2 || results[0].URL != "https://en.wikipedia.org/wiki/Raft_(algorithm)" {
 		t.Fatalf("expected consensus result first, got %+v", results)
 	}
@@ -58,8 +58,9 @@ func TestDeduplicate_DiscardsPoisonedProviderResponse(t *testing.T) {
 	}
 }
 
-// When every provider looks off-topic (hard-to-match query), nothing is discarded.
-func TestDeduplicate_PoisonGateNeedsAHealthyProvider(t *testing.T) {
+// A short query whose results look off-topic lexically is not discarded when
+// no other provider can vouch for it (it may be a typo or a semantic match).
+func TestDeduplicate_PoisonGateKeepsShortQueriesWithoutAHealthyProvider(t *testing.T) {
 	var rs []model.RawSearchResult
 	for i := 0; i < 5; i++ {
 		rs = append(rs, model.RawSearchResult{Title: "Inter Miami", URL: "https://x.example/" + string(rune('a'+i)), Snippet: "soccer", Position: i + 1})
@@ -76,5 +77,64 @@ func TestRelevance_CJKQueries(t *testing.T) {
 	}
 	if _, ok := QueryRelevance("東京 天気", "大阪のグルメ", "ラーメン"); ok {
 		t.Fatal("expected unrelated CJK text to be rejected")
+	}
+}
+
+// Regression: a lone provider answering a specific query with unrelated pages
+// (Bing's decoy result pages) must not be passed through as results.
+func TestDeduplicate_DiscardsUnrelatedLoneProviderResponse(t *testing.T) {
+	var rs []model.RawSearchResult
+	for i, title := range []string{"YouTube", "Welcome to Python.org", "Summer Place Apartment Homes", "Girls games - Play free online games", "PayPoint Login"} {
+		rs = append(rs, model.RawSearchResult{Title: title, URL: "https://junk.example/" + string(rune('a'+i)), Snippet: "unrelated text", Position: i + 1})
+	}
+	results, deduped, stats := DeduplicateDetailed([]*model.ProviderResponse{{Engine: "bing", Results: rs}}, DeduplicateOptions{Query: "rust ownership borrow checker", Limit: 10})
+	if len(results) != 0 || deduped != 0 {
+		t.Fatalf("expected no results from an unrelated response, got %d", len(results))
+	}
+	if len(stats.LowQualityEngines) != 1 || stats.ProviderDiscarded != 5 {
+		t.Fatalf("expected bing discarded with 5 results, got %+v", stats)
+	}
+}
+
+// Regression: the engines' own ordering decides the ranking; a slightly better
+// keyword match further down one engine's page must not jump to the top.
+func TestRanking_EngineOrderBeatsKeywordOverlap(t *testing.T) {
+	top := model.RawSearchResult{Title: "Hybrid Search Scoring (RRF) - Azure AI Search", URL: "https://learn.example/rrf", Snippet: "Reciprocal Rank Fusion merges ranked lists.", Position: 1}
+	deep := model.RawSearchResult{Title: "Reciprocal Rank Fusion Algorithm explained", URL: "https://blog.example/rrf", Snippet: "The reciprocal rank fusion algorithm.", Position: 8}
+	responses := []*model.ProviderResponse{
+		{Engine: "duckduckgo", Results: []model.RawSearchResult{top, deep}},
+		{Engine: "yahoo", Results: []model.RawSearchResult{top}},
+	}
+	results, _, _ := DeduplicateDetailed(responses, DeduplicateOptions{Query: "reciprocal rank fusion algorithm", Limit: 10})
+	if len(results) != 2 || results[0].URL != top.URL {
+		t.Fatalf("expected the result both engines rank first to stay first, got %+v", results)
+	}
+}
+
+func TestRelevance_IgnoresSearchOperators(t *testing.T) {
+	if _, ok := QueryRelevance("jaguar -car", "Jaguar - Wikipedia", "The jaguar is a large cat species."); !ok {
+		t.Fatal("a negated term must not be required")
+	}
+	if _, ok := QueryRelevance("site:github.com rrf", "RRF implementation", "Reciprocal rank fusion (rrf) in Go"); !ok {
+		t.Fatal("site: operators must not be required words")
+	}
+	if _, ok := QueryRelevance(`intitle:raft "consensus algorithm" -"paxos made simple"`, "Raft consensus algorithm", ""); !ok {
+		t.Fatal("field operators and quotes must reduce to their content words")
+	}
+}
+
+func TestRelevance_MatchesInflectedForms(t *testing.T) {
+	cases := [][3]string{
+		{"best laptops 2026", "Best Laptop Picks of 2026", ""},
+		{"running shoes review", "Run Shoe Reviews", "We reviewed shoes for runners"},
+		{"http caching strategies", "HTTP cache strategy guide", ""},
+	}
+	for _, c := range cases {
+		if _, ok := QueryRelevance(c[0], c[1], c[2]); !ok {
+			t.Errorf("expected %q to match %q", c[0], c[1])
+		}
+	}
+	if _, ok := QueryRelevance("CAN bus", "Bus schedule and route map", "Public transit bus services."); ok {
+		t.Error("stemming must not make unrelated text match")
 	}
 }

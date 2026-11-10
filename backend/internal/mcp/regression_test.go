@@ -184,3 +184,42 @@ func (b *safeBuffer) String() string {
 	defer b.mu.Unlock()
 	return b.buf.String()
 }
+
+// Regression: a JSON-RPC batch is answered with one array of responses, with
+// no entry for notifications.
+func TestRegression_BatchRequests(t *testing.T) {
+	out := &bytes.Buffer{}
+	in := `[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","method":"notifications/initialized"},{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search","arguments":{"query":"go"}}},{"jsonrpc":"2.0","id":3,"method":"nope"}]` + "\n[]\n"
+	s := NewServer(&mockSearcher{}, &mockExtractor{}, strings.NewReader(in), out, nil)
+	if err := s.Serve(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected a batch response and an empty-batch error, got %d lines: %s", len(lines), out.String())
+	}
+	var batch []JSONRPCResponse
+	var single JSONRPCResponse
+	for _, line := range lines {
+		if strings.HasPrefix(line, "[") {
+			if err := json.Unmarshal([]byte(line), &batch); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := json.Unmarshal([]byte(line), &single); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(batch) != 3 {
+		t.Fatalf("expected 3 responses (none for the notification), got %d", len(batch))
+	}
+	byID := map[string]JSONRPCResponse{}
+	for _, r := range batch {
+		byID[string(r.ID)] = r
+	}
+	if byID["1"].Error != nil || byID["2"].Error != nil || byID["2"].Result == nil || byID["3"].Error == nil || byID["3"].Error.Code != CodeMethodNotFound {
+		t.Fatalf("unexpected batch responses: %s", lines)
+	}
+	if single.Error == nil || single.Error.Code != CodeInvalidRequest {
+		t.Fatalf("an empty batch must be an invalid request, got %+v", single)
+	}
+}

@@ -10,21 +10,24 @@ import (
 
 const (
 	// DefaultRRFK is the standard smoothing parameter established by Cormack, Clarke, and Buettcher (SIGIR 2009).
-	DefaultRRFK            = 60.0
-	ConsensusRankingWeight = 0.20
-	RelevanceRankingWeight = 0.80
+	DefaultRRFK = 60.0
+	// RelevanceBoostWeight is how much query relevance can scale the consensus
+	// score: ranking = normalized RRF x ((1 - w) + w x relevance). It is tiny on
+	// purpose: smaller than the RRF gap between adjacent positions of one
+	// engine, so engine order and agreement decide the ranking and lexical
+	// overlap only separates results the engines rank equally.
+	RelevanceBoostWeight = 0.02
 )
 
 // Ranker defines the interface for ranking and fusing search results.
-// Decoupling ranking from result collection and deduplication allows swapping or chaining
-// different ranking strategies, such as Reciprocal Rank Fusion (RRF), Borda count,
-// or downstream neural/ML rerankers.
+// Decoupling ranking from result collection and deduplication allows swapping
+// in other strategies (Borda count, an ML reranker) without touching the pipeline.
 type Ranker interface {
 	Rank(results []model.SearchResult) []model.SearchResult
 }
 
-// RRFRanker uses Reciprocal Rank Fusion (RRF) consensus and query relevance
-// to produce the final hybrid result order. The public Score remains raw RRF.
+// RRFRanker orders results by Reciprocal Rank Fusion (RRF) consensus, scaled
+// by a small query-relevance boost. The public Score remains raw RRF.
 // For each document d, its score is computed as:
 //
 //	score(d) = sum_{m in M} 1 / (k + r_m(d))
@@ -47,11 +50,6 @@ func NewRRFRanker(k ...float64) *RRFRanker {
 
 // DefaultRanker is the global default ranker using standard RRF (k=60.0).
 var DefaultRanker = NewRRFRanker(DefaultRRFK)
-
-// K returns the smoothing parameter used by this ranker.
-func (r *RRFRanker) K() float64 {
-	return r.k
-}
 
 // ComputeScore calculates the Reciprocal Rank Fusion score for a set of engine sources.
 func (r *RRFRanker) ComputeScore(engines []model.EngineSource) float64 {
@@ -116,10 +114,10 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 		rawScore := r.ComputeScore(res.Engines)
 		consensus := math.Min(1, rawScore/maxConsensus)
 		relevance := math.Max(0, math.Min(1, res.Relevance))
-		// Give query fit more weight than consensus. The relevance filter removes
-		// obvious noise upstream; this blend lets strong agreement across engines
-		// beat marginally better keyword overlap.
-		rankScore := ConsensusRankingWeight*consensus + RelevanceRankingWeight*relevance
+		// Consensus is the primary signal. The relevance filter has already
+		// removed off-topic results, so relevance only nudges the order: at most
+		// a RelevanceBoostWeight reduction for a weak lexical match.
+		rankScore := consensus * ((1 - RelevanceBoostWeight) + RelevanceBoostWeight*relevance)
 
 		bestPos := math.MaxInt32
 		for _, eng := range res.Engines {
@@ -142,10 +140,8 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 		}
 	}
 
-	// Order by the hybrid ranking score so that multi-engine consensus can
-	// outweigh small lexical differences (keyword-stuffed pages found deep in a
-	// single engine must not beat a page every engine ranks first). Ties fall
-	// back to relevance, engine count, best SERP position, and discovery order.
+	// Order by the ranking score. Ties fall back to relevance, engine count,
+	// best SERP position, and discovery order.
 	sort.SliceStable(scored, func(i, j int) bool {
 		if math.Abs(scored[i].rankScore-scored[j].rankScore) > 1e-9 {
 			return scored[i].rankScore > scored[j].rankScore
@@ -176,17 +172,4 @@ func (r *RRFRanker) Rank(results []model.SearchResult) []model.SearchResult {
 	}
 
 	return ranked
-}
-
-// MultiRanker allows chaining multiple rankers sequentially (e.g. RRF followed by a secondary reranker).
-type MultiRanker []Ranker
-
-// Rank runs results through each ranker in sequence.
-func (mr MultiRanker) Rank(results []model.SearchResult) []model.SearchResult {
-	for _, r := range mr {
-		if r != nil {
-			results = r.Rank(results)
-		}
-	}
-	return results
 }

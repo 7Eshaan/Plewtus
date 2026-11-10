@@ -188,16 +188,16 @@ func UnwrapURL(rawURL string) string {
 
 	q := parsed.Query()
 
-	// 2. DuckDuckGo redirect unwrapping: uddg=<url>
+	// 2. DuckDuckGo redirect unwrapping: uddg=<url>. Query() has already
+	// percent-decoded the value once; decoding again would corrupt targets that
+	// contain "+" or "%" (for example .../wiki/C++).
 	if uddg := q.Get("uddg"); uddg != "" {
-		if unescaped, err := url.QueryUnescape(uddg); err == nil && unescaped != "" {
-			return unescaped
-		}
 		return uddg
 	}
 
-	// 3. Bing redirect unwrapping: /ck/a?!...&u=a1<base64>...
-	if strings.Contains(parsed.Host, "bing.com") && strings.Contains(parsed.Path, "/ck/a") {
+	// 3. Bing redirect unwrapping: /ck/a?!...&u=a1<base64>... (absolute or
+	// site-relative).
+	if (parsed.Host == "" || strings.Contains(parsed.Host, "bing.com")) && strings.HasPrefix(parsed.Path, "/ck/a") {
 		if uVal := q.Get("u"); uVal != "" {
 			if decoded := decodeBingU(uVal); decoded != "" && strings.HasPrefix(decoded, "http") {
 				return decoded

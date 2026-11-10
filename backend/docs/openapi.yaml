@@ -5,11 +5,12 @@ info:
   description: |
     Plewtus is an AI-agent search API backend that aggregates search results across
     multiple search engines (DuckDuckGo, Bing, Yahoo) using metasearch architecture.
-    Results are relevance-filtered, normalized, deduplicated, and ranked using query relevance
-    combined with Reciprocal Rank Fusion (RRF),
+    Results are normalized, deduplicated, filtered for relevance, and ranked with
+    Reciprocal Rank Fusion (RRF) plus a small query-relevance boost,
     with optional AI-friendly webpage extraction (clean text, highlights, Markdown).
   license:
-    name: MIT
+    name: Apache-2.0
+    identifier: Apache-2.0
 
 servers:
   - url: http://localhost:8080
@@ -20,9 +21,9 @@ paths:
     post:
       summary: Execute federated search
       description: |
-        Dispatches concurrent search queries across upstream search engines, normalizes
-        filters and deduplicates results, ranks with query relevance plus Reciprocal Rank Fusion (RRF), and
-        optionally extracts webpage content for AI agents.
+        Dispatches concurrent search queries across upstream search engines, normalizes,
+        filters and deduplicates results, ranks with Reciprocal Rank Fusion (RRF) plus a small
+        relevance boost, and optionally extracts webpage content for AI agents.
       operationId: search
       security:
         - BearerAuth: []
@@ -177,14 +178,16 @@ components:
       properties:
         query:
           type: string
-          description: Search query string.
+          minLength: 1
+          maxLength: 500
+          description: Search query string (at most 500 characters).
           example: "golang concurrency patterns"
         limit:
           type: integer
           default: 10
           minimum: 1
           maximum: 50
-          description: Maximum number of ranked results to return.
+          description: Maximum number of ranked results to return. Windows deeper than about 10 results make each engine fetch further result pages (up to 3), which is slower and best-effort.
         offset:
           type: integer
           default: 0
@@ -290,7 +293,7 @@ components:
           description: Cleaned, non-truncated webpage title.
         url:
           type: string
-          description: Normalized destination URL with tracking tokens stripped.
+          description: Destination URL with redirect wrappers, fragments, and tracking parameters removed; otherwise as reported by the engine.
           example: "https://go.dev/blog/pipelines"
         snippet:
           type: string
@@ -311,7 +314,7 @@ components:
         ranking_score:
           type: number
           format: double
-          description: Hybrid ordering score (0.8 query relevance plus 0.2 normalized RRF consensus); results are sorted by this value.
+          description: Ordering score, normalized RRF consensus scaled by a small relevance boost (consensus x (0.98 + 0.02 x relevance_score)). Results are sorted by this value.
         engines:
           type: array
           items:
@@ -323,6 +326,9 @@ components:
           example: "Mar 13, 2014"
         content:
           $ref: '#/components/schemas/ExtractedContent'
+        content_error:
+          type: string
+          description: Present when extraction was attempted for this result but produced no content; explains why (blocked address, non-HTML page, timeout).
 
     EngineSource:
       type: object
@@ -448,6 +454,7 @@ components:
         - domain_rejected_count
         - invalid_url_count
         - duplicate_count
+        - provider_discarded_count
       properties:
         raw_count:
           type: integer
@@ -467,6 +474,9 @@ components:
         duplicate_count:
           type: integer
           description: Candidates merged into an already-seen canonical destination URL.
+        provider_discarded_count:
+          type: integer
+          description: Raw results dropped because their whole provider response was discarded as off-topic. raw_count equals deduped_count plus the five rejection and merge counters.
 
     AppliedFilters:
       type: object

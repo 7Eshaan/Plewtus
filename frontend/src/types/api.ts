@@ -15,9 +15,9 @@ export interface paths {
         put?: never;
         /**
          * Execute federated search
-         * @description Dispatches concurrent search queries across upstream search engines, normalizes
-         *     filters and deduplicates results, ranks with query relevance plus Reciprocal Rank Fusion (RRF), and
-         *     optionally extracts webpage content for AI agents.
+         * @description Dispatches concurrent search queries across upstream search engines, normalizes,
+         *     filters and deduplicates results, ranks with Reciprocal Rank Fusion (RRF) plus a small
+         *     relevance boost, and optionally extracts webpage content for AI agents.
          */
         post: operations["search"];
         delete?: never;
@@ -72,12 +72,12 @@ export interface components {
     schemas: {
         SearchRequest: {
             /**
-             * @description Search query string.
+             * @description Search query string (at most 500 characters).
              * @example golang concurrency patterns
              */
             query: string;
             /**
-             * @description Maximum number of ranked results to return.
+             * @description Maximum number of ranked results to return. Windows deeper than about 10 results make each engine fetch further result pages (up to 3), which is slower and best-effort.
              * @default 10
              */
             limit: number;
@@ -158,7 +158,7 @@ export interface components {
             /** @description Cleaned, non-truncated webpage title. */
             title: string;
             /**
-             * @description Normalized destination URL with tracking tokens stripped.
+             * @description Destination URL with redirect wrappers, fragments, and tracking parameters removed; otherwise as reported by the engine.
              * @example https://go.dev/blog/pipelines
              */
             url: string;
@@ -182,7 +182,7 @@ export interface components {
             relevance_score: number;
             /**
              * Format: double
-             * @description Hybrid ordering score (0.8 query relevance plus 0.2 normalized RRF consensus); results are sorted by this value.
+             * @description Ordering score, normalized RRF consensus scaled by a small relevance boost (consensus x (0.98 + 0.02 x relevance_score)). Results are sorted by this value.
              */
             ranking_score: number;
             /** @description Search engines that independently discovered this result. */
@@ -193,6 +193,8 @@ export interface components {
              */
             published_date?: string;
             content?: components["schemas"]["ExtractedContent"];
+            /** @description Present when extraction was attempted for this result but produced no content; explains why (blocked address, non-HTML page, timeout). */
+            content_error?: string;
         };
         EngineSource: {
             /**
@@ -272,6 +274,8 @@ export interface components {
             invalid_url_count: number;
             /** @description Candidates merged into an already-seen canonical destination URL. */
             duplicate_count: number;
+            /** @description Raw results dropped because their whole provider response was discarded as off-topic. raw_count equals deduped_count plus the five rejection and merge counters. */
+            provider_discarded_count: number;
         };
         AppliedFilters: {
             freshness?: string;

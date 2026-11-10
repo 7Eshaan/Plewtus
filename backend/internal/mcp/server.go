@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -197,82 +198,160 @@ func (s *Server) Serve(ctx context.Context) error {
 }
 
 func (s *Server) dispatch(ctx context.Context, line []byte, wg *sync.WaitGroup, sem chan struct{}) {
-	trimmed := strings.TrimSpace(string(line))
-	if trimmed == "" {
+	trimmed := bytes.TrimSpace(line)
+	if len(trimmed) == 0 {
 		return
 	}
 
-	var req JSONRPCRequest
-	if err := json.Unmarshal([]byte(trimmed), &req); err != nil {
-		s.writeError(nil, CodeParseError, "Parse error: "+err.Error())
-		return
-	}
-	if req.JSONRPC != "2.0" || req.Method == "" {
-		if isNotification(req.ID) {
+	// JSON-RPC batch: an array of messages answered with one array of
+	// responses (part of MCP 2025-03-26; harmless to accept for other revisions).
+	if trimmed[0] == '[' {
+		var batch []json.RawMessage
+		if err := json.Unmarshal(trimmed, &batch); err != nil {
+			s.writeError(nil, CodeParseError, "Parse error: "+err.Error())
 			return
 		}
-		s.writeError(req.ID, CodeInvalidRequest, "Invalid request: expected jsonrpc \"2.0\" and a method")
+		if len(batch) == 0 {
+			s.writeError(nil, CodeInvalidRequest, "Invalid request: empty batch")
+			return
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			responses := make([]*JSONRPCResponse, len(batch))
+			var batchWG sync.WaitGroup
+			for i, raw := range batch {
+				req, errResp := parseRequest(raw)
+				if errResp != nil {
+					responses[i] = errResp
+					continue
+				}
+				if req == nil {
+					continue
+				}
+				if isNotification(req.ID) {
+					s.handleNotification(req)
+					continue
+				}
+				if req.Method != "tools/call" {
+					responses[i] = s.respond(req)
+					continue
+				}
+				batchWG.Add(1)
+				go func(i int, req *JSONRPCRequest) {
+					defer batchWG.Done()
+					responses[i] = s.runToolCall(ctx, req, sem)
+				}(i, req)
+			}
+			batchWG.Wait()
+
+			var out []*JSONRPCResponse
+			for _, r := range responses {
+				if r != nil {
+					out = append(out, r)
+				}
+			}
+			if len(out) > 0 {
+				s.write(out)
+			}
+		}()
 		return
 	}
 
+	req, errResp := parseRequest(trimmed)
+	if errResp != nil {
+		s.write(errResp)
+		return
+	}
+	if req == nil {
+		return
+	}
 	if isNotification(req.ID) {
-		s.handleNotification(&req)
+		s.handleNotification(req)
 		return
 	}
 
 	// Fast, synchronous methods are answered inline so their order is preserved.
 	if req.Method != "tools/call" {
-		res, rpcErr := s.handleMethod(ctx, req.Method, req.Params)
-		s.reply(req.ID, res, rpcErr)
+		s.write(s.respond(req))
 		return
 	}
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if resp := s.runToolCall(ctx, req, sem); resp != nil {
+			s.write(resp)
+		}
+	}()
+}
+
+// parseRequest decodes one JSON-RPC message. It returns (nil, nil) for an
+// invalid notification, which must be ignored without a response.
+func parseRequest(raw []byte) (*JSONRPCRequest, *JSONRPCResponse) {
+	var req JSONRPCRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return nil, errorResponse(nil, CodeParseError, "Parse error: "+err.Error())
+	}
+	if req.JSONRPC != "2.0" || req.Method == "" {
+		if isNotification(req.ID) {
+			return nil, nil
+		}
+		return nil, errorResponse(req.ID, CodeInvalidRequest, "Invalid request: expected jsonrpc \"2.0\" and a method")
+	}
+	return &req, nil
+}
+
+// respond answers a synchronous (non-tool) request.
+func (s *Server) respond(req *JSONRPCRequest) *JSONRPCResponse {
+	res, rpcErr := s.handleMethod(req.Method, req.Params)
+	if rpcErr != nil {
+		return errorResponse(req.ID, rpcErr.Code, rpcErr.Message)
+	}
+	return &JSONRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: res}
+}
+
+// runToolCall executes a tools/call request, registered so the client can
+// cancel it. It returns nil when the client cancelled the call (the spec says
+// not to respond).
+func (s *Server) runToolCall(ctx context.Context, req *JSONRPCRequest, sem chan struct{}) (resp *JSONRPCResponse) {
 	callCtx, cancel := context.WithCancel(ctx)
 	key := string(req.ID)
 	s.inflightMu.Lock()
 	s.inflight[key] = cancel
 	s.inflightMu.Unlock()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer func() {
-			cancel()
-			s.inflightMu.Lock()
-			delete(s.inflight, key)
-			s.inflightMu.Unlock()
-		}()
-		select {
-		case sem <- struct{}{}:
-			defer func() { <-sem }()
-		case <-callCtx.Done():
-			return
-		}
-		defer func() {
-			if rec := recover(); rec != nil {
-				s.logger.Error("mcp tool call panic recovered", slog.Any("error", rec))
-				s.writeError(req.ID, CodeInternalError, "internal error")
-			}
-		}()
-		res, rpcErr := s.handleToolCall(callCtx, req.Params)
-		if callCtx.Err() != nil && ctx.Err() == nil {
-			// Cancelled by the client: the spec says not to respond.
-			return
-		}
-		s.reply(req.ID, res, rpcErr)
+	defer func() {
+		cancel()
+		s.inflightMu.Lock()
+		delete(s.inflight, key)
+		s.inflightMu.Unlock()
 	}()
+
+	select {
+	case sem <- struct{}{}:
+		defer func() { <-sem }()
+	case <-callCtx.Done():
+		return nil
+	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			s.logger.Error("mcp tool call panic recovered", slog.Any("error", rec))
+			resp = errorResponse(req.ID, CodeInternalError, "internal error")
+		}
+	}()
+
+	res, rpcErr := s.handleToolCall(callCtx, req.Params)
+	if callCtx.Err() != nil && ctx.Err() == nil {
+		return nil // cancelled by the client
+	}
+	if rpcErr != nil {
+		return errorResponse(req.ID, rpcErr.Code, rpcErr.Message)
+	}
+	return &JSONRPCResponse{JSONRPC: "2.0", ID: req.ID, Result: res}
 }
 
 func isNotification(id json.RawMessage) bool {
 	return len(id) == 0
-}
-
-func (s *Server) reply(id json.RawMessage, res any, rpcErr *JSONRPCError) {
-	if rpcErr != nil {
-		s.writeError(id, rpcErr.Code, rpcErr.Message)
-		return
-	}
-	s.writeResult(id, res)
 }
 
 func (s *Server) handleNotification(req *JSONRPCRequest) {
@@ -296,7 +375,7 @@ func (s *Server) handleNotification(req *JSONRPCRequest) {
 	}
 }
 
-func (s *Server) handleMethod(ctx context.Context, method string, params json.RawMessage) (any, *JSONRPCError) {
+func (s *Server) handleMethod(method string, params json.RawMessage) (any, *JSONRPCError) {
 	switch method {
 	case "initialize":
 		var init struct {
@@ -328,9 +407,6 @@ func (s *Server) handleMethod(ctx context.Context, method string, params json.Ra
 			"tools": s.toolDefinitions(),
 		}, nil
 
-	case "tools/call":
-		return s.handleToolCall(ctx, params)
-
 	default:
 		return nil, &JSONRPCError{
 			Code:    CodeMethodNotFound,
@@ -345,7 +421,7 @@ func (s *Server) toolDefinitions() []map[string]any {
 		{
 			"name":        "search",
 			"title":       "Web search",
-			"description": "Search the web across DuckDuckGo, Bing, and Yahoo. Results are deduplicated, off-topic results are removed, and the rest are ranked by query relevance and cross-engine agreement. Optionally extracts page content from the top results.",
+			"description": "Search the web across DuckDuckGo, Bing, and Yahoo. Results are deduplicated, off-topic results are removed, and the rest are ranked by agreement between engines. Optionally extracts page content from the top results.",
 			"annotations": readOnly,
 			"inputSchema": map[string]any{
 				"type": "object",
@@ -766,21 +842,33 @@ func truncate(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
-func (s *Server) writeResult(id json.RawMessage, result any) {
-	s.write(JSONRPCResponse{JSONRPC: "2.0", ID: id, Result: result})
+func errorResponse(id json.RawMessage, code int, msg string) *JSONRPCResponse {
+	return &JSONRPCResponse{JSONRPC: "2.0", ID: id, Error: &JSONRPCError{Code: code, Message: msg}}
 }
 
 func (s *Server) writeError(id json.RawMessage, code int, msg string) {
-	s.write(JSONRPCResponse{JSONRPC: "2.0", ID: id, Error: &JSONRPCError{Code: code, Message: msg}})
+	s.write(errorResponse(id, code, msg))
 }
 
-func (s *Server) write(resp JSONRPCResponse) {
-	if len(resp.ID) == 0 {
-		resp.ID = json.RawMessage("null") // JSON-RPC requires "id": null when unknown.
+// write emits one response, or one array of responses for a batch.
+func (s *Server) write(payload any) {
+	switch v := payload.(type) {
+	case *JSONRPCResponse:
+		normalizeID(v)
+	case []*JSONRPCResponse:
+		for _, r := range v {
+			normalizeID(r)
+		}
 	}
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	if err := json.NewEncoder(s.out).Encode(resp); err != nil {
+	if err := json.NewEncoder(s.out).Encode(payload); err != nil {
 		s.logger.Error("failed writing mcp response", slog.Any("error", err))
+	}
+}
+
+func normalizeID(resp *JSONRPCResponse) {
+	if len(resp.ID) == 0 {
+		resp.ID = json.RawMessage("null") // JSON-RPC requires "id": null when unknown.
 	}
 }

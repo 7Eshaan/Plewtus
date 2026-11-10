@@ -49,9 +49,4 @@ func TestRegistry(t *testing.T) {
 	if ok {
 		t.Errorf("expected nonexistent provider to return false")
 	}
-
-	all := reg.All()
-	if len(all) != 2 {
-		t.Errorf("expected 2 providers in All(), got %d", len(all))
-	}
 }

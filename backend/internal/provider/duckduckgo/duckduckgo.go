@@ -38,17 +38,26 @@ func (p *Provider) Name() string {
 	return "duckduckgo"
 }
 
-// Search executes a search query against DuckDuckGo.
+// endpoint describes one of DuckDuckGo's two no-JavaScript result pages.
+type endpoint struct {
+	url, origin string
+	parse       func(r io.Reader, limit int) ([]model.RawSearchResult, error)
+}
+
+var (
+	htmlEndpoint = endpoint{HTMLURL, "https://html.duckduckgo.com", ParseHTMLResponse}
+	liteEndpoint = endpoint{LiteURL, "https://lite.duckduckgo.com", ParseLiteResponse}
+)
+
+// Search executes a search query against DuckDuckGo: the /html/ endpoint
+// first, falling back to /lite/ when it fails, then further pages from
+// whichever endpoint answered while the request wants more results.
 func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*model.ProviderResponse, error) {
 	start := time.Now()
+	want, maxPages := provider.PageBudget(req)
 
-	// 1. Build query string with domain filters if specified
-	query := provider.BuildSearchQuery(req)
-
-	// 2. Build form parameters
 	form := url.Values{}
-	form.Set("q", query)
-
+	form.Set("q", provider.BuildSearchQuery(req))
 	if df := mapFreshness(req.Freshness); df != "" {
 		form.Set("df", df)
 	}
@@ -56,28 +65,6 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 		form.Set("kl", kl)
 	}
 
-	// 3. Try primary endpoint (html.duckduckgo.com/html/) with only part of
-	// the provider budget. Otherwise a hung primary request consumes the entire
-	// context deadline and the lite fallback is invoked with an already-expired
-	// context, making fallback impossible.
-	timeout := req.Timeout
-	if timeout <= 0 {
-		timeout = p.timeout
-	}
-	// Cap DuckDuckGo's total budget to 3s so a hung/rate-limited datacenter request
-	// does not block the entire search for the full server timeout.
-	const maxDDGBudget = 3 * time.Second
-	if timeout > maxDDGBudget {
-		timeout = maxDDGBudget
-	}
-	ddgCtx, cancelDDG := context.WithTimeout(ctx, timeout)
-	defer cancelDDG()
-
-	primaryBudget := timeout / 2
-	if primaryBudget <= 0 {
-		primaryBudget = 1200 * time.Millisecond
-	}
-	primaryCtx, cancelPrimary := context.WithTimeout(ddgCtx, primaryBudget)
 	language := req.Language
 	if language == "" {
 		switch provider.NormalizeCountryCode(req.Country) {
@@ -86,76 +73,105 @@ func (p *Provider) Search(ctx context.Context, req model.ProviderRequest) (*mode
 		}
 	}
 	acceptLanguage := provider.AcceptLanguage(language)
-	results, err := p.queryEndpoint(primaryCtx, HTMLURL, "https://html.duckduckgo.com", form, acceptLanguage, req.Limit, ParseHTMLResponse)
+
+	timeout := req.Timeout
+	if timeout <= 0 {
+		timeout = p.timeout
+	}
+	ddgCtx, cancelDDG := context.WithTimeout(ctx, timeout)
+	defer cancelDDG()
+
+	// The primary endpoint gets only half of the budget. Otherwise a hung
+	// primary request would use the whole deadline and leave nothing for the
+	// fallback.
+	primaryCtx, cancelPrimary := context.WithTimeout(ddgCtx, timeout/2)
+	active := htmlEndpoint
+	results, body, err := p.queryEndpoint(primaryCtx, active, form, acceptLanguage)
 	cancelPrimary()
-	if err == nil && len(results) > 0 {
-		return &model.ProviderResponse{
-			Engine:  p.Name(),
-			Results: results,
-			Took:    time.Since(start),
-		}, nil
+
+	// Fall back when the primary failed, or returned nothing without showing
+	// its genuine "no results" page (which suggests markup the parser missed).
+	if err != nil || (len(results) == 0 && !isNoResultsPage(body)) {
+		active = liteEndpoint
+		liteResults, liteBody, liteErr := p.queryEndpoint(ddgCtx, active, form, acceptLanguage)
+		switch {
+		case liteErr == nil:
+			results, body = liteResults, liteBody
+		case err != nil:
+			return nil, fmt.Errorf("duckduckgo search failed: %w (fallback error: %v)", err, liteErr)
+		default:
+			// The primary answered with an empty page and the fallback failed:
+			// report the empty result rather than an error.
+		}
 	}
 
-	// 4. If primary failed or returned challenge, try fallback endpoint (lite.duckduckgo.com/lite/)
-	liteResults, liteErr := p.queryEndpoint(ddgCtx, LiteURL, "https://lite.duckduckgo.com", form, acceptLanguage, req.Limit, ParseLiteResponse)
-	if liteErr == nil && len(liteResults) > 0 {
-		return &model.ProviderResponse{
-			Engine:  p.Name(),
-			Results: liteResults,
-			Took:    time.Since(start),
-		}, nil
+	var all []model.RawSearchResult
+	seen := make(map[string]bool)
+	all, _ = provider.AppendPage(all, seen, results)
+	for page := 1; page < maxPages && len(all) < want; page++ {
+		next, ok := ParseNextPageForm(body)
+		if !ok {
+			break
+		}
+		if next.Get("q") == "" {
+			next.Set("q", form.Get("q"))
+		}
+		pageResults, pageBody, pageErr := p.queryEndpoint(ddgCtx, active, next, acceptLanguage)
+		if pageErr != nil {
+			break // keep what earlier pages returned
+		}
+		var added int
+		if all, added = provider.AppendPage(all, seen, pageResults); added == 0 {
+			break
+		}
+		body = pageBody
+	}
+	if len(all) > want {
+		all = all[:want]
+	}
+	if all == nil {
+		all = []model.RawSearchResult{}
 	}
 
-	// If both failed, report the failure
-	if err != nil {
-		return nil, fmt.Errorf("duckduckgo search failed: %w (fallback error: %v)", err, liteErr)
-	}
-	if liteErr != nil {
-		return nil, fmt.Errorf("duckduckgo fallback search failed: %w", liteErr)
-	}
-
-	// Both endpoints answered without a challenge but had no organic results.
-	return &model.ProviderResponse{Engine: p.Name(), Results: []model.RawSearchResult{}, Took: time.Since(start)}, nil
+	return &model.ProviderResponse{Engine: p.Name(), Results: all, Took: time.Since(start)}, nil
 }
 
-func (p *Provider) queryEndpoint(
-	ctx context.Context,
-	endpointURL, origin string,
-	form url.Values,
-	acceptLanguage string,
-	limit int,
-	parseFunc func(r io.Reader, limit int) ([]model.RawSearchResult, error),
-) ([]model.RawSearchResult, error) {
-	formData := form.Encode()
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL, strings.NewReader(formData))
+// queryEndpoint posts the form and returns the parsed results together with
+// the raw page (needed to follow DuckDuckGo's pagination form).
+func (p *Provider) queryEndpoint(ctx context.Context, ep endpoint, form url.Values, acceptLanguage string) ([]model.RawSearchResult, []byte, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, ep.url, strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	httpReq.Header.Set("Origin", origin)
-	httpReq.Header.Set("Referer", origin+"/")
+	httpReq.Header.Set("Origin", ep.origin)
+	httpReq.Header.Set("Referer", ep.origin+"/")
 	httpReq.Header.Set("Accept-Language", acceptLanguage)
 
 	resp, err := p.client.Do(ctx, httpReq)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("rate limited by duckduckgo (status 429)")
+		return nil, nil, fmt.Errorf("rate limited by duckduckgo (status 429)")
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-		return nil, fmt.Errorf("unexpected status from duckduckgo: %d", resp.StatusCode)
+		return nil, nil, fmt.Errorf("unexpected status from duckduckgo: %d", resp.StatusCode)
 	}
 
 	bodyBytes, err := provider.ReadBody(resp)
 	if err != nil {
-		return nil, fmt.Errorf("failed reading duckduckgo response body: %w", err)
+		return nil, nil, fmt.Errorf("failed reading duckduckgo response body: %w", err)
 	}
 
-	return parseFunc(bytes.NewReader(bodyBytes), limit)
+	results, err := ep.parse(bytes.NewReader(bodyBytes), 0)
+	if err != nil {
+		return nil, bodyBytes, err
+	}
+	return results, bodyBytes, nil
 }
 
 func mapFreshness(freshness string) string {

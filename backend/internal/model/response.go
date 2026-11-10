@@ -23,6 +23,9 @@ type SearchResult struct {
 	Engines        []EngineSource    `json:"engines"`
 	PublishedDate  string            `json:"published_date,omitempty"`
 	Content        *ExtractedContent `json:"content,omitempty"`
+	// ContentError explains why extraction was requested for this result but
+	// produced no content (blocked address, non-HTML page, timeout, ...).
+	ContentError string `json:"content_error,omitempty"`
 }
 
 // EngineSource records which engine discovered this result and its ranking position.
@@ -87,6 +90,9 @@ type SearchStats struct {
 	DomainRejectedCount    int `json:"domain_rejected_count"`
 	InvalidURLCount        int `json:"invalid_url_count"`
 	DuplicateCount         int `json:"duplicate_count"`
+	// ProviderDiscardedCount is the number of raw results dropped because their
+	// whole provider response was discarded as off-topic.
+	ProviderDiscardedCount int `json:"provider_discarded_count"`
 }
 
 // HealthResponse represents the response from GET /health.

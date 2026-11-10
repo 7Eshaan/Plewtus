@@ -31,7 +31,6 @@ type Identity struct {
 	Key     string // Unique lookup key: "key:<raw>" or "ip:<addr>"
 	Type    string // "api_key" or "ip"
 	Tier    string // "free", "pro", etc.
-	RawKey  string // Raw API key if present
 	Address string // Remote IP address
 }
 
@@ -69,16 +68,6 @@ type quotaRecord struct {
 	count int
 }
 
-// Stats holds aggregate usage metrics.
-type Stats struct {
-	TotalRequests       int64 `json:"total_requests"`
-	AllowedRequests     int64 `json:"allowed_requests"`
-	RateLimitedRequests int64 `json:"rate_limited_requests"`
-	QuotaExceededCount  int64 `json:"quota_exceeded_requests"`
-	UnauthorizedCount   int64 `json:"unauthorized_requests"`
-	ActiveClients       int   `json:"active_clients"`
-}
-
 // Manager coordinates API key authentication, rate limiting, and quotas.
 type Manager struct {
 	mu             sync.Mutex
@@ -88,7 +77,6 @@ type Manager struct {
 	trustedProxies []netip.Prefix
 	buckets        map[string]*tokenBucket
 	quotas         map[string]*quotaRecord
-	stats          Stats
 	lastCleanup    time.Time
 }
 
@@ -169,7 +157,6 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 
 	now := time.Now().UTC()
 	m.cleanupStaleRecords(now)
-	m.stats.TotalRequests++
 
 	// 1. Resolve Identity
 	rawKey := extractAPIKey(r)
@@ -178,19 +165,16 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 	if rawKey != "" {
 		tierName, ok := m.apiKeys[rawKey]
 		if !ok {
-			m.stats.UnauthorizedCount++
 			return nil, ErrInvalidAPIKey
 		}
 		ident = Identity{
 			Key:     "key:" + rawKey,
 			Type:    "api_key",
 			Tier:    tierName,
-			RawKey:  rawKey,
 			Address: m.extractClientIP(r),
 		}
 	} else {
 		if m.authRequired {
-			m.stats.UnauthorizedCount++
 			return nil, ErrAuthRequired
 		}
 		ip := m.extractClientIP(r)
@@ -232,7 +216,6 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 	quotaLimit := tier.DailyQuota
 	quotaRemaining := quotaLimit - qRecord.count
 	if quotaLimit > 0 && qRecord.count >= quotaLimit {
-		m.stats.QuotaExceededCount++
 		res := &CheckResult{
 			Identity:       ident,
 			RateLimitLimit: tier.RateLimitPerMin,
@@ -270,7 +253,6 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 	}
 
 	if bucket.tokens < 1.0 {
-		m.stats.RateLimitedRequests++
 		missing := 1.0 - bucket.tokens
 		retryAfter := int(math.Ceil(missing / bucket.fillRate))
 		if retryAfter <= 0 {
@@ -294,7 +276,6 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 	// Consume 1 token and increment quota
 	bucket.tokens -= 1.0
 	qRecord.count++
-	m.stats.AllowedRequests++
 
 	res := &CheckResult{
 		Identity:           ident,
@@ -307,16 +288,6 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 	}
 
 	return res, nil
-}
-
-// Stats returns a snapshot of current metrics.
-func (m *Manager) Stats() Stats {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	s := m.stats
-	s.ActiveClients = len(m.buckets)
-	return s
 }
 
 func (m *Manager) cleanupStaleRecords(now time.Time) {

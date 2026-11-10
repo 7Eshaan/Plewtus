@@ -405,13 +405,13 @@ export const AsciiHeroField = React.memo(function AsciiHeroField({
     let time = 0;
     let clock = 0;
     let reveal = 0;
-    let swap = 1;
     let simDt = 0;
     let animId = 0;
     let lastTick = performance.now();
     let visible = true;
     let staticFrames = 0;
     let clearBounds = [0, 0, 0, 0]; // Normalized clearance rect for content
+    let lastClearMeasure = 0;
 
     // Encode word into uniform array
     const wordUniform = new Int32Array(64);
@@ -539,18 +539,24 @@ export const AsciiHeroField = React.memo(function AsciiHeroField({
         prevPointer = null;
       }
 
-      // Measure clear area around center content
-      const centerEl = container.querySelector(".z-10");
-      if (centerEl) {
-        const cRect = centerEl.getBoundingClientRect();
-        const pad = 24 * dpr;
-        clearBounds = [
-          (cRect.left * dpr - pad) / width,
-          (cRect.top * dpr - pad) / height,
-          (cRect.width * dpr + 2 * pad) / width,
-          (cRect.height * dpr + 2 * pad) / height,
-        ];
-      }
+      measureClearArea();
+    }
+
+    // Keep glyphs out from behind the hero heading. The shader clears an
+    // ellipse inscribed in this rectangle, so the heading's box is scaled by
+    // sqrt(2) (plus padding) to make the ellipse enclose all of its text.
+    function measureClearArea() {
+      const target = container?.parentElement?.querySelector<HTMLElement>("[data-hero-clear]");
+      if (!canvas || !target) return;
+      const area = canvas.getBoundingClientRect();
+      if (area.width <= 0 || area.height <= 0) return;
+      const rect = target.getBoundingClientRect();
+      const pad = 28;
+      const w = rect.width * Math.SQRT2 + 2 * pad;
+      const h = rect.height * Math.SQRT2 + 2 * pad;
+      const cx = rect.left + rect.width / 2 - area.left;
+      const cy = rect.top + rect.height / 2 - area.top;
+      clearBounds = [(cx - w / 2) / area.width, (cy - h / 2) / area.height, w / area.width, h / area.height];
     }
 
     const resizeObserver = new ResizeObserver(() => {
@@ -756,6 +762,12 @@ export const AsciiHeroField = React.memo(function AsciiHeroField({
       const dt = Math.min(0.05, Math.max(1 / 480, (now - lastTick) / 1000));
       lastTick = now;
 
+      // The heading moves when the playground below it changes height.
+      if (now - lastClearMeasure > 500) {
+        lastClearMeasure = now;
+        measureClearArea();
+      }
+
       time += dt;
       const isTrailActive = trailUntil > now;
       if (isTrailActive) simDt += dt;
@@ -763,7 +775,6 @@ export const AsciiHeroField = React.memo(function AsciiHeroField({
 
       // Decode animations
       if (reveal < 1) reveal = Math.min(1, reveal + (1000 * dt) / 1400);
-      if (swap < 1) swap = Math.min(1, swap + (1000 * dt) / 900);
 
       // 1. Simulate Fluid Wake
       if (isTrailActive && floatPrecision) {

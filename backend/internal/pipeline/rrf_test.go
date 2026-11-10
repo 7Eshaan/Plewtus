@@ -139,10 +139,6 @@ func TestRRFRanker_TieBreaking(t *testing.T) {
 
 func TestRRFRanker_CustomK(t *testing.T) {
 	ranker := NewRRFRanker(10.0)
-	if ranker.K() != 10.0 {
-		t.Errorf("expected k=10.0, got %f", ranker.K())
-	}
-
 	score := ranker.ComputeScore([]model.EngineSource{
 		{Name: "bing", Position: 1},
 	})
@@ -150,49 +146,6 @@ func TestRRFRanker_CustomK(t *testing.T) {
 	if math.Abs(score-expected) > 1e-9 {
 		t.Errorf("expected score %f, got %f", expected, score)
 	}
-}
-
-func TestRRFRanker_MultiRankerChain(t *testing.T) {
-	// Test chaining RRF with a custom mock reranker
-	baseRanker := DefaultRanker
-
-	type boostRanker struct{}
-	// Boosts docs with .org domain
-	var boostFn = func(results []model.SearchResult) []model.SearchResult {
-		for i := range results {
-			if results[i].URL == "https://org.org" {
-				results[i].Score += 10.0
-			}
-		}
-		// Re-order by boosted score
-		if len(results) >= 2 && results[1].Score > results[0].Score {
-			results[0], results[1] = results[1], results[0]
-			results[0].Rank = 1
-			results[1].Rank = 2
-		}
-		return results
-	}
-
-	chain := MultiRanker{
-		baseRanker,
-		rankerFunc(boostFn),
-	}
-
-	docs := []model.SearchResult{
-		{Title: "Com", URL: "https://com.com", Engines: []model.EngineSource{{Name: "bing", Position: 1}}},
-		{Title: "Org", URL: "https://org.org", Engines: []model.EngineSource{{Name: "bing", Position: 2}}},
-	}
-
-	ranked := chain.Rank(docs)
-	if ranked[0].Title != "Org" {
-		t.Errorf("expected boosted Org doc to rank first after chained reranker, got %s", ranked[0].Title)
-	}
-}
-
-type rankerFunc func([]model.SearchResult) []model.SearchResult
-
-func (f rankerFunc) Rank(results []model.SearchResult) []model.SearchResult {
-	return f(results)
 }
 
 func TestRRFRanker_EdgeCases(t *testing.T) {

@@ -79,6 +79,7 @@ func (s *Server) setupRoutes() {
 // Handler returns the HTTP handler wrapped with core middleware.
 func (s *Server) Handler() http.Handler {
 	handler := http.Handler(s.mux)
+	handler = JSONErrorMiddleware(handler)
 	handler = CORSMiddleware(handler)
 	handler = LoggingMiddleware(s.logger, handler)
 	handler = RecoveryMiddleware(s.logger, handler)

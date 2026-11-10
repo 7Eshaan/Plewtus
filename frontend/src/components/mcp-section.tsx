@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Check, Wrench, ShieldCheck, Zap } from "lucide-react";
+import { Wrench, ShieldCheck, Zap } from "lucide-react";
+import { CopyButton } from "./ui/copy-button";
+import { SegmentedControl } from "./ui/segmented-control";
 
 type McpClientTab = "claude" | "cursor" | "cli";
 
 export function McpSection() {
   const [activeTab, setActiveTab] = useState<McpClientTab>("claude");
-  const [copied, setCopied] = useState(false);
 
   const CLAUDE_CONFIG = `{
   "mcpServers": {
@@ -47,16 +48,6 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","a
     }
   }
 
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(getCurrentSnippet());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
-    }
-  }
-
   return (
     <section id="mcp" className="w-full pt-8 pb-4 flex flex-col gap-6 scroll-mt-16">
       <div className="flex flex-col gap-1.5 text-center sm:text-left">
@@ -88,7 +79,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","a
               </span>
             </div>
             <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Searches DuckDuckGo, Bing, and Yahoo, filters weak query matches, combines relevance with engine consensus, and can extract page content.
+              Searches DuckDuckGo, Bing, and Yahoo, drops off-topic results, ranks by agreement between engines, and can extract page content.
             </p>
             <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap gap-1 text-[10px] font-mono text-zinc-500">
               <span className="px-1.5 py-0.5 rounded bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">query (required)</span>
@@ -124,63 +115,18 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","a
 
         {/* Right column: Host Configuration Snippet */}
         <div className="lg:col-span-7 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] overflow-hidden shadow-2xs flex flex-col">
-          <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/60 dark:bg-zinc-900/40">
-            {/* Host Tabs */}
-            <div className="inline-flex items-center p-0.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 font-mono text-xs">
-              <button
-                type="button"
-                onClick={() => setActiveTab("claude")}
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                  activeTab === "claude"
-                    ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                }`}
-              >
-                Claude Desktop
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("cursor")}
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                  activeTab === "cursor"
-                    ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                }`}
-              >
-                Cursor / VS Code
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("cli")}
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                  activeTab === "cli"
-                    ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-                }`}
-              >
-                CLI Stdio
-              </button>
-            </div>
-
-            {/* Copy Button */}
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:border-zinc-400 dark:hover:border-zinc-500 text-xs font-mono transition-colors cursor-pointer"
-              aria-label="Copy MCP config to clipboard"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
+          <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2 bg-zinc-50/60 dark:bg-zinc-900/40">
+            <SegmentedControl
+              ariaLabel="MCP client"
+              value={activeTab}
+              onChange={setActiveTab}
+              options={[
+                { value: "claude", label: "Claude Desktop" },
+                { value: "cursor", label: "Cursor / VS Code" },
+                { value: "cli", label: "CLI Stdio" },
+              ]}
+            />
+            <CopyButton getText={getCurrentSnippet} ariaLabel="Copy MCP config to clipboard" />
           </div>
 
           <div className="p-4 bg-zinc-950 text-zinc-200 overflow-x-auto text-xs font-mono leading-relaxed min-h-[220px]">

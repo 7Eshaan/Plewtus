@@ -1,4 +1,5 @@
 import { Header } from "@/components/header";
+import { REPO_URL, SECTION_LINKS } from "@/lib/site";
 import { Playground } from "@/components/playground";
 import { HowItWorks } from "@/components/how-it-works";
 import { McpSection } from "@/components/mcp-section";
@@ -7,12 +8,6 @@ import { AsciiHeroField } from "@/components/ascii-hero-field";
 
 const HERO_ACCENT_COLOR: [number, number, number] = [135 / 255, 0, 1];
 
-const SECTION_LINKS = [
-  { href: "#demo", label: "Search Demo" },
-  { href: "#how-it-works", label: "How It Works" },
-  { href: "#mcp", label: "MCP Setup" },
-  { href: "#quickstart", label: "API Quickstart" },
-];
 
 export default function HomePage() {
   return (
@@ -20,7 +15,7 @@ export default function HomePage() {
       <Header />
 
       <main className="flex-1 w-full flex flex-col">
-        {/* Full Viewport Hero with Interactive Skewed Background Boxes */}
+        {/* Full-viewport hero over the interactive ASCII background */}
         <section
           id="demo"
           className="relative w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] flex flex-col items-center justify-center overflow-hidden scroll-mt-14"
@@ -30,14 +25,15 @@ export default function HomePage() {
 
           {/* Centered Hero Content Container */}
           <div className="relative z-10 w-full max-w-4xl mx-auto px-4 py-8 sm:py-12 flex flex-col items-center text-center gap-5">
-            <div className="flex flex-col items-center gap-2.5 max-w-2xl">
+            {/* data-hero-clear: the background keeps this block free of glyphs */}
+            <div data-hero-clear className="flex flex-col items-center gap-2.5 max-w-2xl">
               <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans text-balance">
                 Federated Search for AI Agents
               </h1>
 
               <p className="text-sm sm:text-base text-zinc-500 dark:text-zinc-400 max-w-xl text-balance leading-relaxed">
                 Query DuckDuckGo, Bing, and Yahoo at once. Deduplicated canonical URLs,
-                off-topic results removed, and relevance-aware consensus ranking.
+                off-topic results removed, and ranking by agreement between engines.
               </p>
             </div>
 
@@ -91,9 +87,14 @@ export default function HomePage() {
             ))}
           </nav>
 
-          <div className="text-[11px] text-zinc-400 dark:text-zinc-600">
-            DuckDuckGo • Bing • Yahoo
-          </div>
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] hover:text-brand dark:hover:text-brand-light transition-colors"
+          >
+            Apache-2.0 · Source on GitHub
+          </a>
         </div>
       </footer>
     </div>

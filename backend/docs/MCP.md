@@ -21,7 +21,10 @@ Plewtus can be launched as an MCP stdio server in two equivalent ways:
 > [!NOTE]
 > All diagnostic logs in MCP mode are automatically routed to `stderr`. The `stdout` stream is strictly reserved for clean JSON-RPC 2.0 messages.
 
-**Protocol details:** the server negotiates MCP revisions `2025-06-18` (latest), `2025-03-26`, and `2024-11-05`. Tool calls run concurrently (up to 4 at a time), honor `notifications/cancelled`, and the process exits promptly on `SIGINT`/`SIGTERM` or when stdin closes.
+**Protocol details:** the server negotiates MCP revisions `2025-06-18` (latest), `2025-03-26`, and `2024-11-05`. Tool calls run concurrently (up to 4 at a time), honor `notifications/cancelled`, and the process exits promptly on `SIGINT`/`SIGTERM` or when stdin closes. JSON-RPC batches (an array of messages on one line) are answered with one array of responses.
+
+> [!IMPORTANT]
+> MCP clients launch the compiled binary, not the source. After changing or pulling code, rebuild it: `go build -o bin/plewtus-mcp ./cmd/plewtus-mcp && go build -o bin/plewtus ./cmd/plewtus` (from `backend/`).
 
 ---
 
@@ -92,11 +95,11 @@ Add to your MCP settings:
 ## Available MCP Tools
 
 ### 1. `search`
-Searches DuckDuckGo, Bing, and Yahoo, removes duplicate and off-topic results, and ranks the rest by query relevance and cross-engine agreement. Can also extract content from the top results.
+Searches DuckDuckGo, Bing, and Yahoo, removes duplicate and off-topic results, and ranks the rest by agreement between engines. Can also extract content from the top results.
 
 **Parameters:**
 - `query` (`string`, **required**): The search query.
-- `limit` (`integer`, optional): Results to return (default `PLEWTUS_DEFAULT_LIMIT`, 10; max 50).
+- `limit` (`integer`, optional): Results to return (default `PLEWTUS_DEFAULT_LIMIT`, 10; max 50). Windows deeper than 10 make each engine fetch more pages, which is slower and best-effort.
 - `offset` (`integer`, optional): Pagination offset (default 0); `offset + limit` cannot exceed 50.
 - `providers` (`array<string>`, optional): Subset of `duckduckgo`, `bing`, `yahoo` (default: all).
 - `freshness` (`string`, optional): Recency filter (`"day"`, `"week"`, `"month"`, `"year"`).

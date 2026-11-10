@@ -78,3 +78,15 @@ func TestNormalizeCountryCode(t *testing.T) {
 		t.Fatalf("UK alias normalized to %q, want gb", got)
 	}
 }
+
+func TestAppendPageSkipsRepeatsAndContinuesPositions(t *testing.T) {
+	seen := map[string]bool{}
+	all, added := AppendPage(nil, seen, []model.RawSearchResult{{URL: "https://a", Position: 1}, {URL: "https://b", Position: 2}})
+	if added != 2 {
+		t.Fatalf("expected 2 new results, got %d", added)
+	}
+	all, added = AppendPage(all, seen, []model.RawSearchResult{{URL: "https://b", Position: 1}, {URL: "https://c", Position: 2}})
+	if added != 1 || len(all) != 3 || all[2].URL != "https://c" || all[2].Position != 3 {
+		t.Fatalf("unexpected merge: added=%d all=%+v", added, all)
+	}
+}

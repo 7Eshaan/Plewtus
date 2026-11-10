@@ -106,7 +106,7 @@ func TestDeduplicateWithOptions_DropsOffTopicResults(t *testing.T) {
 		},
 	}
 
-	results, count := DeduplicateWithOptions(responses, DeduplicateOptions{
+	results, count, _ := DeduplicateDetailed(responses, DeduplicateOptions{
 		Query: "model context protocol stdio",
 		Limit: 10,
 	})
@@ -128,7 +128,7 @@ func TestRRFRankerUsesRelevanceToBreakEqualScores(t *testing.T) {
 	}
 }
 
-func TestRRFRankerLetsStrongQueryFitBeatWeakEngineConsensus(t *testing.T) {
+func TestRRFRankerKeepsConsensusAheadOfBetterKeywordFit(t *testing.T) {
 	results := DefaultRanker.Rank([]model.SearchResult{
 		{
 			Title:     "Weak consensus match",
@@ -144,11 +144,11 @@ func TestRRFRankerLetsStrongQueryFitBeatWeakEngineConsensus(t *testing.T) {
 			Engines:   []model.EngineSource{{Name: "bing", Position: 1}},
 		},
 	})
-	if results[0].Title != "Strong exact match" {
-		t.Fatalf("expected query fit to beat weak consensus, got %q", results[0].Title)
+	if results[0].Title != "Weak consensus match" {
+		t.Fatalf("expected two-engine agreement to beat a better keyword fit, got %q", results[0].Title)
 	}
-	if results[0].Score >= results[1].Score {
-		t.Fatal("expected exposed score to retain pure RRF values even when hybrid ranking order differs")
+	if results[0].RankingScore <= results[1].RankingScore || results[0].Score <= results[1].Score {
+		t.Fatal("expected ranking_score and raw RRF score to agree on the order")
 	}
 }
 
@@ -165,7 +165,7 @@ func TestDeduplicateWithOptions_FallbackWhenAllRelevanceRejected(t *testing.T) {
 
 	// Query is "messi", none of the snippets/titles contain "messi", so strict relevance would reject both.
 	// But fallback ensures user receives results rather than an empty screen.
-	results, count := DeduplicateWithOptions(responses, DeduplicateOptions{
+	results, count, _ := DeduplicateDetailed(responses, DeduplicateOptions{
 		Query: "messi",
 		Limit: 10,
 	})

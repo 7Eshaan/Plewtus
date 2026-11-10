@@ -1,6 +1,6 @@
 # Plewtus Search API Reference
 
-Plewtus is an AI-agent metasearch API that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo), filters and ranks results using query relevance plus Reciprocal Rank Fusion (RRF), deduplicates destination URLs, and provides optional safe webpage content extraction.
+Plewtus is an AI-agent metasearch API that aggregates search results across multiple search engines (DuckDuckGo, Bing, Yahoo), deduplicates destination URLs, removes off-topic results, ranks with Reciprocal Rank Fusion (RRF), and provides optional safe webpage content extraction.
 
 ---
 
@@ -55,14 +55,14 @@ Every `/search` response includes usage and rate limit status headers:
 
 ### 1. `POST /search`
 
-Executes federated search across multiple search engines with relevance filtering, hybrid relevance/consensus ranking, and deduplication.
+Executes federated search across multiple search engines with deduplication, relevance filtering, and consensus ranking.
 
 How results are processed:
 
-1. **Normalize & deduplicate** — redirect wrappers are unwrapped, tracking parameters stripped, and identical pages merged (keeping every engine and its position).
-2. **Drop off-topic results** — results whose title/snippet do not cover the query (`relevance_rejected_count`) are removed. If *nothing* matches, the candidates are kept so the response is never empty for hard-to-match queries.
-3. **Discard poisoned engine responses** — when an engine's whole result page is off-topic (search engines sometimes serve decoy results to automated clients) while another engine returned on-topic results, that engine is reported under `metadata.providers.failed` and contributes no results.
-4. **Rank** — results are ordered by `ranking_score = 0.8 × relevance_score + 0.2 × normalized RRF consensus`. `score` is the raw RRF value (`Σ 1/(60 + position)` over engines).
+1. **Normalize & deduplicate** — redirect wrappers are unwrapped, tracking parameters and fragments stripped, and identical pages merged (keeping every engine and its position). The returned `url` is otherwise left as the engine reported it; scheme, `www.`, trailing slashes, index files, and parameter order are ignored only when deciding whether two results are the same page.
+2. **Drop off-topic results** — results whose title/snippet do not cover the query (`relevance_rejected_count`) are removed. Matching ignores search operators (`-term`, `site:`, quotes) and common inflections ("laptops" matches "laptop"). If *nothing* matches, the candidates are kept so short or misspelled queries still get an answer.
+3. **Discard poisoned engine responses** — search engines sometimes serve unrelated decoy pages to automated clients. An engine's whole page is discarded (`provider_discarded_count`), and the engine reported under `metadata.providers.failed`, when it is off-topic and either another engine returned on-topic results or the query has three or more terms that the page barely touches. Repeated discards open that engine's circuit breaker.
+4. **Rank** — results are ordered by `ranking_score = normalized RRF × (0.98 + 0.02 × relevance_score)`. `score` is the raw RRF value (`Σ 1/(60 + position)` over engines); it is normalized against a result that every responding engine ranks first. Agreement between engines and their own ordering decide the ranking; relevance only separates results the engines rank equally.
 
 #### Request Headers
 
@@ -75,8 +75,8 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `query` | `string` | **Yes** | — | Search query to execute. |
-| `limit` | `integer` | No | `10` | Max ranked results to return (max `50`). |
+| `query` | `string` | **Yes** | — | Search query to execute (at most 500 characters). |
+| `limit` | `integer` | No | `10` | Max ranked results to return (max `50`). See *Result depth* below. |
 | `offset` | `integer` | No | `0` | Offset for slicing results. `offset + limit` must be at most `50`. When `limit` is omitted it shrinks to fit the window. |
 | `providers` | `[]string` | No | `["duckduckgo", "bing", "yahoo"]` | Subset of search engines to query. Unknown names are rejected with `400`. |
 | `freshness` | `string` | No | `""` | Discovery recency: `"day"`, `"week"`, `"month"`, or `"year"`. |
@@ -94,6 +94,10 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 | `mode` | `string` | `"highlights"` | Format: `"markdown"` (fills `content.markdown`), `"highlights"` (fills `content.highlights`, falling back to `content.text`), `"text"` (fills `content.text`), or `"metadata"` (title/description/author/date). |
 | `max_pages` | `integer` | `3` | Maximum number of top results to extract (max `10`). |
 | `max_chars_per_page` | `integer` | `4000` | Maximum character length per extracted page (max `20000`). |
+
+**Result depth.** Each engine returns roughly 7–10 results per page. For windows (`offset + limit`) deeper than 10, every engine fetches further pages, up to three. That is slower (pages are fetched one after another) and best-effort: three engines typically yield 30–45 unique results, so deep pages can come back short. `metadata.stats.deduped_count` is the number of unique results available for the query.
+
+**Caching.** Responses are cached for `PLEWTUS_CACHE_TTL_SECONDS`. A response in which any engine failed is cached for at most one minute.
 
 Request bodies are limited to 1 MiB and must contain exactly one JSON value. Search-engine HTML responses are capped at 4 MiB. Usage counters and the frontend proxy limiter are process-local in-memory guards; use a shared gateway/store for limits that must span replicas or survive restarts.
 
@@ -141,17 +145,20 @@ Request bodies are limited to 1 MiB and must contain exactly one JSON value. Sea
       "relevance_rejected_count": 0,
       "domain_rejected_count": 0,
       "invalid_url_count": 0,
-      "duplicate_count": 2
+      "duplicate_count": 2,
+      "provider_discarded_count": 0
     },
-    "filters": {
-      "limit": 10,
-      "offset": 0
-    },
-    "cached": false,
     "timestamp": "2026-11-03T10:00:00Z"
   }
 }
 ```
+
+Notes on optional fields:
+
+- `metadata.filters` appears only when a filter or an offset was applied, and echoes it.
+- `metadata.cached` appears (as `true`) only when the response came from the cache.
+- `metadata.total_results` is the number of results in this response; `stats.deduped_count` is the number available. `raw_count` equals `deduped_count` plus the five rejection and merge counters.
+- `content_error` appears on a result when extraction was attempted for it but produced no content, with the reason (blocked address, non-HTML page, timeout).
 
 ---
 
@@ -187,8 +194,10 @@ Standardized JSON error responses are returned on failures:
 | HTTP Status | Error Token | Cause |
 |---|---|---|
 | `400 Bad Request` | `invalid_json` | Malformed JSON in request payload |
-| `400 Bad Request` | `validation_error` | Missing query, invalid ISO codes, unknown provider, or invalid extract mode |
+| `400 Bad Request` | `validation_error` | Missing or overlong query, invalid ISO codes, unknown provider, or invalid extract mode |
 | `401 Unauthorized` | `unauthorized` | Missing API key when `PLEWTUS_AUTH_REQUIRED=true`, or invalid key |
+| `404 Not Found` | `not_found` | Unknown endpoint |
+| `405 Method Not Allowed` | `method_not_allowed` | Wrong HTTP method for the endpoint |
 | `408 Request Timeout` | `request_cancelled` | The client cancelled the request |
 | `429 Too Many Requests` | `rate_limit_exceeded` | Token bucket exhausted; check `Retry-After` header |
 | `429 Too Many Requests` | `quota_exceeded` | Daily request quota reached; resets at 00:00:00 UTC |

@@ -4,11 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // MaxResultWindow is the deepest result position (offset + limit) the
 // federated pipeline can serve; upstream engines return roughly one SERP page.
 const MaxResultWindow = 50
+
+// MaxQueryChars bounds the query length; longer text is not a search query
+// and would be forwarded verbatim to every upstream engine.
+const MaxQueryChars = 500
 
 // ErrInvalidRequest marks caller errors (HTTP 400) detected after decoding,
 // such as references to unknown providers.
@@ -152,6 +157,9 @@ func cleanDomainString(d string) string {
 func (r *SearchRequest) Validate() error {
 	if strings.TrimSpace(r.Query) == "" {
 		return errors.New("query parameter is required and cannot be empty")
+	}
+	if utf8.RuneCountInString(r.Query) > MaxQueryChars {
+		return fmt.Errorf("query cannot exceed %d characters", MaxQueryChars)
 	}
 	if r.Offset+r.Limit > MaxResultWindow {
 		return fmt.Errorf("offset + limit cannot exceed the %d-result provider window; reduce either value", MaxResultWindow)
