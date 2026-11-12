@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useStarfield, type StarLayer } from "@/lib/starfield";
+import { useStarTiles, type StarTileLayer } from "@/lib/starfield";
 
-/** Sparser and dimmer than the hero sky so long sections stay readable. */
-const STAR_LAYERS: readonly StarLayer[] = [
-  { name: "far", area: 7000, r: [0.3, 0.7], a: [0.15, 0.45] },
-  { name: "near", area: 52000, r: [0.8, 1.3], a: [0.4, 0.8], glow: 4 },
+/**
+ * Sparser and dimmer than the hero sky so long sections stay readable. Each
+ * layer is a repeating full-width tile; the heights differ (and exceed a
+ * typical screen) so no repeat is ever visible.
+ */
+const STAR_LAYERS: readonly StarTileLayer[] = [
+  { name: "far", area: 7000, r: [0.3, 0.7], a: [0.15, 0.45], tileHeight: 1024 },
+  { name: "near", area: 52000, r: [0.8, 1.3], a: [0.4, 0.8], glow: 4, tileHeight: 1408 },
 ];
 
 /**
@@ -17,9 +21,9 @@ const STAR_LAYERS: readonly StarLayer[] = [
  */
 export function DeepSpaceBackground() {
   const rootRef = useRef<HTMLDivElement>(null);
-  const starRefs = useRef<(HTMLCanvasElement | null)[]>([]);
+  const starRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  useStarfield(rootRef, starRefs, STAR_LAYERS, "--ds-star-colors", 4242);
+  useStarTiles(rootRef, starRefs, STAR_LAYERS, "--ds-star-colors", 4242);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -41,8 +45,10 @@ export function DeepSpaceBackground() {
       if (visible && !frame) frame = requestAnimationFrame(update);
     };
 
+    // Off-screen: skip scroll work and pause the twinkle.
     const observer = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting;
+      root.classList.toggle("is-offscreen", !visible);
       onScroll();
     });
     observer.observe(root);
@@ -62,7 +68,7 @@ export function DeepSpaceBackground() {
     <div ref={rootRef} className="deep-space" aria-hidden="true">
       <div className="deep-space__surface" />
       {STAR_LAYERS.map((layer, i) => (
-        <canvas
+        <div
           key={layer.name}
           ref={(el) => {
             starRefs.current[i] = el;

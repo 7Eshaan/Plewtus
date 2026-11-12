@@ -48,12 +48,12 @@ body {
 /* ------------------------------------------------------------------------
  * Hero horizon background (components/horizon-background.tsx)
  * A starfield over deep space with a glowing planet rim rising from the bottom edge.
- * --hz-* position variables are written by the component's pointer loop.
+ * --hz-* position variables are written by the component's pointer loop and
+ * are only ever used in transforms, so animating never repaints anything.
  * ---------------------------------------------------------------------- */
 .horizon-bg {
-  --hz-mx: 32%;
-  --hz-rim-x: 40%;
-  --hz-rim-y: 1%;
+  --hz-rot: 0deg;
+  --hz-glow-x: 0px;
   --hz-shift-x: 0px;
   --hz-shift-y: 0px;
   --hz-horizon: clamp(110px, 21vh, 230px);
@@ -132,63 +132,94 @@ body {
   width: max(180%, 1400px);
   aspect-ratio: 1;
   transform: translate(calc(-50% + var(--hz-shift-x)), var(--hz-shift-y));
+  will-change: transform;
 }
 
 .horizon-bg__atmosphere,
+.horizon-bg__atmosphere-glow,
 .horizon-bg__rim,
-.horizon-bg__planet {
+.horizon-bg__rim-light,
+.horizon-bg__planet,
+.horizon-bg__planet-light {
   position: absolute;
   inset: 0;
   border-radius: 50%;
 }
 
-/* Wide haze above the rim, strongest where the light hits. */
+/* Light layers are painted once with their highlight at the top of the
+   circle, then rotated about the planet's centre (--hz-rot) so it slides
+   along the rim. Rotating is a GPU transform; nothing is repainted. */
+.horizon-bg__atmosphere,
+.horizon-bg__rim-light,
+.horizon-bg__planet-light {
+  transform: rotate(var(--hz-rot));
+  will-change: transform;
+}
+
+/* Wide haze above the rim, strongest where the light hits. The blur sits on
+   the inner element so it is baked into the layer once, not run per frame. */
 .horizon-bg__atmosphere {
   inset: -4%;
-  background: radial-gradient(
-    ellipse 26% 10% at var(--hz-rim-x) calc(var(--hz-rim-y) + 4%),
-    var(--hz-glow),
-    transparent 70%
-  );
-  filter: blur(28px);
+  border-radius: 0;
   animation: horizon-breathe 7s ease-in-out infinite alternate;
+}
+
+.horizon-bg__atmosphere-glow {
+  border-radius: 0;
+  background: radial-gradient(ellipse 26% 10% at 50% 4%, var(--hz-glow), transparent 70%);
+  filter: blur(28px);
 }
 
 /* A copy of the planet nudged upward; only its top edge shows, as the rim. */
 .horizon-bg__rim {
   transform: translateY(-2px);
-  background:
-    radial-gradient(
-      ellipse 22% 18% at var(--hz-rim-x) var(--hz-rim-y),
-      var(--hz-rim-hot),
-      var(--hz-rim) 35%,
-      transparent 75%
-    ),
-    var(--hz-rim-base);
+  background: var(--hz-rim-base);
   box-shadow:
     0 0 24px 2px var(--hz-glow),
     0 0 140px 30px var(--hz-halo);
 }
 
-.horizon-bg__planet {
-  background:
-    radial-gradient(
-      ellipse 40% 12% at var(--hz-rim-x) var(--hz-rim-y),
-      var(--hz-planet-lit),
-      transparent 70%
-    ),
-    var(--hz-planet);
+.horizon-bg__rim-light {
+  transform: translateY(-2px) rotate(var(--hz-rot));
+  background: radial-gradient(
+    ellipse 22% 18% at 50% 0%,
+    var(--hz-rim-hot),
+    var(--hz-rim) 35%,
+    transparent 75%
+  );
 }
 
-/* Bloom of light spilling from below the horizon, following the highlight. */
+.horizon-bg__planet {
+  background: var(--hz-planet);
+}
+
+.horizon-bg__planet-light {
+  background: radial-gradient(ellipse 40% 12% at 50% 0%, var(--hz-planet-lit), transparent 70%);
+}
+
+/* Bloom of light spilling from below the horizon, following the highlight.
+   Moved with a transform; its blur is baked in on the inner element. */
 .horizon-bg__corner-glow {
   position: absolute;
-  left: calc(var(--hz-mx) - 35%);
+  left: -35%;
   bottom: -30%;
   width: 70%;
   height: 60%;
+  transform: translateX(var(--hz-glow-x));
+  will-change: transform;
+}
+
+.horizon-bg__corner-glow-fill {
+  position: absolute;
+  inset: 0;
   background: radial-gradient(closest-side, var(--hz-corner), transparent);
   filter: blur(40px);
+}
+
+/* Nothing animates while the hero is scrolled out of view. */
+.horizon-bg.is-offscreen *,
+.deep-space.is-offscreen * {
+  animation-play-state: paused;
 }
 
 @keyframes horizon-twinkle {
@@ -241,13 +272,15 @@ body {
 }
 
 /* Taller than the block so scroll parallax never shows an edge. Stars fade in
-   below the planet surface. */
+   below the planet surface. The stars are a repeating tile set by the
+   component (only the part near the screen is rasterised). */
 .deep-space__stars {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: calc(100% + 240px);
+  background-repeat: repeat-y;
   opacity: var(--ds-stars-opacity);
   -webkit-mask-image: linear-gradient(to bottom, transparent, #000 280px);
   mask-image: linear-gradient(to bottom, transparent, #000 280px);

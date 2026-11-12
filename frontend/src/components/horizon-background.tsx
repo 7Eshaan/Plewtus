@@ -17,18 +17,23 @@ const STAR_LAYERS: readonly StarLayer[] = [
  * It reacts to the pointer: the brightest point of the rim slides toward the
  * cursor and the three star layers move at different depths for parallax.
  * When idle (or on touch screens) the highlight drifts slowly on its own.
- * Everything is plain CSS driven by a few custom properties, so the frame loop
- * only writes style variables and stops when off-screen.
+ *
+ * Performance: every per-frame change is a transform, so the GPU only moves
+ * already-painted layers. The rim highlight is painted once at the top of a
+ * circle and *rotated* about the planet's centre to slide along the rim, so
+ * the large gradients and blurs are never repainted while animating.
  */
 export function HorizonBackground({ className = "" }: { className?: string }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const planetRef = useRef<HTMLDivElement>(null);
   const starRefs = useRef<(HTMLCanvasElement | null)[]>([]);
 
   useStarfield(rootRef, starRefs, STAR_LAYERS, "--hz-star-colors", 1337);
 
   useEffect(() => {
     const root = rootRef.current;
-    if (!root) return;
+    const planet = planetRef.current;
+    if (!root || !planet) return;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -43,27 +48,37 @@ export function HorizonBackground({ className = "" }: { className?: string }) {
     let frame = 0;
     const start = performance.now();
 
-    const apply = () => {
-      const rect = root.getBoundingClientRect();
-      // The planet is wider than the viewport, so map the viewport x onto the
-      // planet's own width for the rim gradient.
-      const planetWidth = Math.max(rect.width * 1.8, 1400);
-      const planetLeft = (rect.width - planetWidth) / 2;
-      const rimX = (current.x * rect.width - planetLeft) / planetWidth;
-      // Where the circle's top edge sits at that x, as a fraction of its height.
-      const dx = rimX - 0.5;
-      const rimY = 0.5 - Math.sqrt(Math.max(0, 0.25 - dx * dx));
+    // Layout is measured on resize only, never inside the frame loop.
+    const size = { width: 1, planet: 1 };
+    const measure = () => {
+      size.width = root.clientWidth || 1;
+      size.planet = planet.offsetWidth || 1;
+    };
 
-      root.style.setProperty("--hz-mx", `${(current.x * 100).toFixed(2)}%`);
-      root.style.setProperty("--hz-rim-x", `${(rimX * 100).toFixed(2)}%`);
-      root.style.setProperty("--hz-rim-y", `${(rimY * 100).toFixed(2)}%`);
+    const apply = () => {
+      // Viewport x -> fraction across the planet's width -> angle from the
+      // top of the circle. Rotating by that angle puts the highlight there.
+      const planetLeft = (size.width - size.planet) / 2;
+      const rimX = (current.x * size.width - planetLeft) / size.planet;
+      const angle = Math.asin(Math.min(1, Math.max(-1, (rimX - 0.5) * 2)));
+
+      root.style.setProperty("--hz-rot", `${((angle * 180) / Math.PI).toFixed(3)}deg`);
+      root.style.setProperty("--hz-glow-x", `${(current.x * size.width).toFixed(1)}px`);
       root.style.setProperty("--hz-shift-x", `${((current.x - 0.5) * -14).toFixed(2)}px`);
       root.style.setProperty("--hz-shift-y", `${((current.y - 0.5) * -10).toFixed(2)}px`);
     };
 
-    if (reduceMotion) {
+    const onResize = () => {
+      measure();
       apply();
-      return;
+    };
+
+    const resizeObserver = new ResizeObserver(onResize);
+    resizeObserver.observe(root);
+    onResize();
+
+    if (reduceMotion) {
+      return () => resizeObserver.disconnect();
     }
 
     const tick = (now: number) => {
@@ -105,24 +120,24 @@ export function HorizonBackground({ className = "" }: { className?: string }) {
       pointerActive = false;
     };
 
+    // Off-screen: stop the frame loop and pause the CSS twinkle/breathing.
     const observer = new IntersectionObserver(([entry]) => {
       visible = entry.isIntersecting;
+      root.classList.toggle("is-offscreen", !visible);
       schedule();
     });
     observer.observe(root);
 
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     document.documentElement.addEventListener("pointerleave", onPointerLeave);
-    window.addEventListener("resize", apply);
-    apply();
     schedule();
 
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      resizeObserver.disconnect();
       window.removeEventListener("pointermove", onPointerMove);
       document.documentElement.removeEventListener("pointerleave", onPointerLeave);
-      window.removeEventListener("resize", apply);
     };
   }, []);
 
@@ -138,12 +153,18 @@ export function HorizonBackground({ className = "" }: { className?: string }) {
           className={`horizon-bg__stars horizon-bg__stars--${layer.name}`}
         />
       ))}
-      <div className="horizon-bg__planet-wrap">
-        <div className="horizon-bg__atmosphere" />
+      <div ref={planetRef} className="horizon-bg__planet-wrap">
+        <div className="horizon-bg__atmosphere">
+          <div className="horizon-bg__atmosphere-glow" />
+        </div>
         <div className="horizon-bg__rim" />
+        <div className="horizon-bg__rim-light" />
         <div className="horizon-bg__planet" />
+        <div className="horizon-bg__planet-light" />
       </div>
-      <div className="horizon-bg__corner-glow" />
+      <div className="horizon-bg__corner-glow">
+        <div className="horizon-bg__corner-glow-fill" />
+      </div>
     </div>
   );
 }
