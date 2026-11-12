@@ -1,6 +1,6 @@
 import {
-  ALL_PROVIDERS,
   DEFAULT_ADVANCED_OPTIONS,
+  DEFAULT_PROVIDERS,
   type AdvancedOptions,
   type ExtractionMode,
   type ProviderName,
@@ -28,7 +28,10 @@ export function buildSearchRequest(
   const payload: SearchRequest = { query: query.trim() };
 
   if (options.limit !== DEFAULT_ADVANCED_OPTIONS.limit) payload.limit = options.limit;
-  if (providers.length > 0 && providers.length < ALL_PROVIDERS.length) payload.providers = providers;
+  // The backend's default engine set is implied; anything else is sent explicitly.
+  const isDefaultSet =
+    providers.length === DEFAULT_PROVIDERS.length && DEFAULT_PROVIDERS.every((p) => providers.includes(p));
+  if (providers.length > 0 && !isDefaultSet) payload.providers = providers;
   if (options.freshness) payload.freshness = options.freshness;
 
   const country = options.country.trim().toLowerCase();

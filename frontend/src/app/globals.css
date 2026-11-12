@@ -44,3 +44,242 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------------------------------------
+ * Hero horizon background (components/horizon-background.tsx)
+ * A starfield over deep space with a glowing planet rim rising from the bottom edge.
+ * --hz-* position variables are written by the component's pointer loop.
+ * ---------------------------------------------------------------------- */
+.horizon-bg {
+  --hz-mx: 32%;
+  --hz-rim-x: 40%;
+  --hz-rim-y: 1%;
+  --hz-shift-x: 0px;
+  --hz-shift-y: 0px;
+  --hz-horizon: clamp(110px, 21vh, 230px);
+
+  /* light theme */
+  /* Space follows the neutral site theme; the planet keeps the purple accent. */
+  --hz-sky: #ffffff;
+  --hz-star-colors: 9, 9, 11 | 39, 39, 42 | 82, 82, 91;
+  --hz-stars-opacity: 0.4;
+  --hz-planet: #ffffff;
+  --hz-planet-lit: rgba(135, 0, 255, 0.07);
+  --hz-rim-hot: #8700ff;
+  --hz-rim: #a84dff;
+  --hz-rim-base: rgba(135, 0, 255, 0.28);
+  --hz-glow: rgba(135, 0, 255, 0.3);
+  --hz-halo: rgba(135, 0, 255, 0.1);
+  --hz-corner: rgba(135, 0, 255, 0.16);
+
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark .horizon-bg {
+  --hz-sky: #050505;
+  --hz-star-colors: 255, 255, 255 | 255, 255, 255 | 228, 228, 231 | 212, 212, 216;
+  --hz-stars-opacity: 1;
+  --hz-planet: #040308;
+  --hz-planet-lit: rgba(135, 0, 255, 0.12);
+  --hz-rim-hot: #f6efff;
+  --hz-rim: #b37dff;
+  --hz-rim-base: rgba(150, 90, 255, 0.5);
+  --hz-glow: rgba(135, 0, 255, 0.6);
+  --hz-halo: rgba(120, 40, 255, 0.22);
+  --hz-corner: rgba(135, 0, 255, 0.22);
+}
+
+/* Plain space: a flat sky, only stars on top. */
+.horizon-bg__sky {
+  position: absolute;
+  inset: 0;
+  background: var(--hz-sky);
+  transition: background-color 0.2s ease;
+}
+
+/* Star layers are oversized so parallax never shows an edge; nearer layers move more. */
+.horizon-bg__stars {
+  position: absolute;
+  inset: -48px;
+  width: calc(100% + 96px);
+  height: calc(100% + 96px);
+  opacity: var(--hz-stars-opacity);
+  will-change: transform;
+}
+
+.horizon-bg__stars--far {
+  transform: translate(calc(var(--hz-shift-x) * 0.4), calc(var(--hz-shift-y) * 0.4));
+}
+
+.horizon-bg__stars--mid {
+  transform: translate(calc(var(--hz-shift-x) * 1.2), calc(var(--hz-shift-y) * 1.2));
+  animation: horizon-twinkle 5s ease-in-out infinite alternate;
+}
+
+.horizon-bg__stars--near {
+  transform: translate(calc(var(--hz-shift-x) * 2.6), calc(var(--hz-shift-y) * 2.6));
+  animation: horizon-twinkle 3.7s ease-in-out infinite alternate-reverse;
+}
+
+.horizon-bg__planet-wrap {
+  position: absolute;
+  left: 50%;
+  top: calc(100% - var(--hz-horizon));
+  width: max(180%, 1400px);
+  aspect-ratio: 1;
+  transform: translate(calc(-50% + var(--hz-shift-x)), var(--hz-shift-y));
+}
+
+.horizon-bg__atmosphere,
+.horizon-bg__rim,
+.horizon-bg__planet {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+/* Wide haze above the rim, strongest where the light hits. */
+.horizon-bg__atmosphere {
+  inset: -4%;
+  background: radial-gradient(
+    ellipse 26% 10% at var(--hz-rim-x) calc(var(--hz-rim-y) + 4%),
+    var(--hz-glow),
+    transparent 70%
+  );
+  filter: blur(28px);
+  animation: horizon-breathe 7s ease-in-out infinite alternate;
+}
+
+/* A copy of the planet nudged upward; only its top edge shows, as the rim. */
+.horizon-bg__rim {
+  transform: translateY(-2px);
+  background:
+    radial-gradient(
+      ellipse 22% 18% at var(--hz-rim-x) var(--hz-rim-y),
+      var(--hz-rim-hot),
+      var(--hz-rim) 35%,
+      transparent 75%
+    ),
+    var(--hz-rim-base);
+  box-shadow:
+    0 0 24px 2px var(--hz-glow),
+    0 0 140px 30px var(--hz-halo);
+}
+
+.horizon-bg__planet {
+  background:
+    radial-gradient(
+      ellipse 40% 12% at var(--hz-rim-x) var(--hz-rim-y),
+      var(--hz-planet-lit),
+      transparent 70%
+    ),
+    var(--hz-planet);
+}
+
+/* Bloom of light spilling from below the horizon, following the highlight. */
+.horizon-bg__corner-glow {
+  position: absolute;
+  left: calc(var(--hz-mx) - 35%);
+  bottom: -30%;
+  width: 70%;
+  height: 60%;
+  background: radial-gradient(closest-side, var(--hz-corner), transparent);
+  filter: blur(40px);
+}
+
+@keyframes horizon-twinkle {
+  from { opacity: calc(var(--hz-stars-opacity) * 0.55); }
+  to { opacity: var(--hz-stars-opacity); }
+}
+
+@keyframes horizon-breathe {
+  from { opacity: 0.75; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .horizon-bg__atmosphere,
+  .horizon-bg__stars { animation: none; }
+}
+
+/* ------------------------------------------------------------------------
+ * Lower-page background (components/deep-space-background.tsx)
+ * The space beyond the hero planet: its dark surface fades into a sparse,
+ * neutral starfield. --ds-p is scroll progress.
+ * ---------------------------------------------------------------------- */
+.deep-space {
+  --ds-p: 0;
+
+  /* light theme */
+  --ds-surface: rgba(24, 24, 27, 0.03);
+  --ds-star-colors: 9, 9, 11 | 39, 39, 42 | 82, 82, 91;
+  --ds-stars-opacity: 0.35;
+
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.dark .deep-space {
+  /* Near-black like the hero planet's surface, so the two blocks join. */
+  --ds-surface: #040404;
+  --ds-star-colors: 255, 255, 255 | 255, 255, 255 | 228, 228, 231 | 212, 212, 216;
+  --ds-stars-opacity: 1;
+}
+
+.deep-space__surface {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 320px;
+  background: linear-gradient(to bottom, var(--ds-surface), transparent);
+}
+
+/* Taller than the block so scroll parallax never shows an edge. Stars fade in
+   below the planet surface. */
+.deep-space__stars {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: calc(100% + 240px);
+  opacity: var(--ds-stars-opacity);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 280px);
+  mask-image: linear-gradient(to bottom, transparent, #000 280px);
+  will-change: transform;
+}
+
+.deep-space__stars--far {
+  transform: translateY(calc(var(--ds-p) * -80px));
+}
+
+.deep-space__stars--near {
+  transform: translateY(calc(var(--ds-p) * -220px));
+  animation: deep-space-twinkle 4.5s ease-in-out infinite alternate;
+}
+
+@keyframes deep-space-twinkle {
+  from { opacity: calc(var(--ds-stars-opacity) * 0.55); }
+  to { opacity: var(--ds-stars-opacity); }
+}
+
+/* Section dividers as thin lines of light that fade out at both ends. */
+.section-divider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(24, 24, 27, 0.18), transparent);
+}
+
+.dark .section-divider {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deep-space__stars { animation: none; }
+}

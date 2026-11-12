@@ -101,7 +101,7 @@ Searches DuckDuckGo, Bing, and Yahoo, removes duplicate and off-topic results, a
 - `query` (`string`, **required**): The search query.
 - `limit` (`integer`, optional): Results to return (default `PLEWTUS_DEFAULT_LIMIT`, 10; max 50). Windows deeper than 10 make each engine fetch more pages, which is slower and best-effort.
 - `offset` (`integer`, optional): Pagination offset (default 0); `offset + limit` cannot exceed 50.
-- `providers` (`array<string>`, optional): Subset of `duckduckgo`, `bing`, `yahoo` (default: all).
+- `providers` (`array<string>`, optional): Any of `duckduckgo`, `bing`, `yahoo`, `marginalia` (default: `PLEWTUS_DEFAULT_PROVIDERS`, i.e. the first three). Marginalia is an independent small-web index queried through its official API.
 - `freshness` (`string`, optional): Recency filter (`"day"`, `"week"`, `"month"`, `"year"`).
 - `include_domains` / `exclude_domains` (`array<string>`, optional): Domain allow/deny lists (subdomains included).
 - `country` / `language` (`string`, optional): 2-letter ISO codes (e.g. `"us"`, `"en"`).

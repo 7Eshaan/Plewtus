@@ -4,10 +4,8 @@ import { Playground } from "@/components/playground";
 import { HowItWorks } from "@/components/how-it-works";
 import { McpSection } from "@/components/mcp-section";
 import { ApiQuickstart } from "@/components/api-quickstart";
-import { AsciiHeroField } from "@/components/ascii-hero-field";
-
-const HERO_ACCENT_COLOR: [number, number, number] = [135 / 255, 0, 1];
-
+import { HorizonBackground } from "@/components/horizon-background";
+import { DeepSpaceBackground } from "@/components/deep-space-background";
 
 export default function HomePage() {
   return (
@@ -15,18 +13,17 @@ export default function HomePage() {
       <Header />
 
       <main className="flex-1 w-full flex flex-col">
-        {/* Full-viewport hero over the interactive ASCII background */}
+        {/* Full-viewport hero over the planet-horizon background */}
         <section
           id="demo"
           className="relative w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] flex flex-col items-center justify-center overflow-hidden scroll-mt-14"
         >
-          {/* Interactive ASCII fluid background in the brand accent */}
-          <AsciiHeroField word="PLEWTUS METASEARCH " accentColor={HERO_ACCENT_COLOR} />
+          {/* Grid sky with a glowing planet rim that follows the pointer */}
+          <HorizonBackground />
 
           {/* Centered Hero Content Container */}
           <div className="relative z-10 w-full max-w-4xl mx-auto px-4 py-8 sm:py-12 flex flex-col items-center text-center gap-5">
-            {/* data-hero-clear: the background keeps this block free of glyphs */}
-            <div data-hero-clear className="flex flex-col items-center gap-2.5 max-w-2xl">
+            <div className="flex flex-col items-center gap-2.5 max-w-2xl">
               <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans text-balance">
                 Federated Search for AI Agents
               </h1>
@@ -48,25 +45,23 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 2nd Page Container: Documentation, MCP & Rate Limits */}
-        <div className="w-full max-w-4xl mx-auto px-4 flex flex-col gap-10 pb-16">
-          {/* Section Divider - Appears on 2nd page scroll */}
-          <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80" />
+        {/* 2nd Page: Documentation, MCP & API, over the space beyond the planet */}
+        <div className="relative w-full">
+          <DeepSpaceBackground />
 
-          {/* How It Works Section */}
-          <HowItWorks />
+          <div className="relative z-10 w-full max-w-4xl mx-auto px-4 flex flex-col gap-10 pb-16">
+            <div className="section-divider" />
 
-          {/* Section Divider */}
-          <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80 my-2" />
+            <HowItWorks />
 
-          {/* Model Context Protocol (MCP) Section */}
-          <McpSection />
+            <div className="section-divider my-2" />
 
-          {/* Section Divider */}
-          <div className="w-full border-t border-zinc-200/80 dark:border-zinc-800/80 my-2" />
+            <McpSection />
 
-          {/* API Quickstart & Code Integration Section */}
-          <ApiQuickstart />
+            <div className="section-divider my-2" />
+
+            <ApiQuickstart />
+          </div>
         </div>
       </main>
 

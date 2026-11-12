@@ -17,8 +17,10 @@ import {
 import {
   ALL_PROVIDERS,
   DEFAULT_ADVANCED_OPTIONS,
+  DEFAULT_PROVIDERS,
   EXAMPLE_QUERIES,
   LIMIT_CHOICES,
+  PROVIDER_HINTS,
   PROVIDER_LABELS,
   type AdvancedOptions,
   type ExtractionMode,
@@ -354,13 +356,13 @@ export function SearchPreview({
               <div className="grid grid-cols-2 gap-1.5">
                 <OptionButton
                   selected={allProviders}
-                  onClick={() => onProvidersChange(allProviders ? ["duckduckgo"] : ALL_PROVIDERS)}
-                  title={allProviders ? "Query DuckDuckGo only" : "Query all engines"}
+                  onClick={() => onProvidersChange(allProviders ? DEFAULT_PROVIDERS : ALL_PROVIDERS)}
+                  title={allProviders ? "Back to the default engines" : "Query all engines, including Marginalia"}
                 >
                   All ({ALL_PROVIDERS.length})
                 </OptionButton>
                 {ALL_PROVIDERS.map((p) => (
-                  <OptionButton key={p} selected={providers.includes(p)} onClick={() => toggleProvider(p)}>
+                  <OptionButton key={p} selected={providers.includes(p)} onClick={() => toggleProvider(p)} title={PROVIDER_HINTS[p]}>
                     {PROVIDER_LABELS[p]}
                   </OptionButton>
                 ))}

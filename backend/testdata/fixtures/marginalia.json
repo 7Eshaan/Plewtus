@@ -1,0 +1,44 @@
+{
+  "license": "CC-BY-NC-SA 4.0",
+  "query": "golang concurrency",
+  "page": 1,
+  "pages": 3,
+  "results": [
+    {
+      "url": "https://go.dev/blog/pipelines",
+      "title": "Go Concurrency Patterns: Pipelines and cancellation - The Go Programming Language",
+      "description": "Go's concurrency primitives make it easy to construct streaming data pipelines that make efficient use of I/O and multiple CPUs.",
+      "quality": -2.5,
+      "format": "html5",
+      "resultsFromDomain": 14,
+      "details": []
+    },
+    {
+      "url": "https://eli.thegreenplace.net/2019/on-concurrency-in-go-http-servers/",
+      "title": "On concurrency in Go HTTP servers",
+      "description": "Go's  built-in net/http package is convenient,\n solid and performant, making it easy to write production-grade web servers.",
+      "quality": -1.0,
+      "format": "html5",
+      "resultsFromDomain": 3,
+      "details": []
+    },
+    {
+      "url": "gopher://example.org/1/concurrency",
+      "title": "Not an http result",
+      "description": "Skipped by the parser.",
+      "quality": 0,
+      "format": "text",
+      "resultsFromDomain": 1,
+      "details": []
+    },
+    {
+      "url": "https://dave.cheney.net/2016/11/13/do-not-fear-first-class-functions",
+      "title": "",
+      "description": "",
+      "quality": -3.0,
+      "format": "html5",
+      "resultsFromDomain": 1,
+      "details": []
+    }
+  ]
+}

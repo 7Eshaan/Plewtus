@@ -78,7 +78,7 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 | `query` | `string` | **Yes** | — | Search query to execute (at most 500 characters). |
 | `limit` | `integer` | No | `10` | Max ranked results to return (max `50`). See *Result depth* below. |
 | `offset` | `integer` | No | `0` | Offset for slicing results. `offset + limit` must be at most `50`. When `limit` is omitted it shrinks to fit the window. |
-| `providers` | `[]string` | No | `["duckduckgo", "bing", "yahoo"]` | Subset of search engines to query. Unknown names are rejected with `400`. |
+| `providers` | `[]string` | No | `["duckduckgo", "bing", "yahoo"]` | Search engines to query: `duckduckgo`, `bing`, `yahoo`, `marginalia` (opt-in). Unknown names are rejected with `400`. Marginalia supports only the `year` freshness window; other windows report it as unsupported for that search. |
 | `freshness` | `string` | No | `""` | Discovery recency: `"day"`, `"week"`, `"month"`, or `"year"`. |
 | `include_domains` | `[]string` | No | `[]` | Only return results matching these hostnames/subdomains. |
 | `exclude_domains` | `[]string` | No | `[]` | Exclude any results matching these hostnames/subdomains. |

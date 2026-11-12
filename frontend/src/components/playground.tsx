@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SearchPreview, type ActiveTab } from "@/components/search-preview";
 import { buildSearchRequest } from "@/lib/build-request";
 import {
-  ALL_PROVIDERS,
   DEFAULT_ADVANCED_OPTIONS,
+  DEFAULT_PROVIDERS,
   EXAMPLE_QUERIES,
   MAX_RESULT_WINDOW,
   type AdvancedOptions,
@@ -55,7 +55,7 @@ async function postSearch(body: unknown, signal: AbortSignal): Promise<SearchRes
 
 export function Playground() {
   const [query, setQuery] = useState("");
-  const [providers, setProviders] = useState<ProviderName[]>(ALL_PROVIDERS);
+  const [providers, setProviders] = useState<ProviderName[]>(DEFAULT_PROVIDERS);
   const [extractionMode, setExtractionMode] = useState<ExtractionMode>("none");
   const [advancedOptions, setAdvancedOptions] = useState<AdvancedOptions>({ ...DEFAULT_ADVANCED_OPTIONS });
   const [activeTab, setActiveTab] = useState<ActiveTab>("results");

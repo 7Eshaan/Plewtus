@@ -86,8 +86,8 @@ export interface components {
              * @default 0
              */
             offset: number;
-            /** @description Optional list of search engines to query. Defaults to all active providers. */
-            providers?: ("duckduckgo" | "bing" | "yahoo")[];
+            /** @description Optional list of search engines to query. Defaults to PLEWTUS_DEFAULT_PROVIDERS (duckduckgo, bing, yahoo). marginalia is opt-in; its index is mostly English, it supports only the 'year' freshness window, and the shared public API key is heavily rate limited (set PLEWTUS_MARGINALIA_API_KEY). */
+            providers?: ("duckduckgo" | "bing" | "yahoo" | "marginalia")[];
             /**
              * @description Optional discovery recency filter.
              * @enum {string}
@@ -198,7 +198,7 @@ export interface components {
         };
         EngineSource: {
             /**
-             * @description Search engine name (duckduckgo, bing, yahoo).
+             * @description Search engine name (duckduckgo, bing, yahoo, marginalia).
              * @example duckduckgo
              */
             name: string;

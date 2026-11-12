@@ -9,7 +9,7 @@ func TestNewRegistry(t *testing.T) {
 	reg := NewRegistry(3*time.Second, "test-agent")
 	names := reg.Names()
 
-	expected := []string{"bing", "duckduckgo", "yahoo"}
+	expected := []string{"bing", "duckduckgo", "marginalia", "yahoo"}
 	if len(names) != len(expected) {
 		t.Fatalf("expected %d providers, got %d (%v)", len(expected), len(names), names)
 	}

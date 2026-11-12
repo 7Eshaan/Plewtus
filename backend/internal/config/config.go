@@ -33,6 +33,8 @@ type Config struct {
 	ProTierDailyQuota       int
 	CircuitBreakerThreshold int
 	CircuitBreakerCooldown  time.Duration
+	// MarginaliaAPIKey authenticates against the Marginalia Search API.
+	MarginaliaAPIKey string
 }
 
 // Load loads configuration from environment variables with sane defaults.
@@ -68,6 +70,7 @@ func Load() *Config {
 		ProTierDailyQuota:       getEnvAsInt("PLEWTUS_PRO_TIER_DAILY_QUOTA", 2000),
 		CircuitBreakerThreshold: getEnvAsInt("PLEWTUS_CIRCUIT_BREAKER_THRESHOLD", 3),
 		CircuitBreakerCooldown:  getEnvAsDurationMs("PLEWTUS_CIRCUIT_BREAKER_COOLDOWN_MS", 30000),
+		MarginaliaAPIKey:        getEnv("PLEWTUS_MARGINALIA_API_KEY", "public"),
 	}
 }
 

@@ -14,7 +14,8 @@ For local development, Plewtus also reads an optional `.env` file from the worki
 | `PLEWTUS_PORT` | `integer` | `8080` | Port to listen on. |
 | `PLEWTUS_ENV` | `string` | `development` | Environment mode (`development` or `production`). In production, logs format as JSON. |
 | `PLEWTUS_LOG_LEVEL` | `string` | `info` | Logging verbosity (`debug`, `info`, `warn`, `error`). |
-| `PLEWTUS_DEFAULT_PROVIDERS` | `string` | `duckduckgo,bing,yahoo` | Comma-separated list of active providers queried by default. |
+| `PLEWTUS_DEFAULT_PROVIDERS` | `string` | `duckduckgo,bing,yahoo` | Comma-separated list of active providers queried by default. Available: `duckduckgo`, `bing`, `yahoo`, `marginalia`. |
+| `PLEWTUS_MARGINALIA_API_KEY` | `string` | `public` | Key for the Marginalia Search API. `public` is shared and heavily rate limited; free personal keys are available from Marginalia. Free-key results are CC-BY-NC-SA 4.0. |
 | `PLEWTUS_DEFAULT_TIMEOUT_MS` | `integer` | `6000` | Per-provider scrape timeout in milliseconds (default 6s). |
 | `PLEWTUS_EXTRACT_TIMEOUT_MS` | `integer` | `8000` | Time budget for the page-extraction stage of a search. A single page fetch is capped at the smaller of this value and 5 seconds, so one slow site cannot hold back the others. |
 | `PLEWTUS_STRAGGLER_GRACE_MS` | `integer` | `1500` | When three or more engines are queried and all but one have returned results, how long to keep waiting for the last one before answering without it. It bounds tail latency when one engine hangs; `0` always waits for the full timeout. A cut-off engine is listed under `providers.failed` and does not count against its circuit breaker. |

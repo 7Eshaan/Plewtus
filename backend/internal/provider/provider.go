@@ -2,11 +2,17 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"sync"
 
 	"plewtus/internal/model"
 )
+
+// ErrUnsupportedFilter marks a request the provider cannot serve faithfully
+// (for example a freshness window the engine cannot express). It says nothing
+// about the provider's health, so it must not count as a circuit-breaker failure.
+var ErrUnsupportedFilter = errors.New("filter not supported by this provider")
 
 // Provider defines the interface that all search engine scrapers must implement.
 type Provider interface {

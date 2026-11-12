@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -266,4 +267,28 @@ func (p *recordingProvider) Name() string { return "rec" }
 func (p *recordingProvider) Search(ctx context.Context, req model.ProviderRequest) (*model.ProviderResponse, error) {
 	p.seen <- req
 	return &model.ProviderResponse{Engine: "rec", Results: relevantResults()}, nil
+}
+
+// An engine that cannot express a filter must be reported as failed for that
+// search without counting against its circuit breaker.
+func TestUnsupportedFilterDoesNotTripBreaker(t *testing.T) {
+	reg := provider.NewRegistry()
+	reg.Register(&mockProvider{name: "picky", err: fmt.Errorf("%w: no weekly freshness", provider.ErrUnsupportedFilter)})
+	reg.Register(&mockProvider{name: "ok", results: []model.RawSearchResult{{Title: "raft consensus", URL: "https://raft.github.io", Snippet: "raft", Position: 1}}})
+
+	breakers := reliability.NewManager(reliability.BreakerOptions{FailureThreshold: 1, Cooldown: time.Minute})
+	orch := New(reg, time.Second, "test", testLogger()).WithBreakers(breakers)
+
+	for i := 0; i < 3; i++ {
+		resp, err := orch.Search(context.Background(), &model.SearchRequest{Query: "raft", Limit: 5, Providers: []string{"picky", "ok"}})
+		if err != nil {
+			t.Fatalf("search %d failed: %v", i, err)
+		}
+		if len(resp.Metadata.Providers.Failed) != 1 || !strings.Contains(resp.Metadata.Providers.Failed[0].Error, "not supported") {
+			t.Fatalf("search %d: expected picky reported as unsupported, got %+v", i, resp.Metadata.Providers.Failed)
+		}
+	}
+	if state := breakers.Get("picky").State(); state != reliability.StateClosed {
+		t.Fatalf("unsupported filters must not open the breaker, state=%s", state)
+	}
 }

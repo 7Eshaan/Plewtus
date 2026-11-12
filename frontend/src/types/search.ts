@@ -1,11 +1,20 @@
-export type ProviderName = "duckduckgo" | "bing" | "yahoo";
+export type ProviderName = "duckduckgo" | "bing" | "yahoo" | "marginalia";
 
-export const ALL_PROVIDERS: ProviderName[] = ["duckduckgo", "bing", "yahoo"];
+export const ALL_PROVIDERS: ProviderName[] = ["duckduckgo", "bing", "yahoo", "marginalia"];
+
+/** Engines the backend queries when a request names none (PLEWTUS_DEFAULT_PROVIDERS). */
+export const DEFAULT_PROVIDERS: ProviderName[] = ["duckduckgo", "bing", "yahoo"];
+
+/** Extra context shown on engine toggles. */
+export const PROVIDER_HINTS: Partial<Record<ProviderName, string>> = {
+  marginalia: "Independent small-web index (mostly English). Only 'Past year' freshness is supported; the shared API key is often rate limited.",
+};
 
 export const PROVIDER_LABELS: Record<ProviderName, string> = {
   duckduckgo: "DuckDuckGo",
   bing: "Bing",
   yahoo: "Yahoo",
+  marginalia: "Marginalia",
 };
 
 export type ExtractionMode = "none" | "highlights" | "markdown" | "text";

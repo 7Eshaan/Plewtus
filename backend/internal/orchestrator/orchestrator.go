@@ -339,10 +339,11 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 			}
 			if err != nil {
 				if o.breakers != nil {
-					if provCtx.Err() != nil {
-						// The caller went away, the overall deadline hit, or this
-						// provider was cut off as a straggler; none of that says
-						// anything about the provider's health.
+					if provCtx.Err() != nil || errors.Is(err, provider.ErrUnsupportedFilter) {
+						// The caller went away, the overall deadline hit, this
+						// provider was cut off as a straggler, or it cannot express
+						// the requested filters; none of that says anything about
+						// the provider's health.
 						o.breakers.Get(name).ReleaseFor(breakerGeneration)
 					} else {
 						o.breakers.Get(name).ReportFailureFor(breakerGeneration, err)
