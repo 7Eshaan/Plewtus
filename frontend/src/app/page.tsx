@@ -29,8 +29,8 @@ export default function HomePage() {
               </h1>
 
               <p className="text-sm sm:text-base text-zinc-500 dark:text-zinc-400 max-w-xl text-balance leading-relaxed">
-                Query DuckDuckGo, Bing, and Yahoo at once. Deduplicated canonical URLs,
-                off-topic results removed, and ranking by agreement between engines.
+                Connect your agents to the web with one search API. Clean, deduplicated
+                results ranked by consensus, with full page content when you need it.
               </p>
             </div>
 

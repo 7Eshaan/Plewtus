@@ -5,14 +5,15 @@ import {
   Search,
   ArrowUp,
   X,
-  BookOpen,
   Code2,
   FileJson,
   ListOrdered,
   Loader2,
   SlidersHorizontal,
-  ChevronDown,
   RotateCcw,
+  Layers,
+  Clock,
+  FileText,
 } from "lucide-react";
 import {
   ALL_PROVIDERS,
@@ -34,6 +35,7 @@ import { ErrorState } from "./error-state";
 import { JsonViewer } from "./json-viewer";
 import { handleArrowNav } from "@/lib/arrow-nav";
 import { CodeSnippets } from "./code-snippets";
+import { Dropdown, DropdownOption } from "./ui/dropdown";
 import type { components } from "@/types/api";
 
 type SearchResponse = components["schemas"]["SearchResponse"];
@@ -89,14 +91,6 @@ const TABS: { value: ActiveTab; label: string; icon: typeof ListOrdered }[] = [
   { value: "json", label: "JSON", icon: FileJson },
   { value: "code", label: "API Code", icon: Code2 },
 ];
-
-function SectionLabel({ children, id }: { children: React.ReactNode; id?: string }) {
-  return (
-    <span id={id} className="text-[10px] font-mono tracking-wider text-zinc-500 font-semibold uppercase">
-      {children}
-    </span>
-  );
-}
 
 /** Pill-style toggle used for single- and multi-select option groups. */
 function OptionButton({
@@ -220,9 +214,8 @@ export function SearchPreview({
   onSelectSuggestion,
 }: SearchPreviewProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  // On small screens the options are collapsed so results sit right under the search bar.
-  const [optionsOpen, setOptionsOpen] = useState(false);
+  // Which options dropdown is open; opening one closes the others.
+  const [openMenu, setOpenMenu] = useState<"engines" | "freshness" | "content" | "advanced" | null>(null);
   const baseId = useId();
   const panelId = `${baseId}-panel`;
 
@@ -258,14 +251,23 @@ export function SearchPreview({
   }
 
   const allProviders = providers.length === ALL_PROVIDERS.length;
-  const optionsSummary = [
-    allProviders ? "All engines" : providers.map((p) => PROVIDER_LABELS[p]).join(", "),
-    FRESHNESS_OPTIONS.find((o) => o.value === advancedOptions.freshness)?.label ?? "Anytime",
-    extractionMode === "none" ? "Snippets only" : EXTRACTION_OPTIONS.find((o) => o.value === extractionMode)?.label,
-  ].join(" · ");
+  const defaultProviders =
+    providers.length === DEFAULT_PROVIDERS.length && DEFAULT_PROVIDERS.every((p) => providers.includes(p));
+  const engineSummary = allProviders
+    ? `All ${ALL_PROVIDERS.length}`
+    : providers.length === 1
+      ? PROVIDER_LABELS[providers[0]]
+      : `${PROVIDER_LABELS[providers[0]]} +${providers.length - 1}`;
+  const freshnessLabel = FRESHNESS_OPTIONS.find((o) => o.value === advancedOptions.freshness)?.label ?? "Anytime";
+  const extractionLabel =
+    extractionMode === "none" ? "Snippets" : (EXTRACTION_OPTIONS.find((o) => o.value === extractionMode)?.label ?? "Snippets");
   const advancedActive =
     advancedOptions.limit !== DEFAULT_ADVANCED_OPTIONS.limit ||
     Boolean(advancedOptions.country || advancedOptions.language || advancedOptions.includeDomains || advancedOptions.excludeDomains);
+  const filtersSet = Boolean(
+    advancedOptions.country || advancedOptions.language || advancedOptions.includeDomains || advancedOptions.excludeDomains,
+  );
+  const optionsLabel = `${advancedOptions.limit} results${filtersSet ? " + filters" : ""}`;
 
   return (
     <div className="w-full max-w-4xl mx-auto rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0c0c0e] shadow-lg overflow-hidden text-left">
@@ -281,7 +283,7 @@ export function SearchPreview({
           type="search"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          placeholder="Search the web across DuckDuckGo, Bing & Yahoo…"
+          placeholder="Search the web…"
           aria-label="Search query"
           enterKeyHint="search"
           className="flex-1 min-w-0 text-sm sm:text-base font-medium text-zinc-950 dark:text-zinc-50 placeholder-zinc-400 dark:placeholder-zinc-600 bg-transparent outline-none [&::-webkit-search-cancel-button]:hidden"
@@ -312,165 +314,184 @@ export function SearchPreview({
         </button>
       </form>
 
-      <div className="flex flex-col md:flex-row md:h-[400px]">
-        {/* Controls */}
-        <aside
-          className="w-full md:w-64 lg:w-72 border-b md:border-b-0 md:border-r border-zinc-200 dark:border-zinc-800/80 p-3.5 sm:p-4 flex flex-col justify-between gap-3 bg-zinc-50/50 dark:bg-zinc-950/20 overflow-y-auto shrink-0"
-          aria-label="Search options"
+      {/* Options toolbar: one dropdown per setting, so results get the full width */}
+      <div
+        className="relative px-3 py-2 flex flex-wrap items-center gap-1.5 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-950/30"
+        role="toolbar"
+        aria-label="Search options"
+      >
+        <Dropdown
+          id={`${baseId}-engines`}
+          label="Engines"
+          value={engineSummary}
+          icon={<Layers />}
+          open={openMenu === "engines"}
+          onOpenChange={(open) => setOpenMenu(open ? "engines" : null)}
+          modified={!defaultProviders}
+          panelClassName="sm:w-80"
         >
-          <button
-            type="button"
-            onClick={() => setOptionsOpen((open) => !open)}
-            aria-expanded={optionsOpen}
-            aria-controls={`${baseId}-options`}
-            className="md:hidden flex items-center justify-between gap-2 text-left text-xs font-mono text-zinc-600 dark:text-zinc-400 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded"
-          >
-            <span className="inline-flex items-center gap-1.5 min-w-0">
-              <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
-              <span className="font-semibold text-zinc-800 dark:text-zinc-200 shrink-0">Options</span>
-              <span className="truncate text-zinc-500">{optionsSummary}</span>
-            </span>
-            <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${optionsOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          <div id={`${baseId}-options`} className={`${optionsOpen ? "flex" : "hidden"} md:flex flex-col gap-3.5`}>
-            <div className="flex flex-col gap-1.5" role="radiogroup" aria-labelledby={`${baseId}-extract`} onKeyDown={handleArrowNav}>
-              <SectionLabel id={`${baseId}-extract`}>Extraction</SectionLabel>
-              <div className="grid grid-cols-2 gap-1.5">
-                {EXTRACTION_OPTIONS.map((opt) => (
-                  <OptionButton
-                    key={opt.value}
-                    role="radio"
-                    selected={extractionMode === opt.value}
-                    onClick={() => onExtractionModeChange(opt.value)}
-                    title={opt.hint}
-                  >
-                    {opt.label}
-                  </OptionButton>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5" role="group" aria-labelledby={`${baseId}-engines`}>
-              <SectionLabel id={`${baseId}-engines`}>Engines</SectionLabel>
-              <div className="grid grid-cols-2 gap-1.5">
-                <OptionButton
-                  selected={allProviders}
-                  onClick={() => onProvidersChange(allProviders ? DEFAULT_PROVIDERS : ALL_PROVIDERS)}
-                  title={allProviders ? "Back to the default engines" : "Query all engines, including Marginalia"}
-                >
-                  All ({ALL_PROVIDERS.length})
-                </OptionButton>
-                {ALL_PROVIDERS.map((p) => (
-                  <OptionButton key={p} selected={providers.includes(p)} onClick={() => toggleProvider(p)} title={PROVIDER_HINTS[p]}>
-                    {PROVIDER_LABELS[p]}
-                  </OptionButton>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5" role="radiogroup" aria-labelledby={`${baseId}-fresh`} onKeyDown={handleArrowNav}>
-              <SectionLabel id={`${baseId}-fresh`}>Freshness</SectionLabel>
-              <div className="flex flex-wrap gap-1.5">
-                {FRESHNESS_OPTIONS.map((opt) => (
-                  <OptionButton
-                    key={opt.value || "any"}
-                    role="radio"
-                    selected={advancedOptions.freshness === opt.value}
-                    onClick={() => setOption("freshness", opt.value)}
-                  >
-                    {opt.label}
-                  </OptionButton>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-2 mb-1 border-b border-zinc-100 dark:border-zinc-800">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Engines</span>
+            <div className="flex items-center gap-1 text-[11px] font-mono">
               <button
                 type="button"
-                onClick={() => setAdvancedOpen((open) => !open)}
-                aria-expanded={advancedOpen}
-                aria-controls={`${baseId}-advanced`}
-                className="inline-flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-mono text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+                onClick={() => onProvidersChange(DEFAULT_PROVIDERS)}
+                disabled={defaultProviders}
+                className="px-1.5 py-0.5 rounded text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-100 disabled:opacity-40 disabled:cursor-default cursor-pointer"
               >
-                <span className="inline-flex items-center gap-1.5">
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  Advanced
-                  {advancedActive && <span className="w-1.5 h-1.5 rounded-full bg-brand" aria-label="(modified)" />}
-                </span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
+                Defaults
               </button>
-
-              {advancedOpen && (
-                <div
-                  id={`${baseId}-advanced`}
-                  className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col gap-2 text-xs"
-                >
-                  <div className="flex items-center justify-between pb-1 border-b border-zinc-100 dark:border-zinc-800">
-                    <span className="font-mono text-[10px] text-zinc-500 uppercase">Options</span>
-                    <button
-                      type="button"
-                      onClick={() => onAdvancedOptionsChange({ ...DEFAULT_ADVANCED_OPTIONS })}
-                      className="text-[10px] font-mono text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-100 inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      <RotateCcw className="w-2.5 h-2.5" />
-                      Reset
-                    </button>
-                  </div>
-
-                  <div className="flex flex-col gap-1" role="radiogroup" aria-label="Number of results" onKeyDown={handleArrowNav}>
-                    <span className="text-[10px] font-mono text-zinc-500">Results</span>
-                    <div className="grid grid-cols-4 gap-1">
-                      {LIMIT_CHOICES.map((n) => (
-                        <OptionButton key={n} role="radio" selected={advancedOptions.limit === n} onClick={() => setOption("limit", n)}>
-                          {n}
-                        </OptionButton>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <TextField
-                      label="Country (ISO)"
-                      value={advancedOptions.country}
-                      maxLength={2}
-                      placeholder="us"
-                      onChange={(v) => setOption("country", v.toLowerCase().replace(/[^a-z]/g, ""))}
-                    />
-                    <TextField
-                      label="Language (ISO)"
-                      value={advancedOptions.language}
-                      maxLength={2}
-                      placeholder="en"
-                      onChange={(v) => setOption("language", v.toLowerCase().replace(/[^a-z]/g, ""))}
-                    />
-                  </div>
-                  <TextField
-                    label="Include domains (comma-separated)"
-                    value={advancedOptions.includeDomains}
-                    placeholder="go.dev, pkg.go.dev"
-                    onChange={(v) => setOption("includeDomains", v)}
-                  />
-                  <TextField
-                    label="Exclude domains (comma-separated)"
-                    value={advancedOptions.excludeDomains}
-                    placeholder="pinterest.com"
-                    onChange={(v) => setOption("excludeDomains", v)}
-                  />
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => onProvidersChange(ALL_PROVIDERS)}
+                disabled={allProviders}
+                className="px-1.5 py-0.5 rounded text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-100 disabled:opacity-40 disabled:cursor-default cursor-pointer"
+              >
+                All ({ALL_PROVIDERS.length})
+              </button>
             </div>
           </div>
+          <div role="group" aria-label="Engines" className="flex flex-col">
+            {ALL_PROVIDERS.map((p) => {
+              const selected = providers.includes(p);
+              return (
+                <DropdownOption
+                  key={p}
+                  kind="checkbox"
+                  checked={selected}
+                  onSelect={() => toggleProvider(p)}
+                  label={PROVIDER_LABELS[p]}
+                  hint={PROVIDER_HINTS[p] ?? (DEFAULT_PROVIDERS.includes(p) ? "Queried by default." : undefined)}
+                  disabled={selected && providers.length === 1}
+                  disabledReason="At least one engine is required"
+                />
+              );
+            })}
+          </div>
+        </Dropdown>
 
-          <a
-            href="#quickstart"
-            className="hidden md:inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs font-mono text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-zinc-950 dark:hover:text-white transition-colors select-none"
-          >
-            <BookOpen className="w-3 h-3 text-zinc-400" />
-            Use it from your code
-          </a>
-        </aside>
+        <Dropdown
+          id={`${baseId}-freshness`}
+          label="Freshness"
+          value={freshnessLabel}
+          icon={<Clock />}
+          open={openMenu === "freshness"}
+          onOpenChange={(open) => setOpenMenu(open ? "freshness" : null)}
+          modified={advancedOptions.freshness !== ""}
+          panelClassName="sm:w-48"
+        >
+          <div role="radiogroup" aria-label="Freshness" onKeyDown={handleArrowNav} className="flex flex-col">
+            {FRESHNESS_OPTIONS.map((opt) => (
+              <DropdownOption
+                key={opt.value || "any"}
+                kind="radio"
+                checked={advancedOptions.freshness === opt.value}
+                onSelect={() => {
+                  setOption("freshness", opt.value);
+                  setOpenMenu(null);
+                }}
+                label={opt.label}
+              />
+            ))}
+          </div>
+        </Dropdown>
 
+        <Dropdown
+          id={`${baseId}-content`}
+          label="Content"
+          value={extractionLabel}
+          icon={<FileText />}
+          open={openMenu === "content"}
+          onOpenChange={(open) => setOpenMenu(open ? "content" : null)}
+          modified={extractionMode !== "none"}
+          panelClassName="sm:w-64"
+        >
+          <div role="radiogroup" aria-label="Page content" onKeyDown={handleArrowNav} className="flex flex-col">
+            {EXTRACTION_OPTIONS.map((opt) => (
+              <DropdownOption
+                key={opt.value}
+                kind="radio"
+                checked={extractionMode === opt.value}
+                onSelect={() => {
+                  onExtractionModeChange(opt.value);
+                  setOpenMenu(null);
+                }}
+                label={opt.value === "none" ? "Snippets" : opt.label}
+                hint={opt.hint}
+              />
+            ))}
+          </div>
+        </Dropdown>
+
+        <Dropdown
+          id={`${baseId}-advanced`}
+          label="Options"
+          value={optionsLabel}
+          icon={<SlidersHorizontal />}
+          open={openMenu === "advanced"}
+          onOpenChange={(open) => setOpenMenu(open ? "advanced" : null)}
+          modified={advancedActive}
+          panelClassName="sm:w-80"
+        >
+          <div className="p-1.5 flex flex-col gap-2.5 text-xs">
+            <div className="flex items-center justify-between pb-1.5 border-b border-zinc-100 dark:border-zinc-800">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500">Options</span>
+              <button
+                type="button"
+                onClick={() => onAdvancedOptionsChange({ ...DEFAULT_ADVANCED_OPTIONS, freshness: advancedOptions.freshness })}
+                disabled={!advancedActive}
+                className="text-[11px] font-mono text-zinc-500 hover:text-zinc-950 dark:hover:text-zinc-100 inline-flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-default"
+              >
+                <RotateCcw className="w-2.5 h-2.5" />
+                Reset
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-1" role="radiogroup" aria-label="Number of results" onKeyDown={handleArrowNav}>
+              <span className="text-[10px] font-mono text-zinc-500">Results</span>
+              <div className="grid grid-cols-4 gap-1">
+                {LIMIT_CHOICES.map((n) => (
+                  <OptionButton key={n} role="radio" selected={advancedOptions.limit === n} onClick={() => setOption("limit", n)}>
+                    {n}
+                  </OptionButton>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <TextField
+                label="Country (ISO)"
+                value={advancedOptions.country}
+                maxLength={2}
+                placeholder="us"
+                onChange={(v) => setOption("country", v.toLowerCase().replace(/[^a-z]/g, ""))}
+              />
+              <TextField
+                label="Language (ISO)"
+                value={advancedOptions.language}
+                maxLength={2}
+                placeholder="en"
+                onChange={(v) => setOption("language", v.toLowerCase().replace(/[^a-z]/g, ""))}
+              />
+            </div>
+            <TextField
+              label="Include domains (comma-separated)"
+              value={advancedOptions.includeDomains}
+              placeholder="go.dev, pkg.go.dev"
+              onChange={(v) => setOption("includeDomains", v)}
+            />
+            <TextField
+              label="Exclude domains (comma-separated)"
+              value={advancedOptions.excludeDomains}
+              placeholder="pinterest.com"
+              onChange={(v) => setOption("excludeDomains", v)}
+            />
+          </div>
+        </Dropdown>
+
+      </div>
+
+      <div className="flex flex-col md:h-[420px]">
         {/* Output */}
         <div className="flex-1 p-3.5 sm:p-4 flex flex-col gap-2.5 overflow-hidden bg-white/60 dark:bg-[#0c0c0e]/60 min-h-[320px] md:min-h-0">
           <div className="flex items-center justify-between gap-2 border-b border-zinc-200 dark:border-zinc-800/80 pb-2 shrink-0">

@@ -316,3 +316,14 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .deep-space__stars { animation: none; }
 }
+
+/* Playground option dropdowns (components/ui/dropdown.tsx): a quick fade and lift on open. */
+.dropdown-panel {
+  animation: dropdown-in 120ms ease-out;
+  transform-origin: top left;
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
