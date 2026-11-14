@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   description: |
     Plewtus is an AI-agent search API backend that aggregates search results across
-    multiple search engines (DuckDuckGo, Bing, Yahoo, and opt-in Marginalia) using metasearch architecture.
+    multiple search engines (DuckDuckGo, Bing, Yahoo, and opt-in Marginalia, Brave and Qwant) using metasearch architecture.
     Results are normalized, deduplicated, filtered for relevance, and ranked with
     Reciprocal Rank Fusion (RRF) plus a small query-relevance boost,
     with optional AI-friendly webpage extraction (clean text, highlights, Markdown).
@@ -198,8 +198,8 @@ components:
           type: array
           items:
             type: string
-            enum: [duckduckgo, bing, yahoo, marginalia]
-          description: Optional list of search engines to query. Defaults to PLEWTUS_DEFAULT_PROVIDERS (duckduckgo, bing, yahoo). marginalia is opt-in; its index is mostly English, it supports only the 'year' freshness window, and the shared public API key is heavily rate limited (set PLEWTUS_MARGINALIA_API_KEY).
+            enum: [duckduckgo, bing, yahoo, marginalia, brave, qwant]
+          description: Optional list of search engines to query. Defaults to PLEWTUS_DEFAULT_PROVIDERS (duckduckgo, bing, yahoo). marginalia, brave and qwant are opt-in. Marginalia has a mostly English index, supports only the 'year' freshness window, and its shared public API key is heavily rate limited (set PLEWTUS_MARGINALIA_API_KEY). Brave's HTML page usually answers non-browser clients with a captcha, so set PLEWTUS_BRAVE_API_KEY to use Brave's official Search API. Qwant is only available in some countries, sits behind bot protection, and has no freshness filter.
         freshness:
           type: string
           enum: [day, week, month, year]
@@ -338,7 +338,7 @@ components:
       properties:
         name:
           type: string
-          description: Search engine name (duckduckgo, bing, yahoo, marginalia).
+          description: Search engine name (duckduckgo, bing, yahoo, marginalia, brave, qwant).
           example: "duckduckgo"
         position:
           type: integer

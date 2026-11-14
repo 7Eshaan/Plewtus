@@ -30,6 +30,7 @@ type Components struct {
 func Build(cfg *config.Config, logger *slog.Logger) *Components {
 	registry := all.NewRegistry(cfg.DefaultTimeout, cfg.UserAgent, all.Options{
 		MarginaliaAPIKey: cfg.MarginaliaAPIKey,
+		BraveAPIKey:      cfg.BraveAPIKey,
 	})
 	// A single page gets less than the whole extraction stage, so one slow
 	// site cannot hold back the pages that already finished.

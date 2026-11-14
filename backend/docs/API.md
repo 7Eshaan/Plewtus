@@ -78,7 +78,7 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 | `query` | `string` | **Yes** | — | Search query to execute (at most 500 characters). |
 | `limit` | `integer` | No | `10` | Max ranked results to return (max `50`). See *Result depth* below. |
 | `offset` | `integer` | No | `0` | Offset for slicing results. `offset + limit` must be at most `50`. When `limit` is omitted it shrinks to fit the window. |
-| `providers` | `[]string` | No | `["duckduckgo", "bing", "yahoo"]` | Search engines to query: `duckduckgo`, `bing`, `yahoo`, `marginalia` (opt-in). Unknown names are rejected with `400`. Marginalia supports only the `year` freshness window; other windows report it as unsupported for that search. |
+| `providers` | `[]string` | No | `["duckduckgo", "bing", "yahoo"]` | Search engines to query: `duckduckgo`, `bing`, `yahoo`, `marginalia`, `brave`, `qwant` (all three opt-in). Unknown names are rejected with `400`. Marginalia supports only the `year` freshness window and Qwant has no freshness filter; other windows report them as unsupported for that search. Brave usually needs `PLEWTUS_BRAVE_API_KEY` (its HTML page answers non-browser clients with a captcha). Qwant only serves some countries and is behind bot protection; when unavailable it appears in `providers.failed` with the reason. |
 | `freshness` | `string` | No | `""` | Discovery recency: `"day"`, `"week"`, `"month"`, or `"year"`. |
 | `include_domains` | `[]string` | No | `[]` | Only return results matching these hostnames/subdomains. |
 | `exclude_domains` | `[]string` | No | `[]` | Exclude any results matching these hostnames/subdomains. |

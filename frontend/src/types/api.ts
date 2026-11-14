@@ -86,8 +86,8 @@ export interface components {
              * @default 0
              */
             offset: number;
-            /** @description Optional list of search engines to query. Defaults to PLEWTUS_DEFAULT_PROVIDERS (duckduckgo, bing, yahoo). marginalia is opt-in; its index is mostly English, it supports only the 'year' freshness window, and the shared public API key is heavily rate limited (set PLEWTUS_MARGINALIA_API_KEY). */
-            providers?: ("duckduckgo" | "bing" | "yahoo" | "marginalia")[];
+            /** @description Optional list of search engines to query. Defaults to PLEWTUS_DEFAULT_PROVIDERS (duckduckgo, bing, yahoo). marginalia, brave and qwant are opt-in. Marginalia has a mostly English index, supports only the 'year' freshness window, and its shared public API key is heavily rate limited (set PLEWTUS_MARGINALIA_API_KEY). Brave's HTML page usually answers non-browser clients with a captcha, so set PLEWTUS_BRAVE_API_KEY to use Brave's official Search API. Qwant is only available in some countries, sits behind bot protection, and has no freshness filter. */
+            providers?: ("duckduckgo" | "bing" | "yahoo" | "marginalia" | "brave" | "qwant")[];
             /**
              * @description Optional discovery recency filter.
              * @enum {string}
@@ -198,7 +198,7 @@ export interface components {
         };
         EngineSource: {
             /**
-             * @description Search engine name (duckduckgo, bing, yahoo, marginalia).
+             * @description Search engine name (duckduckgo, bing, yahoo, marginalia, brave, qwant).
              * @example duckduckgo
              */
             name: string;

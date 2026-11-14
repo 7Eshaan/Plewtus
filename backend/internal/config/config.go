@@ -35,6 +35,8 @@ type Config struct {
 	CircuitBreakerCooldown  time.Duration
 	// MarginaliaAPIKey authenticates against the Marginalia Search API.
 	MarginaliaAPIKey string
+	// BraveAPIKey enables Brave's official Search API (empty: scrape the HTML page).
+	BraveAPIKey string
 }
 
 // Load loads configuration from environment variables with sane defaults.
@@ -71,6 +73,7 @@ func Load() *Config {
 		CircuitBreakerThreshold: getEnvAsInt("PLEWTUS_CIRCUIT_BREAKER_THRESHOLD", 3),
 		CircuitBreakerCooldown:  getEnvAsDurationMs("PLEWTUS_CIRCUIT_BREAKER_COOLDOWN_MS", 30000),
 		MarginaliaAPIKey:        getEnv("PLEWTUS_MARGINALIA_API_KEY", "public"),
+		BraveAPIKey:             getEnv("PLEWTUS_BRAVE_API_KEY", ""),
 	}
 }
 

@@ -272,8 +272,9 @@ Plewtus is configured via environment variables:
 | `PLEWTUS_PORT` (or `PORT`) | `8080` | HTTP listening port for the REST API |
 | `PLEWTUS_AUTH_REQUIRED` | `false` | When `true`, rejects requests lacking a valid API key |
 | `PLEWTUS_API_KEYS` | `""` | Comma-delimited list of authorized keys with tiers (e.g. `key1:free,key2:pro`) |
-| `PLEWTUS_DEFAULT_PROVIDERS` | `duckduckgo,bing,yahoo` | Default providers queried per search (`marginalia` is also available) |
+| `PLEWTUS_DEFAULT_PROVIDERS` | `duckduckgo,bing,yahoo` | Default providers queried per search (`marginalia`, `brave` and `qwant` are also available) |
 | `PLEWTUS_MARGINALIA_API_KEY` | `public` | Marginalia Search API key; `public` is shared and heavily rate limited |
+| `PLEWTUS_BRAVE_API_KEY` | _(empty)_ | Brave Search API key; without it Brave's HTML page usually serves a captcha |
 | `PLEWTUS_DEFAULT_LIMIT` | `10` | Results returned when `limit` is omitted |
 | `PLEWTUS_CACHE_ENABLED` | `true` | Enables the in-memory LRU search cache |
 | `PLEWTUS_CACHE_TTL_SECONDS` | `600` | Search result cache expiration in seconds |
@@ -304,7 +305,7 @@ PlewtusV1/
 │   │   ├── model/           # Request and response types
 │   │   ├── orchestrator/    # Concurrent provider dispatch and response assembly
 │   │   ├── pipeline/        # URL normalization, deduplication, relevance, RRF ranking
-│   │   ├── provider/        # DuckDuckGo, Bing, Yahoo scrapers + Marginalia API client
+│   │   ├── provider/        # DuckDuckGo, Bing, Yahoo, Brave scrapers + Marginalia, Brave, Qwant API clients
 │   │   ├── reliability/     # Circuit breakers
 │   │   ├── server/          # HTTP routes and middleware
 │   │   └── usage/           # API keys, rate limits, daily quotas

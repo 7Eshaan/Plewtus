@@ -1,0 +1,23 @@
+{
+  "status": "success",
+  "data": {
+    "query": {"locale": "en_US", "query": "golang concurrency", "offset": 0},
+    "result": {
+      "total": 3,
+      "items": {
+        "mainline": [
+          {"type": "ads", "items": [{"title": "Sponsored Go course", "url": "https://ads.example.com/go", "desc": "Ad"}]},
+          {"type": "web", "items": [
+            {"title": "Concurrency  is not parallelism", "url": "https://go.dev/blog/waza-talk", "desc": "Rob Pike on Go\n concurrency:  concurrency is not parallelism.", "date": 1357084800},
+            {"title": "", "url": "https://gobyexample.com/goroutines", "desc": "Golang concurrency with goroutines, lightweight threads of execution.", "date": 0},
+            {"title": "gopher only", "url": "gopher://example.org/1", "desc": "skipped"}
+          ]},
+          {"type": "videos", "items": [{"title": "Go concurrency video", "url": "https://www.youtube.com/watch?v=f6kdp27TYZs", "desc": "Video"}]},
+          {"type": "web", "items": [
+            {"title": "Effective Go - Concurrency", "url": "https://go.dev/doc/effective_go#concurrency", "desc": "Share memory by communicating.", "date": 1700000000000}
+          ]}
+        ]
+      }
+    }
+  }
+}

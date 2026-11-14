@@ -49,6 +49,9 @@ type CircuitBreaker struct {
 	generation       uint64
 	lastTrippedAt    time.Time
 	halfOpenProbing  bool
+	// lastErr is the most recent failure, shown while the circuit is open so
+	// callers still see why the provider is unavailable.
+	lastErr string
 }
 
 // NewCircuitBreaker creates a new circuit breaker with given options.
@@ -103,14 +106,14 @@ func (cb *CircuitBreaker) AllowWithGeneration() (uint64, error) {
 			return cb.generation, nil
 		}
 		// Probe is already in-flight, reject concurrent calls until probe completes
-		return cb.generation, fmt.Errorf("%w (%s in probe)", ErrCircuitOpen, cb.name)
+		return cb.generation, fmt.Errorf("%w (%s in probe%s)", ErrCircuitOpen, cb.name, cb.lastErrSuffix())
 
 	case StateOpen:
 		remaining := cb.cooldown - now.Sub(cb.lastTrippedAt)
 		if remaining < 0 {
 			remaining = 0
 		}
-		return cb.generation, fmt.Errorf("%w (%s cooling down, %.1fs remaining)", ErrCircuitOpen, cb.name, remaining.Seconds())
+		return cb.generation, fmt.Errorf("%w (%s cooling down, %.1fs remaining%s)", ErrCircuitOpen, cb.name, remaining.Seconds(), cb.lastErrSuffix())
 
 	default:
 		return cb.generation, nil
@@ -134,6 +137,7 @@ func (cb *CircuitBreaker) ReportSuccessFor(generation uint64) {
 	}
 
 	cb.failures = 0
+	cb.lastErr = ""
 	if cb.state == StateHalfOpen {
 		cb.generation++
 	}
@@ -158,6 +162,9 @@ func (cb *CircuitBreaker) ReportFailureFor(generation uint64, err error) {
 	}
 
 	now := time.Now()
+	if err != nil {
+		cb.lastErr = err.Error()
+	}
 
 	switch cb.state {
 	case StateHalfOpen:
@@ -190,6 +197,14 @@ func (cb *CircuitBreaker) ReleaseFor(generation uint64) {
 	if generation == cb.generation && cb.state == StateHalfOpen {
 		cb.halfOpenProbing = false
 	}
+}
+
+// lastErrSuffix formats the most recent failure for open-circuit errors.
+func (cb *CircuitBreaker) lastErrSuffix() string {
+	if cb.lastErr == "" {
+		return ""
+	}
+	return "; last error: " + cb.lastErr
 }
 
 func (cb *CircuitBreaker) updateStateLocked(now time.Time) {

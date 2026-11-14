@@ -16,7 +16,7 @@ function request(headers: Record<string, string>): Request {
 const clean = sanitizeSearchRequest({
   query: "  golang  ",
   limit: 500,
-  providers: ["bing", "evil", "yahoo", "marginalia"],
+  providers: ["bing", "evil", "yahoo", "marginalia", "brave", "qwant"],
   freshness: "decade",
   country: "US",
   language: "english",
@@ -29,7 +29,7 @@ if (clean.ok) {
   const r = clean.request as Record<string, unknown>;
   assert(r.query === "golang", "query is trimmed");
   assert(r.limit === DEMO_LIMITS.results, "limit is clamped");
-  assert(JSON.stringify(r.providers) === JSON.stringify(["bing", "yahoo", "marginalia"]), "unknown providers are dropped");
+  assert(JSON.stringify(r.providers) === JSON.stringify(["bing", "yahoo", "marginalia", "brave", "qwant"]), "unknown providers are dropped");
   assert(r.freshness === undefined, "invalid freshness is dropped");
   assert(r.country === "us" && r.language === undefined, "ISO codes are validated");
   assert((r.include_domains as string[]).length === DEMO_LIMITS.domains, "domain lists are capped");

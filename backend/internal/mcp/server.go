@@ -396,7 +396,7 @@ func (s *Server) handleMethod(method string, params json.RawMessage) (any, *JSON
 				"title":   "Plewtus Metasearch",
 				"version": s.version,
 			},
-			"instructions": "Use `search` to find web pages across DuckDuckGo, Bing, and Yahoo (plus Marginalia's independent small-web index on request) with optional page content, and `extract` to read specific URLs.",
+			"instructions": "Use `search` to find web pages across DuckDuckGo, Bing, and Yahoo (plus Marginalia, Brave and Qwant on request) with optional page content, and `extract` to read specific URLs.",
 		}, nil
 
 	case "ping":
@@ -421,7 +421,7 @@ func (s *Server) toolDefinitions() []map[string]any {
 		{
 			"name":        "search",
 			"title":       "Web search",
-			"description": "Search the web across DuckDuckGo, Bing, and Yahoo by default; add \"marginalia\" to providers for Marginalia's independent small-web index. Results are deduplicated, off-topic results are removed, and the rest are ranked by agreement between engines. Optionally extracts page content from the top results.",
+			"description": "Search the web across DuckDuckGo, Bing, and Yahoo by default; add \"marginalia\", \"brave\" or \"qwant\" to providers for those engines (Brave usually needs PLEWTUS_BRAVE_API_KEY; Qwant only serves some countries). Results are deduplicated, off-topic results are removed, and the rest are ranked by agreement between engines. Optionally extracts page content from the top results.",
 			"annotations": readOnly,
 			"inputSchema": map[string]any{
 				"type": "object",

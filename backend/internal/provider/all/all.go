@@ -5,8 +5,10 @@ import (
 
 	"plewtus/internal/provider"
 	"plewtus/internal/provider/bing"
+	"plewtus/internal/provider/brave"
 	"plewtus/internal/provider/duckduckgo"
 	"plewtus/internal/provider/marginalia"
+	"plewtus/internal/provider/qwant"
 	"plewtus/internal/provider/yahoo"
 )
 
@@ -14,6 +16,8 @@ import (
 type Options struct {
 	// MarginaliaAPIKey is sent to the Marginalia API; empty uses the shared public key.
 	MarginaliaAPIKey string
+	// BraveAPIKey switches Brave to its official Search API; empty uses the HTML page.
+	BraveAPIKey string
 }
 
 // RegisterAll registers all available search providers into the specified registry.
@@ -26,6 +30,8 @@ func RegisterAll(reg *provider.Registry, timeout time.Duration, userAgent string
 	reg.Register(bing.New(timeout, userAgent))
 	reg.Register(yahoo.New(timeout, userAgent))
 	reg.Register(marginalia.New(timeout, userAgent, o.MarginaliaAPIKey))
+	reg.Register(brave.New(timeout, userAgent, o.BraveAPIKey))
+	reg.Register(qwant.New(timeout, userAgent))
 }
 
 // NewRegistry creates a new Registry pre-configured with all active search providers.

@@ -2,6 +2,7 @@ package reliability
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -190,5 +191,24 @@ func TestCircuitBreaker_ReleaseFreesHalfOpenProbe(t *testing.T) {
 	}
 	if _, err := cb.AllowWithGeneration(); err != nil {
 		t.Fatalf("a new probe should be admitted after release: %v", err)
+	}
+}
+
+func TestOpenCircuitReportsLastFailure(t *testing.T) {
+	cb := NewCircuitBreaker("brave", BreakerOptions{FailureThreshold: 1, Cooldown: time.Minute})
+	cb.ReportFailure(errors.New("brave served a captcha"))
+
+	err := cb.Allow()
+	if !errors.Is(err, ErrCircuitOpen) || !strings.Contains(err.Error(), "last error: brave served a captcha") {
+		t.Fatalf("open circuit should name the last failure, got %v", err)
+	}
+
+	cb = NewCircuitBreaker("qwant", BreakerOptions{FailureThreshold: 2, Cooldown: time.Minute})
+	cb.ReportFailure(errors.New("old failure"))
+	cb.ReportSuccess()
+	cb.ReportFailure(nil)
+	cb.ReportFailure(nil)
+	if err := cb.Allow(); err == nil || strings.Contains(err.Error(), "old failure") {
+		t.Fatalf("a success must clear the remembered failure, got %v", err)
 	}
 }

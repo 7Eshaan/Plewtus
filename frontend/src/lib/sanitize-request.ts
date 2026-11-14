@@ -18,7 +18,7 @@ export const DEMO_LIMITS = {
   extractChars: 8000,
 } as const;
 
-const PROVIDERS = ["duckduckgo", "bing", "yahoo", "marginalia"] as const;
+const PROVIDERS = ["duckduckgo", "bing", "yahoo", "marginalia", "brave", "qwant"] as const;
 const FRESHNESS = ["day", "week", "month", "year"] as const;
 const EXTRACT_MODES = ["highlights", "markdown", "text", "metadata"] as const;
 const ISO_CODE = /^[a-z]{2}$/;
