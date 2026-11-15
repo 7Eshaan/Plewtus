@@ -107,7 +107,7 @@ Searches DuckDuckGo, Bing, and Yahoo, removes duplicate and off-topic results, a
 - `country` / `language` (`string`, optional): 2-letter ISO codes (e.g. `"us"`, `"en"`).
 - `extract_mode` (`string`, optional): Extract page content as `"markdown"`, `"highlights"`, `"text"`, or `"metadata"`.
 - `max_pages` (`integer`, optional): Number of top results to extract (default 3, max 10).
-- `max_chars_per_page` (`integer`, optional): Characters per extracted page (default 4000, max 20000).
+- `max_chars_per_page` (`integer`, optional): Characters per extracted page (default 4000, max 20000). Longer pages are reduced to the passages most relevant to the query, with `[…]` marking omitted text.
 - `format` (`string`, optional): `"text"` (default) for a compact, numbered listing that is cheap in tokens, or `"json"` for the full REST API response.
 
 ### 2. `extract`
@@ -117,7 +117,7 @@ Fetches specific URLs and returns clean content, with SSRF protection and size l
 - `urls` (`array<string>`, **required**): HTTP/HTTPS URLs to fetch (maximum 10 per call).
 - `mode` (`string`, optional): `"markdown"` (default), `"highlights"`, `"text"`, or `"metadata"`.
 - `query` (`string`, optional): Focus for `"highlights"` mode.
-- `max_chars` (`integer`, optional): Character limit per page (default 4000, maximum 20000).
+- `max_chars` (`integer`, optional): Character limit per page (default 4000, maximum 20000). With `query`, longer pages are reduced to the most relevant passages; without it, to the start of the page. Works for web pages and PDFs (PDFs need `pdftotext` on the server).
 
 Both tools are annotated `readOnlyHint: true` and `openWorldHint: true`.
 

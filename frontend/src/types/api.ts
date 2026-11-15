@@ -211,7 +211,7 @@ export interface components {
         ExtractedContent: {
             /** @description Page title from Open Graph/Twitter metadata or the <title> tag. */
             title?: string;
-            /** @description Clean Markdown representation of webpage content. */
+            /** @description Clean Markdown of the page (web page or PDF). When the page is longer than `max_chars_per_page`, see `truncated`. */
             markdown?: string;
             /** @description Plain text extracted from primary article elements. */
             text?: string;
@@ -226,6 +226,10 @@ export interface components {
              * @description UTC timestamp when extraction was performed.
              */
             extracted_at?: string;
+            /** @description True when `markdown`/`text` is not the whole page. With a query, the body is the intro plus the passages most relevant to the query, in page order under their headings, with "[…]" marking omitted text; without one, it is the start of the page. Raise `max_chars_per_page` (up to `total_chars`) for more. */
+            truncated?: boolean;
+            /** @description Length of the whole page body (Markdown or text) in characters, before it was cut to `max_chars_per_page`. */
+            total_chars?: number;
         };
         SearchMetadata: {
             /** @description Number of results returned in this response. */

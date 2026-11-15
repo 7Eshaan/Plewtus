@@ -64,6 +64,12 @@ func Build(cfg *config.Config, logger *slog.Logger) *Components {
 		)
 	}
 
+	if extractor.PDFSupported() {
+		logger.Debug("pdf extraction available (pdftotext found)")
+	} else {
+		logger.Warn("pdf extraction unavailable: pdftotext (poppler-utils) is not installed; PDF results will report content_error")
+	}
+
 	return &Components{Orchestrator: orch, Extractor: ext}
 }
 

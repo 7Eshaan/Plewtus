@@ -24,12 +24,16 @@ type Extractor struct {
 	fetcher       *Fetcher
 	logger        *slog.Logger
 	timeout       time.Duration
+	pdfTimeout    time.Duration
 	maxConcurrent int
 }
 
 // ExtractorOptions configures the Extractor.
 type ExtractorOptions struct {
-	Timeout       time.Duration
+	Timeout time.Duration
+	// PDFTimeout bounds downloading and converting one PDF (default
+	// DefaultPDFTimeout); web pages are bounded by Timeout.
+	PDFTimeout    time.Duration
 	MaxBodyBytes  int64
 	UserAgent     string
 	MaxConcurrent int
@@ -42,6 +46,14 @@ func New(opts ExtractorOptions) *Extractor {
 	timeout := opts.Timeout
 	if timeout <= 0 {
 		timeout = DefaultFetchTimeout
+	}
+
+	pdfTimeout := opts.PDFTimeout
+	if pdfTimeout <= 0 {
+		pdfTimeout = DefaultPDFTimeout
+	}
+	if pdfTimeout < timeout {
+		pdfTimeout = timeout
 	}
 
 	logger := opts.Logger
@@ -67,6 +79,7 @@ func New(opts ExtractorOptions) *Extractor {
 		fetcher:       fetcher,
 		logger:        logger,
 		timeout:       timeout,
+		pdfTimeout:    pdfTimeout,
 		maxConcurrent: maxConcurrent,
 	}
 }
@@ -82,16 +95,24 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 	}
 
 	// Bounded context for this extraction
-	extractCtx, cancel := context.WithTimeout(ctx, e.timeout)
+	// The fetcher holds web pages to e.timeout itself; PDFs may use the
+	// longer budget (search requests still cap it with their own deadline).
+	extractCtx, cancel := context.WithTimeout(ctx, e.pdfTimeout)
 	defer cancel()
 
-	htmlBytes, _, err := e.fetcher.Fetch(extractCtx, targetURL)
+	body, contentType, err := e.fetcher.Fetch(extractCtx, targetURL)
 	if err != nil {
 		return nil, fmt.Errorf("fetch failed for %s: %w", targetURL, err)
 	}
 
-	parsed, err := ParseHTML(htmlBytes)
-	if err != nil {
+	var parsed *ParsedPage
+	if contentType == PDFContentType {
+		// PDFs become a plain HTML article and continue through the same
+		// pipeline as web pages.
+		if parsed, err = parsePDF(extractCtx, body); err != nil {
+			return nil, err
+		}
+	} else if parsed, err = ParseHTML(body); err != nil {
 		return nil, fmt.Errorf("html parse failed for %s: %w", targetURL, err)
 	}
 
@@ -113,7 +134,7 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 		mode = "highlights"
 	}
 
-	fullText := ToText(parsed.MainNode, 20000)
+	fullText := capRunes(ToText(parsed.MainNode, 0), maxConvertChars)
 	if mode != "metadata" && utf8.RuneCountInString(fullText) < minReadableChars {
 		// Next to nothing is left once page chrome is removed: typically an
 		// app shell that renders its content with JavaScript (YouTube, SPAs).
@@ -140,18 +161,40 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 	switch mode {
 	case "markdown":
 		base := parsed.ResolveBase(targetURL)
-		content.Markdown = ToMarkdownWithBase(parsed.MainNode, maxChars, base)
+		full := capRunes(ToMarkdownWithBase(parsed.MainNode, 0, base), maxConvertChars)
 		// The chosen container can start below the page heading (for example
 		// the article body without its <h1>); lead with the page title then.
-		if title := strings.TrimSpace(content.Title); title != "" && !startsWithHeading(content.Markdown) {
-			heading := "# " + title + "\n\n"
-			if budget := maxChars - utf8.RuneCountInString(heading); budget > maxChars/2 {
-				content.Markdown = heading + ToMarkdownWithBase(parsed.MainNode, budget, base)
+		heading, budget := "", maxChars
+		if title := strings.TrimSpace(content.Title); title != "" && !startsWithHeading(full) {
+			if h := "# " + title + "\n\n"; maxChars-utf8.RuneCountInString(h) > maxChars/2 {
+				heading, budget = h, maxChars-utf8.RuneCountInString(h)
 			}
+		}
+		content.TotalChars = utf8.RuneCountInString(full)
+		switch {
+		case content.TotalChars <= budget:
+			content.Markdown = heading + full
+		default:
+			content.Truncated = true
+			body := selectPassages(parsed.MainNode, base, opts.Query, budget, true)
+			if body == "" { // no query, or nothing on the page matches it
+				body = ToMarkdownWithBase(parsed.MainNode, budget, base)
+			}
+			content.Markdown = heading + body
 		}
 
 	case "text":
-		content.Text = ToText(parsed.MainNode, maxChars)
+		full := capRunes(ToText(parsed.MainNode, 0), maxConvertChars)
+		content.TotalChars = utf8.RuneCountInString(full)
+		if content.TotalChars <= maxChars {
+			content.Text = full
+		} else {
+			content.Truncated = true
+			content.Text = selectPassages(parsed.MainNode, nil, opts.Query, maxChars, false)
+			if content.Text == "" {
+				content.Text = truncateCleanly(full, maxChars)
+			}
+		}
 
 	case "metadata":
 		if parsed.Metadata.Description == "" {
@@ -169,6 +212,9 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 
 	return content, nil
 }
+
+// DefaultPDFTimeout bounds downloading and converting one PDF.
+const DefaultPDFTimeout = 20 * time.Second
 
 // ErrNoReadableContent reports a page with no extractable text, usually one
 // that is rendered entirely with JavaScript.
@@ -264,4 +310,12 @@ func describeExtractError(err error) string {
 		msg = msg[:200]
 	}
 	return msg
+}
+
+// capRunes cuts s to at most n characters.
+func capRunes(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n])
 }

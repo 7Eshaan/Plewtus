@@ -261,14 +261,14 @@ func (r *countingReadCloser) Close() error { return nil }
 func TestFetcher_MIMETypeGuard(t *testing.T) {
 	mockTransport := &mockRoundTripper{
 		roundTripFunc: func(req *http.Request) (*http.Response, error) {
-			if strings.Contains(req.URL.Path, "doc.pdf") {
+			if strings.Contains(req.URL.Path, "archive.zip") {
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Status:     "200 OK",
 					Header: http.Header{
-						"Content-Type": []string{"application/pdf"},
+						"Content-Type": []string{"application/zip"},
 					},
-					Body: io.NopCloser(bytes.NewReader([]byte("%PDF-1.4 binary content"))),
+					Body: io.NopCloser(bytes.NewReader([]byte("PK\x03\x04 binary content"))),
 				}, nil
 			}
 
@@ -297,10 +297,10 @@ func TestFetcher_MIMETypeGuard(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 1. PDF should be rejected by Content-Type guard
-	_, _, err := fetcher.Fetch(ctx, "https://example.com/doc.pdf")
+	// 1. Binary archives should be rejected by Content-Type guard
+	_, _, err := fetcher.Fetch(ctx, "https://example.com/archive.zip")
 	if err == nil {
-		t.Errorf("expected error when fetching PDF, got nil")
+		t.Errorf("expected error when fetching a zip archive, got nil")
 	}
 	if !strings.Contains(err.Error(), "unsupported content type") {
 		t.Errorf("expected unsupported content type error, got: %v", err)
@@ -320,19 +320,19 @@ func TestFetcher_MIMETypeGuard(t *testing.T) {
 }
 
 func TestFetcherRejectsUnsupportedMIMEWithoutDownloadingWholeBody(t *testing.T) {
-	body := &countingReadCloser{reader: strings.NewReader("%PDF-1.4" + strings.Repeat("x", 1024*1024))}
+	body := &countingReadCloser{reader: strings.NewReader("PK\x03\x04" + strings.Repeat("x", 1024*1024))}
 	transport := &mockRoundTripper{roundTripFunc: func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Status:     "200 OK",
-			Header:     http.Header{"Content-Type": []string{"application/pdf"}},
+			Header:     http.Header{"Content-Type": []string{"application/zip"}},
 			Body:       body,
 		}, nil
 	}}
 	fetcher := NewFetcher(FetcherOptions{Transport: transport})
-	_, _, err := fetcher.Fetch(context.Background(), "https://example.com/large.pdf")
+	_, _, err := fetcher.Fetch(context.Background(), "https://example.com/large.zip")
 	if err == nil || !strings.Contains(err.Error(), "unsupported content type") {
-		t.Fatalf("expected PDF MIME rejection, got %v", err)
+		t.Fatalf("expected zip MIME rejection, got %v", err)
 	}
 	if body.read > 512 {
 		t.Fatalf("expected MIME rejection after reading at most 512 bytes, read %d", body.read)

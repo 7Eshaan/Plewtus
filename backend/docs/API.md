@@ -93,7 +93,7 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 | `enabled` | `boolean` | `false` | When `true`, fetches and cleans content for top results. |
 | `mode` | `string` | `"highlights"` | Format: `"markdown"` (fills `content.markdown`), `"highlights"` (fills `content.highlights`, falling back to `content.text`), `"text"` (fills `content.text`), or `"metadata"` (title/description/author/date). |
 | `max_pages` | `integer` | `3` | Maximum number of top results to extract (max `10`). |
-| `max_chars_per_page` | `integer` | `4000` | Maximum character length per extracted page (max `20000`). |
+| `max_chars_per_page` | `integer` | `4000` | Maximum character length per extracted page (max `20000`). Longer pages are cut to the intro plus the passages most relevant to the query, in page order, with `[…]` marking omitted text; `content.truncated` and `content.total_chars` report this. PDFs are extracted too (first 150 pages, up to 15 MB, up to 20 s each) when the server has `pdftotext` (poppler-utils). |
 
 **Result depth.** Each engine returns roughly 7–10 results per page. For windows (`offset + limit`) deeper than 10, every engine fetches further pages, up to three. That is slower (pages are fetched one after another) and best-effort: three engines typically yield 30–45 unique results, so deep pages can come back short. `metadata.stats.deduped_count` is the number of unique results available for the query.
 

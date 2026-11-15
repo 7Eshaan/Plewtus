@@ -205,10 +205,16 @@ func TestQuality_HighlightsKeepHeadingsSeparate(t *testing.T) {
 	}
 }
 
-func TestQuality_HighlightTermsDropStopWords(t *testing.T) {
-	got := strings.Join(highlightTerms("Who is the best C++ compiler, and how does it work?"), ",")
-	if got != "c++,compiler,work" {
-		t.Fatalf("unexpected terms %q", got)
+func TestQuality_HighlightsRankByQueryTerms(t *testing.T) {
+	// Stop words ("who", "does") must not pull in unrelated sentences, and
+	// a sentence with both rare query terms beats one with a single term.
+	text := "Who does the scheduling is a question for another day entirely.\n" +
+		"The compiler emits code for many targets across platforms.\n" +
+		"Rust's borrow checker enforces that you hold one mutable reference or many shared ones.\n" +
+		"A mutable variable can be reassigned after it is declared in Rust."
+	highlights := ExtractHighlights(text, "how does the rust borrow checker work", 1)
+	if len(highlights) != 1 || !strings.Contains(highlights[0], "borrow checker") {
+		t.Fatalf("expected the borrow-checker sentence, got %q", highlights)
 	}
 }
 

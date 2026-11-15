@@ -2,6 +2,7 @@ package extractor
 
 import (
 	"fmt"
+	"math"
 	"net/url"
 	"sort"
 	"strings"
@@ -10,6 +11,8 @@ import (
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+
+	"plewtus/internal/pipeline"
 )
 
 // ToMarkdownWithBase converts HTML to Markdown, resolving relative link and
@@ -58,7 +61,11 @@ func ToText(n *html.Node, maxChars int) string {
 	return cleaned
 }
 
-// ExtractHighlights selects 3 to 5 key, high-density highlight sentences from the content.
+// ExtractHighlights picks up to maxHighlights sentences that best answer the
+// query, returned in document order. Sentences are ranked with BM25 over the
+// page's own sentences (using the search pipeline's tokenizer and stemmer),
+// weighted by how many distinct query terms they contain; length and
+// position only break ties. Without query terms the opening sentences win.
 func ExtractHighlights(text string, query string, maxHighlights int) []string {
 	if maxHighlights <= 0 {
 		maxHighlights = 4
@@ -69,17 +76,16 @@ func ExtractHighlights(text string, query string, maxHighlights int) []string {
 		return nil
 	}
 
-	queryTerms := highlightTerms(query)
-
-	type scoredSentence struct {
+	type candidate struct {
 		sentence string
-		score    float64
 		index    int
+		tf       map[string]int
+		length   int
+		score    float64
 	}
 
-	var candidates []scoredSentence
+	var candidates []candidate
 	seen := make(map[string]bool)
-
 	for idx, s := range sentences {
 		s = strings.TrimSpace(s)
 		norm := strings.ToLower(s)
@@ -100,36 +106,16 @@ func ExtractHighlights(text string, query string, maxHighlights int) []string {
 			continue
 		}
 
-		score := 0.0
-
-		// Boost sentences matching query terms
-		for _, term := range queryTerms {
-			if strings.Contains(norm, term) {
-				score += 2.0
-			}
+		tokens := pipeline.Tokens(s)
+		tf := make(map[string]int, len(tokens))
+		for _, t := range tokens {
+			tf[t]++
 		}
-
-		// Length preference: 50 - 200 chars is ideal for an AI highlight
-		if len(s) >= 40 && len(s) <= 220 {
-			score += 1.5
-		} else if len(s) > 350 {
-			score -= 1.0 // penalize run-on sentences
-		}
-
-		// Early sentences in an article are often the most informative summary
-		if idx < 5 {
-			score += 1.0 - (float64(idx) * 0.15)
-		}
-
-		candidates = append(candidates, scoredSentence{
-			sentence: s,
-			score:    score,
-			index:    idx,
-		})
+		candidates = append(candidates, candidate{sentence: s, index: idx, tf: tf, length: len(tokens)})
 	}
 
 	if len(candidates) == 0 {
-		// Fallback to first non-empty sentences if none scored well
+		// Fallback to first non-empty sentences if none qualified
 		var fallback []string
 		for _, s := range sentences {
 			s = strings.TrimSpace(s)
@@ -143,18 +129,54 @@ func ExtractHighlights(text string, query string, maxHighlights int) []string {
 		return fallback
 	}
 
-	// Sort by score descending in O(n log n) for long articles.
+	terms := pipeline.QueryTerms(query)
+	df := make(map[string]int, len(terms))
+	totalLen := 0
+	for _, c := range candidates {
+		totalLen += c.length
+		for _, term := range terms {
+			if c.tf[term] > 0 {
+				df[term]++
+			}
+		}
+	}
+	n := float64(len(candidates))
+	avgLen := math.Max(1, float64(totalLen)/n)
+
+	for i := range candidates {
+		c := &candidates[i]
+		score, matched := 0.0, 0
+		for _, term := range terms {
+			tf := float64(c.tf[term])
+			if tf == 0 {
+				continue
+			}
+			matched++
+			idf := math.Log(1 + (n-float64(df[term])+0.5)/(float64(df[term])+0.5))
+			score += idf * tf * (bm25K1 + 1) / (tf + bm25K1*(1-bm25B+bm25B*float64(c.length)/avgLen))
+		}
+		if len(terms) > 0 {
+			score *= 0.5 + 0.5*float64(matched)/float64(len(terms))
+		}
+		// Tie-breakers: readable length, then early position.
+		if l := len(c.sentence); l >= 40 && l <= 220 {
+			score += 0.15
+		} else if l > 350 {
+			score -= 0.15
+		}
+		if c.index < 5 {
+			score += 0.1 - float64(c.index)*0.02
+		}
+		c.score = score
+	}
+
 	sort.SliceStable(candidates, func(i, j int) bool {
 		return candidates[i].score > candidates[j].score
 	})
-
-	// Pick top N
-	count := maxHighlights
-	if len(candidates) < count {
-		count = len(candidates)
+	top := candidates
+	if len(top) > maxHighlights {
+		top = top[:maxHighlights]
 	}
-
-	top := candidates[:count]
 
 	// Re-sort selected sentences by original document order for natural reading flow
 	sort.Slice(top, func(i, j int) bool {
@@ -165,7 +187,6 @@ func ExtractHighlights(text string, query string, maxHighlights int) []string {
 	for i, item := range top {
 		result[i] = item.sentence
 	}
-
 	return result
 }
 
@@ -552,33 +573,6 @@ func splitSentences(text string) []string {
 	}
 
 	return sentences
-}
-
-// highlightStopWords are query words too common to signal a relevant sentence.
-var highlightStopWords = map[string]bool{
-	"the": true, "and": true, "for": true, "are": true, "was": true, "were": true, "with": true,
-	"what": true, "who": true, "whom": true, "why": true, "how": true, "when": true, "where": true,
-	"which": true, "does": true, "did": true, "can": true, "this": true, "that": true, "these": true,
-	"those": true, "from": true, "into": true, "about": true, "your": true, "you": true, "its": true,
-	"has": true, "have": true, "had": true, "not": true, "but": true, "all": true, "any": true,
-	"best": true, "top": true, "vs": true,
-}
-
-// highlightTerms lower-cases the query, splits it on non-alphanumerics, and
-// keeps the words that can identify a relevant sentence.
-func highlightTerms(query string) []string {
-	var terms []string
-	seen := make(map[string]bool)
-	for _, word := range strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '+' && r != '#'
-	}) {
-		if len([]rune(word)) <= 2 && !strings.ContainsAny(word, "+#") || highlightStopWords[word] || seen[word] {
-			continue
-		}
-		seen[word] = true
-		terms = append(terms, word)
-	}
-	return terms
 }
 
 func isBoilerplateSentence(s string) bool {

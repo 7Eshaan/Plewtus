@@ -8,7 +8,8 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/plewtus ./cmd/plewtus
 
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates wget \
+# poppler-utils provides pdftotext, used to extract text from PDF results.
+RUN apk add --no-cache ca-certificates wget poppler-utils \
     && addgroup -S plewtus \
     && adduser -S -G plewtus plewtus
 COPY --from=build /out/plewtus /usr/local/bin/plewtus

@@ -44,6 +44,13 @@ type ExtractedContent struct {
 	Description   string   `json:"description,omitempty"`
 	ExtractedAt   string   `json:"extracted_at"`
 	PublishedDate string   `json:"-"`
+	// Truncated is set when the markdown or text body is not the whole page:
+	// it was cut to the character limit or reduced to the passages most
+	// relevant to the query (gaps are marked "[…]").
+	Truncated bool `json:"truncated,omitempty"`
+	// TotalChars is the length of the whole page body in characters, so a
+	// caller can raise max_chars_per_page when more is needed.
+	TotalChars int `json:"total_chars,omitempty"`
 }
 
 // SearchMetadata provides transparent details about the search execution.

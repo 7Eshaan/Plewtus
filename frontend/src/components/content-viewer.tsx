@@ -58,7 +58,11 @@ export function ContentViewer({ content, title }: ContentViewerProps) {
           <Icon className={`w-3.5 h-3.5 shrink-0 ${kind === "highlights" ? "text-emerald-500" : "text-zinc-500 dark:text-zinc-400"}`} />
           <span className="text-xs font-mono font-medium text-zinc-900 dark:text-zinc-100">{KIND_LABELS[kind]}</span>
           <span className="text-[11px] font-mono text-zinc-500 truncate">
-            ({sizeKb} KB{kind === "highlights" ? ` · ${content.highlights?.length} sentences` : ""})
+            ({sizeKb} KB{kind === "highlights" ? ` · ${content.highlights?.length} sentences` : ""}
+            {content.truncated && content.total_chars
+              ? ` · excerpt of ${(content.total_chars / 1000).toFixed(content.total_chars < 10_000 ? 1 : 0)}K chars`
+              : ""}
+            )
           </span>
           <ChevronDown
             className={`ml-auto w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500 transition-transform ${expanded ? "rotate-180" : ""}`}

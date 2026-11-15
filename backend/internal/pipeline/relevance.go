@@ -14,6 +14,14 @@ var relevanceStopWords = map[string]struct{}{
 	"same": {}, "she": {}, "should": {}, "so": {}, "some": {}, "such": {}, "than": {}, "that": {}, "the": {}, "their": {}, "theirs": {}, "them": {}, "then": {}, "there": {}, "these": {}, "they": {}, "this": {}, "those": {}, "through": {}, "to": {}, "too": {}, "under": {}, "until": {}, "up": {}, "very": {}, "was": {}, "we": {}, "were": {}, "what": {}, "when": {}, "where": {}, "which": {}, "while": {}, "who": {}, "whom": {}, "why": {}, "will": {}, "with": {}, "would": {}, "you": {}, "your": {},
 }
 
+// Tokens are stemmed before stop words are removed, so the stop word list
+// must also hold the stemmed forms ("does" -> "doe", "having" -> "hav").
+func init() {
+	for word := range relevanceStopWords {
+		relevanceStopWords[stem(word)] = struct{}{}
+	}
+}
+
 // queryProfile caches the tokenized form of a query so that scoring many
 // candidates does not re-tokenize the query for every comparison.
 type queryProfile struct {
@@ -235,6 +243,18 @@ func meaningfulTokens(value string) map[string]struct{} {
 
 func tokenSet(value string) map[string]struct{} {
 	tokens := make(map[string]struct{})
+	for _, token := range Tokens(value) {
+		tokens[token] = struct{}{}
+	}
+	return tokens
+}
+
+// Tokens splits text into normalized, stemmed tokens in reading order,
+// repeats included. It applies the same rules as result relevance scoring:
+// lower-casing, C++/C#/F#/.NET kept as identifiers, golang -> go, light
+// English stemming, and one token per CJK character.
+func Tokens(value string) []string {
+	var tokens []string
 	value = strings.ToLower(value)
 	// Preserve common programming-language identifiers whose punctuation is
 	// meaningful to search (plain tokenization would reduce C++ to the common
@@ -251,7 +271,7 @@ func tokenSet(value string) map[string]struct{} {
 		if normalized == "golang" {
 			normalized = "go"
 		}
-		tokens[stem(normalized)] = struct{}{}
+		tokens = append(tokens, stem(normalized))
 		token.Reset()
 	}
 	for _, r := range value {
@@ -260,7 +280,7 @@ func tokenSet(value string) map[string]struct{} {
 			// CJK scripts do not separate words with spaces; index each
 			// character so queries can match inside longer runs of text.
 			flush()
-			tokens[string(r)] = struct{}{}
+			tokens = append(tokens, string(r))
 		case unicode.IsLetter(r) || unicode.IsNumber(r):
 			token.WriteRune(r)
 		default:
@@ -269,6 +289,27 @@ func tokenSet(value string) map[string]struct{} {
 	}
 	flush()
 	return tokens
+}
+
+// QueryTerms returns the distinct tokens of a query that should count when
+// matching text: search operators (site:, -term, quotes) and stop words are
+// removed, unless the query consists of nothing else.
+func QueryTerms(query string) []string {
+	set := meaningfulTokens(stripSearchOperators(query))
+	terms := make([]string, 0, len(set))
+	for _, token := range Tokens(stripSearchOperators(query)) {
+		if _, ok := set[token]; ok {
+			terms = append(terms, token)
+			delete(set, token)
+		}
+	}
+	return terms
+}
+
+// NormalizedPhrase lower-cases text and reduces it to words separated by
+// single spaces, for exact-phrase comparisons.
+func NormalizedPhrase(value string) string {
+	return normalizedPhrase(value)
 }
 
 func isCJK(r rune) bool {

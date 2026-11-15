@@ -502,7 +502,7 @@ func (s *Server) toolDefinitions() []map[string]any {
 		{
 			"name":        "extract",
 			"title":       "Read web pages",
-			"description": "Fetch one or more web pages and return clean Markdown, plain text, query highlights, or metadata. Private and local network addresses are blocked.",
+			"description": "Fetch one or more web pages or PDFs and return clean Markdown, plain text, query highlights, or metadata. Pages longer than max_chars are cut to the passages most relevant to `query` (or to the start of the page without one). Private and local network addresses are blocked.",
 			"annotations": readOnly,
 			"inputSchema": map[string]any{
 				"type": "object",
@@ -521,7 +521,7 @@ func (s *Server) toolDefinitions() []map[string]any {
 					},
 					"query": map[string]any{
 						"type":        "string",
-						"description": "Optional query used to pick the most relevant sentences in 'highlights' mode.",
+						"description": "Optional query: picks the most relevant sentences in 'highlights' mode, and the most relevant passages of pages longer than max_chars in the other modes.",
 					},
 					"max_chars": map[string]any{
 						"type":        "integer",
@@ -804,9 +804,14 @@ func writeContent(b *strings.Builder, c *model.ExtractedContent, indent string) 
 	if len(metaParts) > 0 {
 		b.WriteString(indent + strings.Join(metaParts, " · ") + "\n")
 	}
+	// Tell the agent when it sees an excerpt, so it can ask for more.
+	excerpt := ""
+	if c.Truncated && c.TotalChars > 0 {
+		excerpt = fmt.Sprintf("; excerpt of a %d-character page, omitted text marked […], raise max_chars for more", c.TotalChars)
+	}
 	switch {
 	case c.Markdown != "":
-		b.WriteString(indent + "Content (markdown):\n")
+		b.WriteString(indent + "Content (markdown" + excerpt + "):\n")
 		b.WriteString(indentBlock(c.Markdown, indent+"   ") + "\n")
 	case len(c.Highlights) > 0:
 		b.WriteString(indent + "Highlights:\n")
@@ -814,7 +819,11 @@ func writeContent(b *strings.Builder, c *model.ExtractedContent, indent string) 
 			b.WriteString(indent + "   - " + h + "\n")
 		}
 	case c.Text != "":
-		b.WriteString(indent + "Content:\n")
+		label := "Content:"
+		if excerpt != "" {
+			label = "Content (" + strings.TrimPrefix(excerpt, "; ") + "):"
+		}
+		b.WriteString(indent + label + "\n")
 		b.WriteString(indentBlock(c.Text, indent+"   ") + "\n")
 	case c.Description != "":
 		b.WriteString(indent + "Description: " + c.Description + "\n")
