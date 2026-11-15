@@ -213,5 +213,16 @@ These supersede earlier notes above where they conflict (ranking weights, candid
 - **Removed:** `MultiRanker`, `RRFRanker.K`, `Deduplicate`/`DeduplicateWithOptions` wrappers, `usage.Stats`, `Registry.All`, breaker `Reset`/`ResetAll`/`Name`, cache `Clear`, `ToMarkdown`, `ProviderRequest.Offset`/`UserAgent`.
 - **Known limits:** Bing frequently serves decoy pages to this kind of client and DuckDuckGo starts returning captchas after a burst of queries; both are detected and reported, not fixed.
 
+## Extraction Quality Fixes (2026-11-15)
+Measured live before and after (8 queries, top 10 pages each, markdown mode): pages returning real article text went from ~49/79 to ~61/80; pages returning junk (menus, language lists, footers, template code) from ~9 to 0. Fetch failures (403s, timeouts) are unchanged, ~15%.
+- **Content selection (`extractor/parser.go`):** Readability-style candidate (container with the most paragraph text) next to `<main>`/`<article>`; the most nested candidate holding >=75% of the reference container's non-link text wins, so README `<article>` beats GitHub's `<main>` chrome. Link-heavy blocks (>=3 links, >=50% link text, <300 chars of prose) are pruned (Wikipedia language list, GfG menus, GitHub file tables); if that leaves <200 chars the page is a link collection and links are kept. ARIA chrome roles, `aria-hidden="true"`, `<template>`, and class/id tokens `nav/navbar/navigation/menu/dropdown/toolbar/skip/login/signin` are pruned. An element holding most of the page's text is never pruned (LogRocket's `sidebar-container`). The `hidden` attribute is deliberately not pruned: Next.js streaming puts the article in `<div hidden>`.
+- **JavaScript-only pages (`extractor/extractor.go`):** under 200 chars of text -> the page's meta description is returned (YouTube); without one, `content_error` = "no readable text found on the page (it may need JavaScript to render)" instead of footer chrome.
+- **Markdown** leads with `# <page title>` when the chosen container has no heading near the top (within the same character budget).
+- **Highlights (`extractor/converter.go`):** line breaks end sentences (headings/bylines were glued to paragraphs), short unpunctuated fragments are skipped, query stopwords ignored.
+- **Fetcher:** body limit 2 MB -> 5 MB; ISO-8859-1/Windows-1252 pages decoded to UTF-8 (`extractor/charset.go`; other legacy charsets still need `golang.org/x/text`).
+- **Tests:** `extractor/quality_test.go`.
+- **Not addressed:** 403s from bot protection (Go's TLS fingerprint), 5 s per-page timeouts, the 4000-char default (most articles are truncated).
+- **Playground:** with page content on, it now requests `max_pages` = min(results limit, 5) (the proxy cap) instead of the API default of 3; Content dropdown hints say "top 5 pages".
+
 ## Next Step
 - Optional: charset decoding for non-UTF-8 pages (needs `golang.org/x/text`).

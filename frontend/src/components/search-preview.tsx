@@ -73,9 +73,9 @@ interface SearchPreviewProps {
 
 const EXTRACTION_OPTIONS: { value: ExtractionMode; label: string; hint: string }[] = [
   { value: "none", label: "None", hint: "Snippets only (fastest)" },
-  { value: "highlights", label: "Highlights", hint: "Key sentences from each page" },
-  { value: "markdown", label: "Markdown", hint: "Full cleaned page as Markdown" },
-  { value: "text", label: "Text", hint: "Full cleaned page as plain text" },
+  { value: "highlights", label: "Highlights", hint: "Key sentences from each of the top 5 pages" },
+  { value: "markdown", label: "Markdown", hint: "Top 5 pages cleaned up as Markdown" },
+  { value: "text", label: "Text", hint: "Top 5 pages cleaned up as plain text" },
 ];
 
 const FRESHNESS_OPTIONS: { value: Freshness; label: string }[] = [

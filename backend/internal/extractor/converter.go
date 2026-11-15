@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -68,7 +69,7 @@ func ExtractHighlights(text string, query string, maxHighlights int) []string {
 		return nil
 	}
 
-	queryTerms := strings.Fields(strings.ToLower(query))
+	queryTerms := highlightTerms(query)
 
 	type scoredSentence struct {
 		sentence string
@@ -93,12 +94,17 @@ func ExtractHighlights(text string, query string, maxHighlights int) []string {
 		if isBoilerplateSentence(norm) {
 			continue
 		}
+		// Skip short fragments without closing punctuation: headings,
+		// bylines, captions, and navigation labels rather than sentences.
+		if last, _ := utf8.DecodeLastRuneInString(s); len(s) < 60 && !strings.ContainsRune(".!?\"”)", last) {
+			continue
+		}
 
 		score := 0.0
 
 		// Boost sentences matching query terms
 		for _, term := range queryTerms {
-			if len(term) > 2 && strings.Contains(norm, term) {
+			if strings.Contains(norm, term) {
 				score += 2.0
 			}
 		}
@@ -516,6 +522,17 @@ func splitSentences(text string) []string {
 		r := runes[i]
 		current.WriteRune(r)
 
+		// A line break ends a sentence: headings, captions, and list items
+		// are separate lines in the extracted text and must not be glued to
+		// the paragraph that follows them.
+		if r == '\n' {
+			if s := strings.TrimSpace(current.String()); len(s) > 0 {
+				sentences = append(sentences, s)
+			}
+			current.Reset()
+			continue
+		}
+
 		// Check for sentence terminator (. ! ?) followed by whitespace or EOF
 		if r == '.' || r == '!' || r == '?' {
 			isNextWhitespace := (i+1 == length) || unicode.IsSpace(runes[i+1])
@@ -535,6 +552,33 @@ func splitSentences(text string) []string {
 	}
 
 	return sentences
+}
+
+// highlightStopWords are query words too common to signal a relevant sentence.
+var highlightStopWords = map[string]bool{
+	"the": true, "and": true, "for": true, "are": true, "was": true, "were": true, "with": true,
+	"what": true, "who": true, "whom": true, "why": true, "how": true, "when": true, "where": true,
+	"which": true, "does": true, "did": true, "can": true, "this": true, "that": true, "these": true,
+	"those": true, "from": true, "into": true, "about": true, "your": true, "you": true, "its": true,
+	"has": true, "have": true, "had": true, "not": true, "but": true, "all": true, "any": true,
+	"best": true, "top": true, "vs": true,
+}
+
+// highlightTerms lower-cases the query, splits it on non-alphanumerics, and
+// keeps the words that can identify a relevant sentence.
+func highlightTerms(query string) []string {
+	var terms []string
+	seen := make(map[string]bool)
+	for _, word := range strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '+' && r != '#'
+	}) {
+		if len([]rune(word)) <= 2 && !strings.ContainsAny(word, "+#") || highlightStopWords[word] || seen[word] {
+			continue
+		}
+		seen[word] = true
+		terms = append(terms, word)
+	}
+	return terms
 }
 
 func isBoilerplateSentence(s string) bool {

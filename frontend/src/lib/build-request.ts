@@ -5,7 +5,7 @@ import {
   type ExtractionMode,
   type ProviderName,
 } from "@/types/search";
-import type { SearchRequest } from "@/lib/sanitize-request";
+import { DEMO_LIMITS, type SearchRequest } from "@/lib/sanitize-request";
 
 function splitDomains(value: string): string[] {
   return value
@@ -45,7 +45,13 @@ export function buildSearchRequest(
   if (exclude.length) payload.exclude_domains = exclude;
 
   if (extractionMode !== "none") {
-    payload.extract = { enabled: true, mode: extractionMode };
+    // The API extracts only the top 3 results by default; ask for as many as
+    // the page shows, up to the demo proxy's cap.
+    payload.extract = {
+      enabled: true,
+      mode: extractionMode,
+      max_pages: Math.min(options.limit, DEMO_LIMITS.extractPages),
+    };
   }
   if (offset > 0) payload.offset = offset;
   return payload;

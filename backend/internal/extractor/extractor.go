@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"plewtus/internal/model"
 )
@@ -112,24 +113,54 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 		mode = "highlights"
 	}
 
+	fullText := ToText(parsed.MainNode, 20000)
+	if mode != "metadata" && utf8.RuneCountInString(fullText) < minReadableChars {
+		// Next to nothing is left once page chrome is removed: typically an
+		// app shell that renders its content with JavaScript (YouTube, SPAs).
+		// The page's own description is the best summary available; without
+		// one, report the page as unreadable instead of returning chrome.
+		description := parsed.Metadata.Description
+		if description == "" {
+			return nil, ErrNoReadableContent
+		}
+		description = truncateCleanly(description, maxChars)
+		switch mode {
+		case "markdown":
+			content.Markdown = description
+		case "text":
+			content.Text = description
+		default:
+			content.Highlights = []string{description}
+		}
+		return content, nil
+	}
+
 	// Each mode returns one representation of the page body; duplicating the
 	// same content as both Markdown and text would double agent token usage.
 	switch mode {
 	case "markdown":
-		content.Markdown = ToMarkdownWithBase(parsed.MainNode, maxChars, parsed.ResolveBase(targetURL))
+		base := parsed.ResolveBase(targetURL)
+		content.Markdown = ToMarkdownWithBase(parsed.MainNode, maxChars, base)
+		// The chosen container can start below the page heading (for example
+		// the article body without its <h1>); lead with the page title then.
+		if title := strings.TrimSpace(content.Title); title != "" && !startsWithHeading(content.Markdown) {
+			heading := "# " + title + "\n\n"
+			if budget := maxChars - utf8.RuneCountInString(heading); budget > maxChars/2 {
+				content.Markdown = heading + ToMarkdownWithBase(parsed.MainNode, budget, base)
+			}
+		}
 
 	case "text":
 		content.Text = ToText(parsed.MainNode, maxChars)
 
 	case "metadata":
 		if parsed.Metadata.Description == "" {
-			content.Text = ToText(parsed.MainNode, 500)
+			content.Text = truncateCleanly(fullText, 500)
 		}
 
 	case "highlights":
 		fallthrough
 	default:
-		fullText := ToText(parsed.MainNode, 20000)
 		content.Highlights = ExtractHighlights(fullText, opts.Query, 4)
 		if len(content.Highlights) == 0 {
 			content.Text = truncateCleanly(fullText, maxChars)
@@ -137,6 +168,27 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 	}
 
 	return content, nil
+}
+
+// ErrNoReadableContent reports a page with no extractable text, usually one
+// that is rendered entirely with JavaScript.
+var ErrNoReadableContent = errors.New("no readable text found on the page (it may need JavaScript to render)")
+
+// minReadableChars is the least text a page must yield to count as readable.
+const minReadableChars = 200
+
+// startsWithHeading reports whether a heading appears near the top of md.
+func startsWithHeading(md string) bool {
+	head := md
+	if len(head) > 300 {
+		head = head[:300]
+	}
+	for _, line := range strings.Split(head, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			return true
+		}
+	}
+	return false
 }
 
 // ExtractBatch extracts content concurrently for the top results up to opts.MaxPages.

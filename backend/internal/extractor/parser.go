@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -47,6 +48,15 @@ var disallowedTags = map[atom.Atom]bool{
 	atom.Applet:   true,
 	atom.Menu:     true,
 	atom.Dialog:   true,
+	// <template> holds inert markup for client-side rendering (often with
+	// ${placeholders}); it is never shown as page content.
+	atom.Template: true,
+}
+
+// noiseRoles are ARIA landmark and widget roles that mark page chrome.
+var noiseRoles = map[string]bool{
+	"navigation": true, "contentinfo": true, "complementary": true, "search": true,
+	"menu": true, "menubar": true, "dialog": true, "alertdialog": true, "toolbar": true,
 }
 
 // Chrome elements that are noise at page level but meaningful inside an
@@ -65,6 +75,10 @@ var noiseTokens = map[string]bool{
 	"disclaimer": true, "promo": true, "sponsor": true, "sponsored": true,
 	"newsletter": true, "share": true, "social": true, "widget": true,
 	"breadcrumb": true, "breadcrumbs": true, "related": true, "comments": true,
+	// Navigation chrome: site menus, language pickers ("vector-menu"),
+	// dropdowns, skip links, and sign-in prompts.
+	"nav": true, "navbar": true, "navigation": true, "menu": true, "dropdown": true,
+	"toolbar": true, "skip": true, "login": true, "signin": true,
 }
 
 // layoutPrefixes mark state/layout classes such as "has-sidebar" or
@@ -84,11 +98,23 @@ func ParseHTML(htmlBytes []byte) (*ParsedPage, error) {
 	meta := extractMetadata(doc)
 	baseHref := findBaseHref(doc)
 
-	// Clean document tree by pruning disallowed and noise nodes
-	cleanNode(doc, false)
-
-	// Locate the best candidate main content container
+	// Drop blocks that are mostly links (menus, language lists, link farms)
+	// before choosing the content container, so chrome does not win.
+	pruneDocument(doc, true)
 	mainNode := findMainContent(doc)
+
+	// On pages that are themselves link collections (reading lists, indexes)
+	// removing link lists leaves next to nothing; keep the links there.
+	if countText(mainNode) < minReadableChars {
+		withLinks, err := html.Parse(bytes.NewReader(htmlBytes))
+		if err != nil {
+			return nil, err
+		}
+		pruneDocument(withLinks, false)
+		if candidate := findMainContent(withLinks); countText(candidate) > countText(mainNode) {
+			mainNode = candidate
+		}
+	}
 
 	return &ParsedPage{
 		Metadata: meta,
@@ -204,17 +230,17 @@ func extractMetadata(doc *html.Node) PageMetadata {
 
 // cleanNode removes noise elements (scripts, styles, nav, ads) in-place from the DOM.
 // inContent is true below <main>/<article>, where headers carry the title.
-func cleanNode(n *html.Node, inContent bool) {
+func cleanNode(n *html.Node, inContent bool, holdsMostText func(*html.Node) bool) {
 	var next *html.Node
 	for c := n.FirstChild; c != nil; c = next {
 		next = c.NextSibling
 
-		if shouldPruneNode(c, inContent) {
+		if shouldPruneNode(c, inContent) && (disallowedTags[c.DataAtom] || !holdsMostText(c)) {
 			n.RemoveChild(c)
 			continue
 		}
 		childInContent := inContent || (c.Type == html.ElementNode && (c.DataAtom == atom.Main || c.DataAtom == atom.Article))
-		cleanNode(c, childInContent)
+		cleanNode(c, childInContent, holdsMostText)
 	}
 }
 
@@ -236,7 +262,12 @@ func shouldPruneNode(n *html.Node, inContent bool) bool {
 		return false
 	}
 
-	if !hasNoiseName(getAttr(n, "class")) && !hasNoiseName(getAttr(n, "id")) {
+	// The `hidden` attribute is deliberately not treated as noise: streaming
+	// renderers (Next.js) deliver the article inside <div hidden> and reveal
+	// it with JavaScript.
+	hidden := strings.EqualFold(strings.TrimSpace(getAttr(n, "aria-hidden")), "true")
+	noiseRole := noiseRoles[strings.ToLower(strings.TrimSpace(getAttr(n, "role")))]
+	if !hidden && !noiseRole && !hasNoiseName(getAttr(n, "class")) && !hasNoiseName(getAttr(n, "id")) {
 		return false
 	}
 	// A "noisy" wrapper that encloses the primary content is a layout
@@ -273,58 +304,218 @@ func containsPrimaryContent(n *html.Node) bool {
 	return false
 }
 
-// findMainContent locates the primary content node (<main>, <article>, or <body> fallback).
-func findMainContent(doc *html.Node) *html.Node {
-	var mainCandidates []*html.Node
-	var bodyNode *html.Node
+// textStats counts the visible characters below a node (whitespace
+// excluded) and how many of them sit inside links.
+type textStats struct {
+	total, link int
+	links       int // number of <a> elements with text
+}
 
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode {
-			if n.DataAtom == atom.Body {
-				bodyNode = n
-			}
+func (s textStats) prose() int { return s.total - s.link }
 
-			// Prioritize semantic tags
-			if n.DataAtom == atom.Main || n.DataAtom == atom.Article {
-				mainCandidates = append(mainCandidates, n)
-			} else {
-				role := strings.ToLower(getAttr(n, "role"))
-				id := strings.ToLower(getAttr(n, "id"))
-				if role == "main" || id == "main" || id == "content" || id == "main-content" {
-					mainCandidates = append(mainCandidates, n)
+func (s textStats) linkDensity() float64 {
+	if s.total == 0 {
+		return 0
+	}
+	return float64(s.link) / float64(s.total)
+}
+
+// collectTextStats computes textStats for every element in one bottom-up pass.
+func collectTextStats(root *html.Node) map[*html.Node]textStats {
+	stats := make(map[*html.Node]textStats)
+	var walk func(n *html.Node, inLink bool) textStats
+	walk = func(n *html.Node, inLink bool) textStats {
+		if n.Type == html.TextNode {
+			count := 0
+			for _, r := range n.Data {
+				if !unicode.IsSpace(r) {
+					count++
 				}
 			}
+			s := textStats{total: count}
+			if inLink {
+				s.link = count
+			}
+			return s
 		}
-
+		if n.Type == html.ElementNode && disallowedTags[n.DataAtom] {
+			return textStats{} // script/style source is not page text
+		}
+		childInLink := inLink || (n.Type == html.ElementNode && n.DataAtom == atom.A)
+		var s textStats
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			cs := walk(c, childInLink)
+			s.total += cs.total
+			s.link += cs.link
+			s.links += cs.links
+		}
+		if n.Type == html.ElementNode && n.DataAtom == atom.A && !inLink && s.total > 0 {
+			s.links++
+		}
+		if n.Type == html.ElementNode {
+			stats[n] = s
+		}
+		return s
+	}
+	stats[root] = walk(root, false)
+	return stats
+}
+
+// Link-heavy blocks are removed when they hold several links, at least this
+// share of their text is link text, and they carry little prose of their own.
+// A single linked card or heading is not a menu.
+const (
+	linkHeavyDensity  = 0.5
+	linkHeavyMaxProse = 300
+	linkHeavyMinLinks = 3
+)
+
+var linkBlockTags = map[atom.Atom]bool{
+	atom.Ul: true, atom.Ol: true, atom.Dl: true, atom.Div: true, atom.Section: true,
+	atom.Table: true, atom.Header: true,
+}
+
+// pruneLinkHeavyBlocks removes menus, language pickers, tag clouds, and file
+// listings: block containers whose text is mostly links. Content containers
+// (<main>, <article>, <body>) are never removed themselves.
+func pruneLinkHeavyBlocks(doc *html.Node) {
+	stats := collectTextStats(doc)
+	pageText := stats[doc].total
+	var walk func(n *html.Node)
+	walk = func(n *html.Node) {
+		var next *html.Node
+		for c := n.FirstChild; c != nil; c = next {
+			next = c.NextSibling
+			if c.Type != html.ElementNode {
+				continue
+			}
+			s := stats[c]
+			if linkBlockTags[c.DataAtom] && s.links >= linkHeavyMinLinks && s.linkDensity() >= linkHeavyDensity &&
+				s.prose() < linkHeavyMaxProse && !containsPrimaryContent(c) &&
+				2*s.total < pageText { // a block holding most of the page is the page, not a menu
+				n.RemoveChild(c)
+				continue
+			}
 			walk(c)
 		}
 	}
-
 	walk(doc)
+}
 
-	if len(mainCandidates) > 0 {
-		// Pick candidate with greatest text density/length
-		best := mainCandidates[0]
-		bestLen := len(extractNodeText(best))
-		for _, cand := range mainCandidates[1:] {
-			candLen := len(extractNodeText(cand))
-			if candLen > bestLen {
-				best = cand
-				bestLen = candLen
+// Paragraph-like blocks whose text marks the surrounding container as content.
+var proseTags = map[atom.Atom]bool{
+	atom.P: true, atom.Pre: true, atom.Blockquote: true, atom.Li: true, atom.Td: true,
+	atom.H1: true, atom.H2: true, atom.H3: true,
+}
+
+// minProseBlock is the shortest block that counts as a paragraph of prose.
+const minProseBlock = 25
+
+// specificShare is how much of the reference container's prose a nested
+// candidate must hold to be preferred over it (it drops the wrapper's chrome).
+const specificShare = 0.75
+
+// findMainContent locates the primary content node. Candidates are semantic
+// containers (<main>, <article>, role="main", common content ids) plus the
+// container that holds the most paragraph text (Readability-style). Starting
+// from the semantic container with the most prose (or <body> without one), it
+// picks the most deeply nested candidate that still holds most of that prose,
+// so wrappers full of chrome lose to the element holding the article itself.
+func findMainContent(doc *html.Node) *html.Node {
+	stats := collectTextStats(doc)
+	var semantic []*html.Node
+	var bodyNode *html.Node
+	paragraphScore := make(map[*html.Node]int)
+	depth := make(map[*html.Node]int)
+
+	var walk func(n *html.Node, d int)
+	walk = func(n *html.Node, d int) {
+		if n.Type == html.ElementNode {
+			depth[n] = d
+			if n.DataAtom == atom.Body {
+				bodyNode = n
+			}
+			role := strings.ToLower(getAttr(n, "role"))
+			id := strings.ToLower(getAttr(n, "id"))
+			if n.DataAtom == atom.Main || n.DataAtom == atom.Article ||
+				role == "main" || id == "main" || id == "content" || id == "main-content" {
+				semantic = append(semantic, n)
+			}
+			if proseTags[n.DataAtom] && n.Parent != nil {
+				if prose := stats[n].prose(); prose >= minProseBlock {
+					paragraphScore[n.Parent] += prose
+					if gp := n.Parent.Parent; gp != nil {
+						paragraphScore[gp] += prose / 2
+					}
+				}
 			}
 		}
-		if bestLen > 100 {
-			return best
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c, d+1)
 		}
 	}
+	walk(doc, 0)
 
-	if bodyNode != nil {
-		return bodyNode
+	fallback := bodyNode
+	if fallback == nil {
+		fallback = doc
 	}
 
-	return doc
+	// Reference container: the semantic candidate with the most prose.
+	var reference *html.Node
+	for _, cand := range semantic {
+		if reference == nil || stats[cand].prose() > stats[reference].prose() {
+			reference = cand
+		}
+	}
+	if reference == nil || stats[reference].prose() <= 100 {
+		reference = fallback
+	}
+
+	candidates := append([]*html.Node(nil), semantic...)
+	var topParagraphNode *html.Node
+	for node, score := range paragraphScore {
+		if node.Type != html.ElementNode {
+			continue
+		}
+		if topParagraphNode == nil || score > paragraphScore[topParagraphNode] ||
+			(score == paragraphScore[topParagraphNode] && depth[node] > depth[topParagraphNode]) {
+			topParagraphNode = node
+		}
+	}
+	if topParagraphNode != nil {
+		candidates = append(candidates, topParagraphNode)
+	}
+
+	refProse := stats[reference].prose()
+	best := reference
+	for _, cand := range candidates {
+		if cand == reference || !isDescendant(cand, reference) {
+			continue
+		}
+		if float64(stats[cand].prose()) >= specificShare*float64(refProse) && depth[cand] > depth[best] {
+			best = cand
+		}
+	}
+	return best
+}
+
+func isDescendant(n, ancestor *html.Node) bool {
+	for p := n.Parent; p != nil; p = p.Parent {
+		if p == ancestor {
+			return true
+		}
+	}
+	return false
+}
+
+func hasAttr(n *html.Node, key string) bool {
+	for _, a := range n.Attr {
+		if strings.EqualFold(a.Key, key) {
+			return true
+		}
+	}
+	return false
 }
 
 // extractNodeText recursively extracts raw text from a node.
@@ -352,4 +543,23 @@ func getAttr(n *html.Node, key string) string {
 		}
 	}
 	return ""
+}
+
+// countText returns the number of visible characters in the tree.
+func countText(root *html.Node) int {
+	return collectTextStats(root)[root].total
+}
+
+// pruneDocument removes scripts, page chrome, and noise from doc, and with
+// dropLinkLists also blocks that are mostly links. An element holding most of
+// the page's text is the page itself, whatever its class or role says (for
+// example a "sidebar-container" layout wrapper), so it is never removed.
+func pruneDocument(doc *html.Node, dropLinkLists bool) {
+	stats := collectTextStats(doc)
+	pageText := stats[doc].total
+	holdsMostText := func(n *html.Node) bool { return pageText > 0 && 2*stats[n].total >= pageText }
+	cleanNode(doc, false, holdsMostText)
+	if dropLinkLists {
+		pruneLinkHeavyBlocks(doc)
+	}
 }

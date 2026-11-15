@@ -32,7 +32,9 @@ type FetcherOptions struct {
 // Default limits
 const (
 	DefaultFetchTimeout = 5 * time.Second
-	DefaultMaxBodyBytes = 2 * 1024 * 1024 // 2 MB
+	// Pages carrying large inline scripts and JSON state commonly exceed 2 MB
+	// of HTML even when the article is short.
+	DefaultMaxBodyBytes = 5 * 1024 * 1024 // 5 MB
 	DefaultUserAgent    = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
 
@@ -175,7 +177,7 @@ func (f *Fetcher) Fetch(ctx context.Context, targetURL string) ([]byte, string, 
 		return nil, "", fmt.Errorf("response body exceeds %d bytes", f.maxBodyBytes)
 	}
 
-	return body, contentType, nil
+	return toUTF8(body, rawContentType), contentType, nil
 }
 
 func isHTMLContentType(contentType string, chunk []byte) bool {
