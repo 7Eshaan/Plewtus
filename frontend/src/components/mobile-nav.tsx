@@ -41,7 +41,7 @@ export function MobileNav() {
         <nav
           id="mobile-nav-menu"
           aria-label="Page sections"
-          className="absolute right-0 top-10 w-48 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-lg flex flex-col text-xs font-mono"
+          className="absolute right-0 top-10 w-48 p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-lg flex flex-col text-[13px]"
         >
           {SECTION_LINKS.map((link) => (
             <a

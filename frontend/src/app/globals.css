@@ -8,8 +8,8 @@
   --color-brand-hover: #9924ff;
   --color-brand-light: #a84dff;
   --color-surface-dark: #09090b;
-  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 :root {
@@ -30,6 +30,7 @@
 }
 
 body {
+  font-feature-settings: "cv11", "ss01", "ss03";
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
@@ -216,6 +217,22 @@ body {
   filter: blur(40px);
 }
 
+/* The hero dissolves into the planet's surface at its bottom edge, so the
+   glow never ends on a hard line; the deep-space block below starts on the
+   same colour. Eased stops avoid a visible band. */
+.horizon-bg__fade {
+  position: absolute;
+  inset: auto 0 0;
+  height: clamp(120px, 22vh, 240px);
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--hz-planet) 40%, transparent) 45%,
+    color-mix(in srgb, var(--hz-planet) 80%, transparent) 75%,
+    var(--hz-planet)
+  );
+}
+
 /* Nothing animates while the hero is scrolled out of view. */
 .horizon-bg.is-offscreen *,
 .deep-space.is-offscreen * {
@@ -246,7 +263,7 @@ body {
   --ds-p: 0;
 
   /* light theme */
-  --ds-surface: rgba(24, 24, 27, 0.03);
+  --ds-surface: #ffffff;
   --ds-star-colors: 9, 9, 11 | 39, 39, 42 | 82, 82, 91;
   --ds-stars-opacity: 0.35;
 
@@ -259,7 +276,7 @@ body {
 
 .dark .deep-space {
   /* Near-black like the hero planet's surface, so the two blocks join. */
-  --ds-surface: #040404;
+  --ds-surface: #040308;
   --ds-star-colors: 255, 255, 255 | 255, 255, 255 | 228, 228, 231 | 212, 212, 216;
   --ds-stars-opacity: 1;
 }
@@ -326,4 +343,10 @@ body {
 @keyframes dropdown-in {
   from { opacity: 0; transform: translateY(-4px) scale(0.98); }
   to { opacity: 1; transform: none; }
+}
+
+/* Thin, dark scrollbars inside code panels (components/ui/code-panel.tsx). */
+.code-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
 }

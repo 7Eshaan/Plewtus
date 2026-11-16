@@ -49,16 +49,14 @@ export default function HomePage() {
         <div className="relative w-full">
           <DeepSpaceBackground />
 
-          <div className="relative z-10 w-full max-w-4xl mx-auto px-4 flex flex-col gap-10 pb-16">
-            <div className="section-divider" />
-
+          <div className="relative z-10 w-full max-w-5xl mx-auto px-4 sm:px-6 flex flex-col">
             <HowItWorks />
 
-            <div className="section-divider my-2" />
+            <div className="section-divider" />
 
             <McpSection />
 
-            <div className="section-divider my-2" />
+            <div className="section-divider" />
 
             <ApiQuickstart />
           </div>
@@ -66,7 +64,7 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <footer className="w-full border-t border-zinc-200 dark:border-zinc-800/80 py-8 text-xs font-mono text-zinc-500 dark:text-zinc-500 bg-zinc-50/50 dark:bg-zinc-950/40">
+      <footer className="w-full border-t border-zinc-200 dark:border-zinc-800/80 py-8 text-[13px] text-zinc-500 dark:text-zinc-500 bg-zinc-50/50 dark:bg-zinc-950/40">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-zinc-900 dark:text-zinc-100">Plewtus</span>
@@ -86,7 +84,7 @@ export default function HomePage() {
             href={REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[11px] hover:text-brand dark:hover:text-brand-light transition-colors"
+            className="hover:text-brand dark:hover:text-brand-light transition-colors"
           >
             Apache-2.0 · Source on GitHub
           </a>

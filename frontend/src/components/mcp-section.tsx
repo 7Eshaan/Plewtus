@@ -1,145 +1,82 @@
 "use client";
 
 import { useState } from "react";
-import { Wrench, ShieldCheck, Zap } from "lucide-react";
-import { CopyButton } from "./ui/copy-button";
-import { SegmentedControl } from "./ui/segmented-control";
+import { CodePanel, type CodeLanguage } from "./ui/code-panel";
+import { SectionHeader } from "./ui/section-header";
 
 type McpClientTab = "claude" | "cursor" | "cli";
 
+const CLIENT_SNIPPETS: Record<McpClientTab, { label: string; language: CodeLanguage; code: string }> = {
+  claude: {
+    label: "Claude Desktop",
+    language: "json",
+    code: `{
+  "mcpServers": {
+    "plewtus": {
+      "command": "/path/to/backend/bin/plewtus",
+      "args": ["mcp"]
+    }
+  }
+}`,
+  },
+  cursor: {
+    label: "Cursor",
+    language: "json",
+    code: `{
+  "mcpServers": {
+    "plewtus": {
+      "command": "/path/to/backend/bin/plewtus-mcp"
+    }
+  }
+}`,
+  },
+  cli: {
+    label: "Terminal",
+    language: "bash",
+    code: `# Build, then start the stdio server
+go build -o bin/ ./cmd/...
+./bin/plewtus mcp`,
+  },
+};
+
+const TAB_ORDER: McpClientTab[] = ["claude", "cursor", "cli"];
+
+const TOOLS = [
+  { name: "search", body: "Search the web and get ranked, deduplicated results." },
+  { name: "extract", body: "Read any page or PDF as clean Markdown." },
+];
+
 export function McpSection() {
   const [activeTab, setActiveTab] = useState<McpClientTab>("claude");
-
-  const CLAUDE_CONFIG = `{
-  "mcpServers": {
-    "plewtus": {
-      "command": "/path/to/PlewtusV1/backend/bin/plewtus",
-      "args": ["mcp"],
-      "env": {
-        "PLEWTUS_CACHE_ENABLED": "true",
-        "PLEWTUS_CACHE_TTL_SECONDS": "600"
-      }
-    }
-  }
-}`;
-
-  const CURSOR_CONFIG = `{
-  "mcpServers": {
-    "plewtus": {
-      "command": "/path/to/PlewtusV1/backend/bin/plewtus-mcp"
-    }
-  }
-}`;
-
-  const CLI_EXAMPLE = `# Launch stdio server directly
-./backend/bin/plewtus mcp
-
-# Or send a JSON-RPC 2.0 tool invocation over stdin:
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{"query":"golang concurrency patterns","limit":3}}}' | ./backend/bin/plewtus mcp`;
-
-  function getCurrentSnippet(): string {
-    switch (activeTab) {
-      case "claude":
-        return CLAUDE_CONFIG;
-      case "cursor":
-        return CURSOR_CONFIG;
-      case "cli":
-        return CLI_EXAMPLE;
-    }
-  }
+  const snippet = CLIENT_SNIPPETS[activeTab];
 
   return (
-    <section id="mcp" className="w-full pt-8 pb-4 flex flex-col gap-6 scroll-mt-16">
-      <div className="flex flex-col gap-1.5 text-center sm:text-left">
-        <div className="inline-flex items-center gap-1.5 text-xs font-mono text-brand dark:text-brand-light uppercase tracking-wider font-semibold">
-          <span>AI Agent Interoperability</span>
-        </div>
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-950 dark:text-zinc-50 font-sans">
-          Native Model Context Protocol (MCP) Support
-        </h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl leading-relaxed">
-          Plewtus includes a built-in stdio Model Context Protocol (MCP) server. Any MCP-compatible host—Claude Desktop, Cursor, Continue, or custom autonomous agent frameworks—can query the web directly via standard JSON-RPC 2.0.
-        </p>
-      </div>
+    <section id="mcp" className="w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] py-20 flex flex-col justify-center scroll-mt-14">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-14 lg:gap-16 items-center">
+        <div className="flex flex-col gap-12">
+          <SectionHeader eyebrow="MCP server" title="Give your agent the web">
+            Add Plewtus to Claude Desktop, Cursor or any MCP client. Your agent gets two tools.
+          </SectionHeader>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left column: Tool specifications */}
-        <div className="lg:col-span-5 flex flex-col gap-3.5">
-          {/* Tool 1: search */}
-          <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-2 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Wrench className="w-3.5 h-3.5 text-emerald-500" />
-                <code className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                  search
-                </code>
-              </div>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/60">
-                Tool
-              </span>
-            </div>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Searches DuckDuckGo, Bing, and Yahoo, drops off-topic results, ranks by agreement between engines, and can extract page content.
-            </p>
-            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap gap-1 text-[10px] font-mono text-zinc-500">
-              <span className="px-1.5 py-0.5 rounded bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">query (required)</span>
-              <span className="px-1.5 py-0.5 rounded bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">limit</span>
-              <span className="px-1.5 py-0.5 rounded bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">freshness</span>
-              <span className="px-1.5 py-0.5 rounded bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">extract_mode</span>
-            </div>
-          </div>
-
-          {/* Tool 2: extract */}
-          <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] flex flex-col gap-2 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-3.5 h-3.5 text-brand" />
-                <code className="font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                  extract
-                </code>
-              </div>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/60">
-                Tool
-              </span>
-            </div>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-              Fetches and converts webpage content into clean Markdown, plain text, or salient highlights with multi-layer SSRF guards (loopback, private RFC 1918, CGNAT rejection) and 5 MB resource bounds.
-            </p>
-            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap gap-1 text-[10px] font-mono text-zinc-500">
-              <span className="px-1.5 py-0.5 rounded bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">urls (required)</span>
-              <span className="px-1.5 py-0.5 rounded bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">mode</span>
-              <span className="px-1.5 py-0.5 rounded bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">max_chars</span>
-            </div>
-          </div>
+          <ul className="flex flex-col gap-7">
+            {TOOLS.map((tool) => (
+              <li key={tool.name} className="flex flex-col gap-1.5 pl-5 border-l-2 border-brand/50">
+                <span className="font-mono text-base font-medium text-zinc-950 dark:text-zinc-50">{tool.name}</span>
+                <span className="text-[17px] text-zinc-600 dark:text-zinc-400">{tool.body}</span>
+              </li>
+            ))}
+          </ul>
         </div>
 
-        {/* Right column: Host Configuration Snippet */}
-        <div className="lg:col-span-7 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#121215] overflow-hidden shadow-2xs flex flex-col">
-          <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-2 bg-zinc-50/60 dark:bg-zinc-900/40">
-            <SegmentedControl
-              ariaLabel="MCP client"
-              value={activeTab}
-              onChange={setActiveTab}
-              options={[
-                { value: "claude", label: "Claude Desktop" },
-                { value: "cursor", label: "Cursor / VS Code" },
-                { value: "cli", label: "CLI Stdio" },
-              ]}
-            />
-            <CopyButton getText={getCurrentSnippet} ariaLabel="Copy MCP config to clipboard" />
-          </div>
-
-          <div className="p-4 bg-zinc-950 text-zinc-200 overflow-x-auto text-xs font-mono leading-relaxed min-h-[220px]">
-            <pre className="selection:bg-zinc-800">{getCurrentSnippet()}</pre>
-          </div>
-
-          <div className="px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/30 flex items-center justify-between text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
-            <span className="flex items-center gap-1.5">
-              <Zap className="w-3 h-3 text-emerald-500" />
-              <span>Strict stdio stream isolation: JSON-RPC on stdout, diagnostics on stderr</span>
-            </span>
-          </div>
-        </div>
+        <CodePanel
+          code={snippet.code}
+          language={snippet.language}
+          tabs={TAB_ORDER.map((value) => ({ value, label: CLIENT_SNIPPETS[value].label }))}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          tabsLabel="MCP client"
+          copyLabel="Copy MCP config to clipboard"
+        />
       </div>
     </section>
   );

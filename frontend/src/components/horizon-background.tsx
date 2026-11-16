@@ -165,6 +165,7 @@ export function HorizonBackground({ className = "" }: { className?: string }) {
       <div className="horizon-bg__corner-glow">
         <div className="horizon-bg__corner-glow-fill" />
       </div>
+      <div className="horizon-bg__fade" />
     </div>
   );
 }

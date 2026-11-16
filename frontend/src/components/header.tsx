@@ -12,7 +12,7 @@ export function Header() {
           className="flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md group"
           aria-label="Plewtus Metasearch Home"
         >
-          <div className="w-7 h-7 rounded-md bg-brand text-white flex items-center justify-center font-mono font-bold text-sm select-none shadow-xs shadow-brand/25 group-hover:scale-105 transition-transform">
+          <div className="w-7 h-7 rounded-md bg-brand text-white flex items-center justify-center font-bold text-sm select-none shadow-xs shadow-brand/25 group-hover:scale-105 transition-transform">
             P
           </div>
           <span className="font-semibold text-sm tracking-tight text-zinc-950 dark:text-zinc-50 group-hover:text-brand dark:group-hover:text-brand-light transition-colors">
@@ -21,7 +21,7 @@ export function Header() {
         </a>
 
         {/* Center navigation links */}
-        <nav className="hidden md:flex items-center gap-6 text-xs font-mono text-zinc-600 dark:text-zinc-400" aria-label="Page sections">
+        <nav className="hidden md:flex items-center gap-6 text-[13px] text-zinc-600 dark:text-zinc-400" aria-label="Page sections">
           {SECTION_LINKS.map((link) => (
             <a key={link.href} href={link.href} className="hover:text-brand dark:hover:text-brand-light transition-colors">
               {link.label}
@@ -35,7 +35,7 @@ export function Header() {
             href={REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:inline-flex items-center h-8 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-800 text-xs font-mono text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+            className="hidden sm:inline-flex items-center h-8 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-800 text-[13px] text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
           >
             GitHub
           </a>
