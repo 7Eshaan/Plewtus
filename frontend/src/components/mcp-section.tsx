@@ -4,11 +4,11 @@ import { useState } from "react";
 import { CodePanel, type CodeLanguage } from "./ui/code-panel";
 import { SectionHeader } from "./ui/section-header";
 
-type McpClientTab = "claude" | "cursor" | "cli";
+type McpClientTab = "claude" | "cursor" | "codex" | "deepseek" | "cli";
 
 const CLIENT_SNIPPETS: Record<McpClientTab, { label: string; language: CodeLanguage; code: string }> = {
   claude: {
-    label: "Claude Desktop",
+    label: "Claude",
     language: "json",
     code: `{
   "mcpServers": {
@@ -30,6 +30,25 @@ const CLIENT_SNIPPETS: Record<McpClientTab, { label: string; language: CodeLangu
   }
 }`,
   },
+  codex: {
+    label: "Codex",
+    language: "toml",
+    code: `# ~/.codex/config.toml
+[mcp_servers.plewtus]
+command = "/path/to/backend/bin/plewtus-mcp"`,
+  },
+  deepseek: {
+    label: "DeepSeek",
+    language: "yaml",
+    code: `# ~/.dsh/profiles/<profile>/cordis.patch.yml
+- insert:
+    - id: mcp-plewtus
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: plewtus
+        transport: stdio
+        command: "/path/to/backend/bin/plewtus-mcp"`,
+  },
   cli: {
     label: "Terminal",
     language: "bash",
@@ -39,7 +58,7 @@ go build -o bin/ ./cmd/...
   },
 };
 
-const TAB_ORDER: McpClientTab[] = ["claude", "cursor", "cli"];
+const TAB_ORDER: McpClientTab[] = ["claude", "cursor", "codex", "deepseek", "cli"];
 
 const TOOLS = [
   { name: "search", body: "Search the web and get ranked, deduplicated results." },
@@ -55,7 +74,7 @@ export function McpSection() {
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-14 lg:gap-16 items-center">
         <div className="flex flex-col gap-12">
           <SectionHeader eyebrow="MCP server" title="Give your agent the web">
-            Add Plewtus to Claude Desktop, Cursor or any MCP client. Your agent gets two tools.
+            Add Plewtus to Claude, Cursor, Codex, DeepSeek Harness or any MCP client. Your agent gets two tools.
           </SectionHeader>
 
           <ul className="flex flex-col gap-7">

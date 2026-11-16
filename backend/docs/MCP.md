@@ -90,6 +90,19 @@ Add to your MCP settings:
 }
 ```
 
+### 5. DeepSeek Harness (`cordis.patch.yml`)
+Add to `~/.dsh/profiles/<profile>/cordis.patch.yml`. New plugins must go under `- insert:`; a bare `- id:` entry only overrides a plugin that already exists, so the harness would ignore it and print a warning.
+```yaml
+- insert:
+    - id: mcp-plewtus
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: plewtus
+        transport: stdio
+        command: "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+```
+The tools appear as `mcp__plewtus__search` and `mcp__plewtus__extract`. Start a new session after editing; existing sessions keep the tool list they started with.
+
 ---
 
 ## Available MCP Tools

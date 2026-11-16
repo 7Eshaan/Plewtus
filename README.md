@@ -182,14 +182,17 @@ Add to your workspace `.cursor/mcp.json` or MCP Extension config:
 ```
 
 ### 5. DeepSeek Harness (`cordis.patch.yml`)
+Add to `~/.dsh/profiles/<profile>/cordis.patch.yml`. New plugins must go under `- insert:`; a bare `- id:` entry only overrides a plugin that already exists, so the harness would ignore it and print a warning.
 ```yaml
-- id: mcp-plewtus
-  name: "@deepseek-ai/dsh-mcp-client"
-  config:
-    serverName: plewtus
-    transport: stdio
-    command: "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+- insert:
+    - id: mcp-plewtus
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: plewtus
+        transport: stdio
+        command: "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
 ```
+The tools appear as `mcp__plewtus__search` and `mcp__plewtus__extract`. Start a new session after editing; existing sessions keep the tool list they started with.
 
 ### Available MCP Tools
 - **`search`**: Multi-engine search with provider selection, freshness and domain filters, and optional extraction of the top pages (`markdown`, `highlights`, `text`, `metadata`). Returns a compact text listing by default, or full JSON with `format: "json"`.

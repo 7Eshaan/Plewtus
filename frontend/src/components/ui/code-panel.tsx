@@ -4,7 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import { CopyButton } from "./copy-button";
 import { handleArrowNav } from "@/lib/arrow-nav";
 
-export type CodeLanguage = "bash" | "typescript" | "python" | "go" | "json";
+export type CodeLanguage = "bash" | "typescript" | "python" | "go" | "json" | "toml" | "yaml";
 
 export interface CodeTab<T extends string> {
   value: T;
@@ -31,6 +31,8 @@ const KEYWORDS: Record<CodeLanguage, readonly string[]> = {
   python: ["import", "from", "for", "in", "print", "True", "False", "None"],
   go: ["package", "import", "func", "var", "if", "return", "defer", "nil", "map", "any", "string", "true", "false", "for", "range"],
   json: ["true", "false", "null"],
+  toml: ["true", "false"],
+  yaml: ["true", "false"],
 };
 
 const COMMENT: Record<CodeLanguage, string> = {
@@ -39,6 +41,8 @@ const COMMENT: Record<CodeLanguage, string> = {
   typescript: "\\/\\/[^\\n]*",
   go: "\\/\\/[^\\n]*",
   json: "(?!)",
+  toml: "#[^\\n]*",
+  yaml: "#[^\\n]*",
 };
 
 type Token = { text: string; className?: string };
