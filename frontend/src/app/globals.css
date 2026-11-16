@@ -345,8 +345,38 @@ body {
   to { opacity: 1; transform: none; }
 }
 
-/* Thin, dark scrollbars inside code panels (components/ui/code-panel.tsx). */
-.code-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+/* ------------------------------------------------------------------------
+ * Scrollbars: 4px, in the search button's purple (--color-brand), no track.
+ * They only appear where content overflows (every scroller uses overflow:
+ * auto). Chrome does not repaint a custom scrollbar when a :hover style
+ * changes, so the thumb is always drawn rather than revealed on hover.
+ * Chrome and Safari use ::-webkit-scrollbar, which allows a thinner bar than
+ * the standard scrollbar-width: thin; the standard properties are only set
+ * where ::-webkit-scrollbar is unsupported (Firefox), since Chrome ignores
+ * the pseudo-elements once they are set.
+ * ---------------------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--color-brand);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brand-hover);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-brand) transparent;
+  }
 }

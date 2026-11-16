@@ -1,6 +1,7 @@
 import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./mobile-nav";
 import { REPO_URL, SECTION_LINKS } from "@/lib/site";
+import { GitHubIcon } from "./ui/github-icon";
 
 export function Header() {
   return (
@@ -35,8 +36,9 @@ export function Header() {
             href={REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:inline-flex items-center h-8 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-800 text-[13px] text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+            className="hidden sm:inline-flex items-center gap-2 h-8 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-800 text-[13px] text-zinc-600 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-zinc-100 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
           >
+            <GitHubIcon className="w-4 h-4" />
             GitHub
           </a>
           <ThemeToggle />

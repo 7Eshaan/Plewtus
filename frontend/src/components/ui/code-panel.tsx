@@ -132,7 +132,7 @@ export function CodePanel<T extends string>({
         </div>
       </div>
 
-      <div className={`code-scroll overflow-auto ${maxHeight}`}>
+      <div className={`overflow-auto ${maxHeight}`}>
         <pre className="px-6 pt-5 pb-7 text-[14px] leading-[1.8] min-h-[260px] font-mono [tab-size:4] text-zinc-300 selection:bg-brand/40">
           <code>
             {tokens.map((token, i) =>
