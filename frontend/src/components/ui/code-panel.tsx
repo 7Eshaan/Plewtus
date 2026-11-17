@@ -115,7 +115,7 @@ export function CodePanel<T extends string>({
                   aria-selected={selected}
                   tabIndex={selected ? 0 : -1}
                   onClick={() => onTabChange(tab.value)}
-                  className={`px-3 py-1.5 rounded-lg text-[14px] whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+                  className={`px-2.5 py-1.5 rounded-lg text-[14px] whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
                     selected ? "bg-white/[0.08] text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
                   }`}
                 >

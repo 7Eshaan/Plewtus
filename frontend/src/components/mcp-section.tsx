@@ -38,7 +38,7 @@ const CLIENT_SNIPPETS: Record<McpClientTab, { label: string; language: CodeLangu
 command = "/path/to/backend/bin/plewtus-mcp"`,
   },
   deepseek: {
-    label: "DeepSeek",
+    label: "DeepSeek Harness",
     language: "yaml",
     code: `# ~/.dsh/profiles/<profile>/cordis.patch.yml
 - insert:
@@ -71,7 +71,7 @@ export function McpSection() {
 
   return (
     <section id="mcp" className="w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] py-20 flex flex-col justify-center scroll-mt-14">
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-14 lg:gap-16 items-center">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-14 lg:gap-16 items-center">
         <div className="flex flex-col gap-12">
           <SectionHeader eyebrow="MCP server" title="Give your agent the web">
             Add Plewtus to Claude, Cursor, Codex, DeepSeek Harness or any MCP client. Your agent gets two tools.
