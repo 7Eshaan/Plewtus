@@ -29,6 +29,11 @@
   color: inherit;
 }
 
+/* Header links (#demo, #mcp, …) glide to their section instead of jumping. */
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   font-feature-settings: "cv11", "ss01", "ss03";
   background-color: var(--background);
@@ -38,6 +43,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   *,
   *::before,
   *::after {
