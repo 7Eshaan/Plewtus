@@ -92,7 +92,7 @@ func (s *Server) Start() error {
 		Addr:         s.cfg.Addr(),
 		Handler:      s.Handler(),
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: writeTimeout(s.cfg),
 		IdleTimeout:  60 * time.Second,
 	}
 
@@ -111,6 +111,21 @@ func (s *Server) Start() error {
 		return fmt.Errorf("server error: %w", err)
 	}
 	return nil
+}
+
+// minWriteTimeout is the write timeout used with the default time budgets.
+const minWriteTimeout = 30 * time.Second
+
+// writeTimeout gives a response at least the longest a search may take (the
+// provider stage, the extraction stage, and the orchestrator's one-second
+// allowance) plus a margin for reading the request and writing the body, so
+// raising the configured timeouts can never cut a finished response off.
+func writeTimeout(cfg *config.Config) time.Duration {
+	d := cfg.DefaultTimeout + cfg.ExtractTimeout + time.Second + 10*time.Second
+	if d < minWriteTimeout {
+		return minWriteTimeout
+	}
+	return d
 }
 
 // Shutdown gracefully stops the HTTP server.

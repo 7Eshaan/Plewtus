@@ -48,6 +48,7 @@ func Build(cfg *config.Config, logger *slog.Logger) *Components {
 		WithExtractor(ext).
 		WithExtractTimeout(cfg.ExtractTimeout).
 		WithStragglerGrace(cfg.StragglerGrace).
+		WithFallbackProviders(FallbackProviders(cfg)).
 		WithBreakers(reliability.NewManager(reliability.BreakerOptions{
 			FailureThreshold: cfg.CircuitBreakerThreshold,
 			Cooldown:         cfg.CircuitBreakerCooldown,
@@ -71,6 +72,20 @@ func Build(cfg *config.Config, logger *slog.Logger) *Components {
 	}
 
 	return &Components{Orchestrator: orch, Extractor: ext}
+}
+
+// FallbackProviders lists the engines that may stand in when every requested
+// engine's circuit is open, most dependable first: the default engines, then
+// Marginalia (official API), then Brave only when it has an API key (its HTML
+// page answers non-browser clients with a captcha). Qwant is left out because
+// it only serves some countries.
+func FallbackProviders(cfg *config.Config) []string {
+	names := append([]string(nil), cfg.DefaultProviders...)
+	names = append(names, "marginalia")
+	if strings.TrimSpace(cfg.BraveAPIKey) != "" {
+		names = append(names, "brave")
+	}
+	return names
 }
 
 // LogLevel parses a textual log level, defaulting to info.

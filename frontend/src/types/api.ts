@@ -82,7 +82,7 @@ export interface components {
              */
             limit: number;
             /**
-             * @description Pagination offset. offset + limit must not exceed the 50-result provider window.
+             * @description Pagination offset. offset + limit must not exceed the 50-result provider window. Pages of one query are cut from one cached ranked list, so they do not overlap or skip results; a deeper page appends newly found results after the earlier ones.
              * @default 0
              */
             offset: number;
@@ -278,7 +278,7 @@ export interface components {
             invalid_url_count: number;
             /** @description Candidates merged into an already-seen canonical destination URL. */
             duplicate_count: number;
-            /** @description Raw results dropped because their whole provider response was discarded as off-topic. raw_count equals deduped_count plus the five rejection and merge counters. */
+            /** @description Raw results dropped because their whole provider response was discarded as off-topic. raw_count equals deduped_count plus the five rejection and merge counters, except after a deeper page extended an earlier cached list. */
             provider_discarded_count: number;
         };
         AppliedFilters: {
@@ -351,11 +351,11 @@ export interface operations {
                     "X-RateLimit-Remaining"?: number;
                     /** @description Seconds until rate limit bucket refills. */
                     "X-RateLimit-Reset"?: number;
-                    /** @description Daily request quota limit. */
+                    /** @description Daily request quota limit. Omitted when the tier has no daily quota. */
                     "X-Quota-Limit"?: number;
-                    /** @description Remaining requests for current UTC day. */
+                    /** @description Remaining requests for current UTC day. Omitted when the tier has no daily quota. */
                     "X-Quota-Remaining"?: number;
-                    /** @description Seconds until daily quota resets at 00:00:00 UTC. */
+                    /** @description Seconds until daily quota resets at 00:00:00 UTC. Omitted when the tier has no daily quota. */
                     "X-Quota-Reset"?: number;
                     [name: string]: unknown;
                 };

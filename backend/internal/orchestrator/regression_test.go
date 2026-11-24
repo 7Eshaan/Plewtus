@@ -256,8 +256,10 @@ func TestRegression_DeepWindowsRequestMorePages(t *testing.T) {
 	if first.MaxPages != 1 || first.Limit != 10 {
 		t.Fatalf("default page should cost one request per engine, got %+v", first)
 	}
-	if deep.MaxPages != 3 || deep.Limit != 30 {
-		t.Fatalf("offset 20 + limit 10 should request 30 results over 3 pages, got %+v", deep)
+	// Depth 3 is the deepest list; it collects up to the whole result window
+	// so every window that needs three pages shares one ranked list.
+	if deep.MaxPages != 3 || deep.Limit != model.MaxResultWindow {
+		t.Fatalf("offset 20 + limit 10 should request the full window over 3 pages, got %+v", deep)
 	}
 }
 

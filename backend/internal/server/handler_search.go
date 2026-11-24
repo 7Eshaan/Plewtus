@@ -64,9 +64,12 @@ func (s *Server) handleSearch() http.HandlerFunc {
 				w.Header().Set("X-RateLimit-Limit", strconv.Itoa(checkRes.RateLimitLimit))
 				w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(checkRes.RateLimitRemaining))
 				w.Header().Set("X-RateLimit-Reset", strconv.Itoa(checkRes.RateLimitResetSec))
-				w.Header().Set("X-Quota-Limit", strconv.Itoa(checkRes.QuotaLimit))
-				w.Header().Set("X-Quota-Remaining", strconv.Itoa(checkRes.QuotaRemaining))
-				w.Header().Set("X-Quota-Reset", strconv.Itoa(checkRes.QuotaResetSec))
+				// An unlimited daily quota (limit 0) has no quota headers.
+				if checkRes.QuotaLimit > 0 {
+					w.Header().Set("X-Quota-Limit", strconv.Itoa(checkRes.QuotaLimit))
+					w.Header().Set("X-Quota-Remaining", strconv.Itoa(checkRes.QuotaRemaining))
+					w.Header().Set("X-Quota-Reset", strconv.Itoa(checkRes.QuotaResetSec))
+				}
 			}
 
 			if err != nil {

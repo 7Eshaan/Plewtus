@@ -255,3 +255,21 @@ func TestUsage_ConcurrencyAndStats(t *testing.T) {
 		t.Fatalf("expected exactly 1000 requests counted against the quota, got %d", 10000-res.QuotaRemaining)
 	}
 }
+
+// An unlimited daily quota (0) must never report a negative remainder.
+func TestUsage_UnlimitedQuotaNeverNegative(t *testing.T) {
+	mgr := NewManager(Options{
+		Tiers: map[string]Tier{"free": {Name: "free", RateLimitPerMin: 100, DailyQuota: 0}},
+	})
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/search", nil)
+		req.RemoteAddr = "198.51.100.20:1234"
+		res, err := mgr.Check(req)
+		if err != nil {
+			t.Fatalf("request %d rejected with an unlimited quota: %v", i+1, err)
+		}
+		if res.QuotaLimit != 0 || res.QuotaRemaining != 0 {
+			t.Fatalf("request %d: unlimited quota reported limit=%d remaining=%d", i+1, res.QuotaLimit, res.QuotaRemaining)
+		}
+	}
+}

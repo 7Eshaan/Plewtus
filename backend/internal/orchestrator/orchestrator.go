@@ -32,10 +32,14 @@ type Orchestrator struct {
 	// is given once every other provider has returned results (three or more
 	// providers only). It bounds tail latency when one engine hangs.
 	stragglerGrace time.Duration
-	userAgent      string
-	logger         *slog.Logger
-	flightMu       sync.Mutex
-	flights        map[string]*searchFlight
+	// fallbackProviders, when set, lists the engines (in order of preference)
+	// that may stand in when every requested engine's circuit is open. Unset,
+	// any registered engine may be used, in name order.
+	fallbackProviders []string
+	userAgent         string
+	logger            *slog.Logger
+	flightMu          sync.Mutex
+	flights           map[string]*searchFlight
 }
 
 type searchFlight struct {
@@ -88,6 +92,38 @@ func (o *Orchestrator) WithStragglerGrace(d time.Duration) *Orchestrator {
 		o.stragglerGrace = d
 	}
 	return o
+}
+
+// WithFallbackProviders sets which engines may stand in, in order of
+// preference, when every requested engine's circuit breaker is open. Engines
+// that cannot work in this deployment (for example Brave without an API key)
+// should be left out, or the fallback would only produce another failure.
+func (o *Orchestrator) WithFallbackProviders(names []string) *Orchestrator {
+	o.fallbackProviders = append([]string(nil), names...)
+	return o
+}
+
+// maxFallbackProviders bounds how many stand-in engines one search queries,
+// so a single failing stand-in does not fail the whole request.
+const maxFallbackProviders = 2
+
+// fallbackCandidates returns the registered engines that may stand in for
+// the requested ones, in order of preference.
+func (o *Orchestrator) fallbackCandidates(requested []string) []string {
+	order := o.fallbackProviders
+	if order == nil {
+		order = o.registry.Names()
+	}
+	var out []string
+	for _, name := range order {
+		if containsProvider(requested, name) || containsProvider(out, name) {
+			continue
+		}
+		if _, ok := o.registry.Get(name); ok {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // ProviderNames returns the registered provider names.
@@ -220,7 +256,10 @@ func (o *Orchestrator) Search(ctx context.Context, req *model.SearchRequest) (re
 	}
 }
 
-func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cacheKey string) (*model.SearchResponse, error) {
+// fetchRanked queries the providers for depth result pages each and returns
+// the whole deduplicated, ranked list (not yet paginated or extracted), with
+// provider metadata and pipeline stats, as a SearchResponse.
+func (o *Orchestrator) fetchRanked(ctx context.Context, req *model.SearchRequest, want, maxPages int) (*model.SearchResponse, error) {
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
@@ -255,28 +294,26 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 		providersToQuery = append(providersToQuery, pName)
 	}
 
-	// 3. Provider fallback: if all requested engines were tripped, attempt a healthy registered engine
+	// 3. Provider fallback: if all requested engines were tripped, query up to
+	// maxFallbackProviders healthy stand-ins, in the configured order.
 	queried := append([]string(nil), providersToQuery...)
 	if len(providersToQuery) == 0 && len(requested) > 0 {
-		for _, candidate := range o.registry.Names() {
-			if containsProvider(requested, candidate) {
-				continue
-			}
-			if o.breakers == nil {
-				providersToQuery = append(providersToQuery, candidate)
-				queried = append(queried, candidate)
+		for _, candidate := range o.fallbackCandidates(requested) {
+			if len(providersToQuery) >= maxFallbackProviders {
 				break
 			}
-			generation, err := o.breakers.Get(candidate).AllowWithGeneration()
-			if err == nil {
+			if o.breakers != nil {
+				generation, err := o.breakers.Get(candidate).AllowWithGeneration()
+				if err != nil {
+					continue
+				}
 				breakerGenerations[candidate] = generation
-				providersToQuery = append(providersToQuery, candidate)
-				queried = append(queried, candidate)
-				o.logger.Info("circuit breaker fallback: querying alternative healthy provider",
-					slog.String("fallback_engine", candidate),
-				)
-				break
 			}
+			providersToQuery = append(providersToQuery, candidate)
+			queried = append(queried, candidate)
+			o.logger.Info("circuit breaker fallback: querying alternative healthy provider",
+				slog.String("fallback_engine", candidate),
+			)
 		}
 	}
 
@@ -286,7 +323,6 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 	defer cancelProviders()
 
 	ch := make(chan providerOutcome, len(providersToQuery))
-	want, maxPages := providerBudget(req.Limit, req.Offset)
 
 	for _, pName := range providersToQuery {
 		generation := breakerGenerations[pName]
@@ -475,11 +511,10 @@ collectLoop:
 		failed = []model.ProviderError{}
 	}
 
-	// 7. Canonicalize, deduplicate, filter domains, and merge results across successful providers
+	// 7. Canonicalize, deduplicate, filter domains, and rank the whole list;
+	// search() paginates it.
 	dedupOpts := pipeline.DeduplicateOptions{
 		Query:          req.Query,
-		Limit:          req.Limit,
-		Offset:         req.Offset,
 		IncludeDomains: req.IncludeDomains,
 		ExcludeDomains: req.ExcludeDomains,
 	}
@@ -523,31 +558,56 @@ collectLoop:
 		)
 	}
 
-	// 8. Optional AI-friendly content extraction
-	if req.Extract != nil && req.Extract.Enabled && o.extractor != nil && len(uniqueResults) > 0 {
+	list := model.NewSearchResponse(req.Query)
+	list.Results = uniqueResults
+	list.Metadata.TotalResults = len(uniqueResults)
+	list.Metadata.TookMs = time.Since(start).Milliseconds()
+	list.Metadata.Providers.Queried = queried
+	list.Metadata.Providers.Successful = successful
+	list.Metadata.Providers.Failed = failed
+	list.Metadata.Providers.TimingMs = providerTimings
+	list.Metadata.Stats.RawCount = rawCount
+	list.Metadata.Stats.DedupedCount = dedupedCount
+	list.Metadata.Stats.RelevanceRejectedCount = dedupStats.RelevanceRejected
+	list.Metadata.Stats.DomainRejectedCount = dedupStats.DomainRejected
+	list.Metadata.Stats.InvalidURLCount = dedupStats.InvalidURL
+	list.Metadata.Stats.DuplicateCount = dedupStats.Duplicates
+	list.Metadata.Stats.ProviderDiscardedCount = dedupStats.ProviderDiscarded
+	return list, nil
+}
+
+// search builds the response for one page: it takes the ranked list for the
+// request's depth (see rankedList), cuts out [offset, offset+limit), extracts
+// page content for that page if asked, and caches the response.
+func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cacheKey string) (*model.SearchResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	start := time.Now()
+
+	list, fromCache, err := o.rankedList(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	page := paginate(list.Results, req.Offset, req.Limit)
+
+	// 8. Optional AI-friendly content extraction, for this page only
+	if req.Extract != nil && req.Extract.Enabled && o.extractor != nil && len(page) > 0 {
 		extractOpts := *req.Extract
 		extractOpts.Query = req.Query
 		extractCtx, cancelExtract := context.WithTimeout(ctx, o.extractTimeout)
-		uniqueResults = o.extractor.ExtractBatch(extractCtx, uniqueResults, &extractOpts)
+		page = o.extractor.ExtractBatch(extractCtx, page, &extractOpts)
 		cancelExtract()
 	}
 
 	// 9. Build the final unified response
 	resp := model.NewSearchResponse(req.Query)
-	resp.Results = uniqueResults
-	resp.Metadata.TotalResults = len(uniqueResults)
+	resp.Results = page
+	resp.Metadata.TotalResults = len(page)
 	resp.Metadata.TookMs = time.Since(start).Milliseconds()
-	resp.Metadata.Providers.Queried = queried
-	resp.Metadata.Providers.Successful = successful
-	resp.Metadata.Providers.Failed = failed
-	resp.Metadata.Providers.TimingMs = providerTimings
-	resp.Metadata.Stats.RawCount = rawCount
-	resp.Metadata.Stats.DedupedCount = dedupedCount
-	resp.Metadata.Stats.RelevanceRejectedCount = dedupStats.RelevanceRejected
-	resp.Metadata.Stats.DomainRejectedCount = dedupStats.DomainRejected
-	resp.Metadata.Stats.InvalidURLCount = dedupStats.InvalidURL
-	resp.Metadata.Stats.DuplicateCount = dedupStats.Duplicates
-	resp.Metadata.Stats.ProviderDiscardedCount = dedupStats.ProviderDiscarded
+	resp.Metadata.Providers = list.Metadata.Providers
+	resp.Metadata.Stats = list.Metadata.Stats
+	resp.Metadata.Cached = fromCache
 
 	// Populate applied filters in metadata if any filters were active
 	if req.Freshness != "" || len(req.IncludeDomains) > 0 || len(req.ExcludeDomains) > 0 ||
@@ -567,7 +627,7 @@ collectLoop:
 	// more providers is kept only briefly, so a transient failure does not pin
 	// degraded results for the full TTL.
 	if o.cache != nil && cacheKey != "" && len(resp.Results) > 0 {
-		if len(failed) > 0 {
+		if len(resp.Metadata.Providers.Failed) > 0 {
 			o.cache.SetWithTTL(cacheKey, resp, degradedCacheTTL)
 		} else {
 			o.cache.Set(cacheKey, resp)
@@ -575,6 +635,106 @@ collectLoop:
 	}
 
 	return resp, nil
+}
+
+// rankedList returns the whole ranked list behind a request, and whether it
+// came from the cache.
+//
+// Pages of one query must not overlap or skip results, but a deeper page
+// needs more engine result pages, and a deeper fetch ranks differently. So
+// lists are cached per depth (1-3 engine pages), keyed without offset, limit,
+// or extraction options. A request reuses any cached list at least as deep as
+// it needs. When it must fetch deeper, the new list keeps the order of the
+// cached shallower list (the pages a caller may already have seen) and only
+// appends the results that list did not have, in the deeper list's order.
+func (o *Orchestrator) rankedList(ctx context.Context, req *model.SearchRequest) (*model.SearchResponse, bool, error) {
+	want, depth := providerBudget(req.Limit, req.Offset)
+	if o.cache == nil {
+		list, err := o.fetchRanked(ctx, req, want, depth)
+		return list, false, err
+	}
+
+	for d := depth; d <= maxProviderPages; d++ {
+		if list, ok := o.cache.Get(o.listKey(req, d)); ok {
+			return list, true, nil
+		}
+	}
+
+	list, err := o.fetchRanked(ctx, req, want, depth)
+	if err != nil {
+		return nil, false, err
+	}
+	for d := depth - 1; d >= 1; d-- {
+		if base, ok := o.cache.Get(o.listKey(req, d)); ok {
+			list = extendRanked(base, list)
+			break
+		}
+	}
+	if len(list.Results) > 0 {
+		key := o.listKey(req, depth)
+		if len(list.Metadata.Providers.Failed) > 0 {
+			o.cache.SetWithTTL(key, list, degradedCacheTTL)
+		} else {
+			o.cache.Set(key, list)
+		}
+	}
+	return list, false, nil
+}
+
+// listKey is the cache key of the ranked list for a request at a depth: the
+// query, providers, and filters, but not offset, limit, or extraction.
+func (o *Orchestrator) listKey(req *model.SearchRequest, depth int) string {
+	listReq := *req
+	listReq.Offset, listReq.Limit, listReq.Extract = 0, 0, nil
+	return fmt.Sprintf("list:%d:%s", depth, o.cache.Key(&listReq))
+}
+
+// extendRanked returns deeper with the order of base kept: base's results
+// first, as they were, then deeper's results that base did not have (compared
+// by canonical URL). Ranks and ids are renumbered; metadata comes from deeper.
+func extendRanked(base, deeper *model.SearchResponse) *model.SearchResponse {
+	seen := make(map[string]bool, len(base.Results))
+	merged := make([]model.SearchResult, 0, len(base.Results)+len(deeper.Results))
+	for _, r := range base.Results {
+		seen[resultKey(r.URL)] = true
+		merged = append(merged, r)
+	}
+	for _, r := range deeper.Results {
+		if key := resultKey(r.URL); !seen[key] {
+			seen[key] = true
+			merged = append(merged, r)
+		}
+	}
+	for i := range merged {
+		merged[i].Rank = i + 1
+		merged[i].ID = fmt.Sprintf("res_%d", i+1)
+	}
+	out := *deeper
+	out.Results = merged
+	out.Metadata.TotalResults = len(merged)
+	out.Metadata.Stats.DedupedCount = len(merged)
+	return &out
+}
+
+// resultKey is the canonical comparison key of a result URL.
+func resultKey(rawURL string) string {
+	if _, key, err := pipeline.NormalizeURL(rawURL); err == nil {
+		return key
+	}
+	return rawURL
+}
+
+// paginate copies results[offset : offset+limit], so extraction can fill in
+// content without touching the (possibly cached) list.
+func paginate(results []model.SearchResult, offset, limit int) []model.SearchResult {
+	if offset >= len(results) {
+		return []model.SearchResult{}
+	}
+	end := len(results)
+	if limit > 0 && offset+limit < end {
+		end = offset + limit
+	}
+	return append([]model.SearchResult{}, results[offset:end]...)
 }
 
 // degradedCacheTTL bounds how long a response with failed providers is cached.
@@ -588,23 +748,22 @@ const resultsPerPage = 10
 // maxProviderPages caps how many pages a provider fetches for one search.
 const maxProviderPages = 3
 
-// providerBudget returns how many results each provider should collect and
-// how many pages it may fetch to cover the requested window (limit + offset).
-// The default first page costs one request per engine; deeper windows fetch
-// further pages because engines ignore requests for longer pages.
+// providerBudget returns how many engine result pages (the depth) cover the
+// requested window (limit + offset), and how many results each provider
+// should collect at that depth. The default first page costs one request per
+// engine; deeper windows fetch further pages because engines ignore requests
+// for longer pages. The budget depends only on the depth, so every window of
+// one depth shares the same ranked list (see rankedList).
 func providerBudget(limit, offset int) (want, maxPages int) {
-	want = limit + offset
-	if want < resultsPerPage {
-		want = resultsPerPage
+	window := limit + offset
+	if window < resultsPerPage {
+		window = resultsPerPage
 	}
-	if want > model.MaxResultWindow {
-		want = model.MaxResultWindow
+	maxPages = (window + resultsPerPage - 1) / resultsPerPage
+	if maxPages >= maxProviderPages {
+		return model.MaxResultWindow, maxProviderPages
 	}
-	maxPages = (want + resultsPerPage - 1) / resultsPerPage
-	if maxPages > maxProviderPages {
-		maxPages = maxProviderPages
-	}
-	return want, maxPages
+	return maxPages * resultsPerPage, maxPages
 }
 
 // settleLateOutcomes consumes outcomes that arrive after the collector stopped

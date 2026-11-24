@@ -213,8 +213,19 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 		m.quotas[ident.Key] = qRecord
 	}
 
+	// A daily quota of 0 or less means unlimited: QuotaLimit and
+	// QuotaRemaining are then both 0 and callers omit the quota headers.
 	quotaLimit := tier.DailyQuota
-	quotaRemaining := quotaLimit - qRecord.count
+	if quotaLimit < 0 {
+		quotaLimit = 0
+	}
+	remainingAfter := func(count int) int {
+		if quotaLimit == 0 || count >= quotaLimit {
+			return 0
+		}
+		return quotaLimit - count
+	}
+	quotaRemaining := remainingAfter(qRecord.count)
 	if quotaLimit > 0 && qRecord.count >= quotaLimit {
 		res := &CheckResult{
 			Identity:       ident,
@@ -283,7 +294,7 @@ func (m *Manager) Check(r *http.Request) (*CheckResult, error) {
 		RateLimitRemaining: int(bucket.tokens),
 		RateLimitResetSec:  int(math.Ceil((capacity - bucket.tokens) / fillRate)),
 		QuotaLimit:         quotaLimit,
-		QuotaRemaining:     quotaLimit - qRecord.count,
+		QuotaRemaining:     remainingAfter(qRecord.count),
 		QuotaResetSec:      secondsUntilMidnight,
 	}
 

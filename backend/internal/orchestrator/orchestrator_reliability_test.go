@@ -240,3 +240,38 @@ func TestOrchestrator_CircuitBreakerFallback(t *testing.T) {
 		t.Fatalf("breaker-skipped requested provider should be recorded as failed, got %+v", resp.Metadata.Providers.Failed)
 	}
 }
+
+// The fallback must follow the configured order, skip engines left out of it
+// (such as Brave without a key), and query at most maxFallbackProviders.
+func TestOrchestrator_FallbackFollowsConfiguredOrder(t *testing.T) {
+	reg := provider.NewRegistry()
+	broken := &countProvider{name: "broken", err: errors.New("broken")}
+	captcha := &countProvider{name: "aaa-captcha", err: errors.New("captcha")}
+	first := &countProvider{name: "zz-first"}
+	second := &countProvider{name: "mm-second"}
+	third := &countProvider{name: "bb-third"}
+	for _, p := range []*countProvider{broken, captcha, first, second, third} {
+		reg.Register(p)
+	}
+
+	breakers := reliability.NewManager(reliability.BreakerOptions{FailureThreshold: 1, Cooldown: time.Minute})
+	breakers.Get("broken").ReportFailure(errors.New("pre-trip"))
+	orch := New(reg, time.Second, "test", testLogger()).
+		WithBreakers(breakers).
+		WithFallbackProviders([]string{"broken", "not-registered", "zz-first", "mm-second", "bb-third"})
+
+	resp, err := orch.Search(context.Background(), &model.SearchRequest{Query: "fallback order", Providers: []string{"broken"}})
+	if err != nil {
+		t.Fatalf("search failed: %v", err)
+	}
+	if got := atomic.LoadInt64(&captcha.calls); got != 0 {
+		t.Fatalf("an engine outside the fallback list must not be queried, got %d calls", got)
+	}
+	if atomic.LoadInt64(&first.calls) != 1 || atomic.LoadInt64(&second.calls) != 1 || atomic.LoadInt64(&third.calls) != 0 {
+		t.Fatalf("expected the first two listed stand-ins only, got first=%d second=%d third=%d",
+			first.calls, second.calls, third.calls)
+	}
+	if want := []string{"zz-first", "mm-second"}; strings.Join(resp.Metadata.Providers.Queried, ",") != strings.Join(want, ",") {
+		t.Fatalf("queried = %v, want %v", resp.Metadata.Providers.Queried, want)
+	}
+}

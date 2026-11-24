@@ -18,7 +18,7 @@ For local development, Plewtus also reads an optional `.env` file from the worki
 | `PLEWTUS_MARGINALIA_API_KEY` | `string` | `public` | Key for the Marginalia Search API. `public` is shared and heavily rate limited; free personal keys are available from Marginalia. Free-key results are CC-BY-NC-SA 4.0. |
 | `PLEWTUS_BRAVE_API_KEY` | `string` | `""` | Key for Brave's official Search API. When set, the `brave` provider uses the API (billed per request after Brave's monthly credit). When empty it reads the public HTML results page, which Brave usually answers with a captcha for non-browser clients; that is reported as a failed engine, not worked around. |
 | `PLEWTUS_DEFAULT_TIMEOUT_MS` | `integer` | `6000` | Per-provider scrape timeout in milliseconds (default 6s). |
-| `PLEWTUS_EXTRACT_TIMEOUT_MS` | `integer` | `8000` | Time budget for the page-extraction stage of a search. A single page fetch is capped at the smaller of this value and 5 seconds, so one slow site cannot hold back the others. |
+| `PLEWTUS_EXTRACT_TIMEOUT_MS` | `integer` | `8000` | Time budget for the page-extraction stage of a search. A single page fetch is capped at the smaller of this value and 5 seconds, so one slow site cannot hold back the others. The HTTP server's write timeout grows with this value and `PLEWTUS_DEFAULT_TIMEOUT_MS` (at least 30 s), so a long budget never cuts a finished response off. |
 | `PLEWTUS_STRAGGLER_GRACE_MS` | `integer` | `1500` | When three or more engines are queried and all but one have returned results, how long to keep waiting for the last one before answering without it. It bounds tail latency when one engine hangs; `0` always waits for the full timeout. A cut-off engine is listed under `providers.failed` and does not count against its circuit breaker. |
 | `PLEWTUS_TRUSTED_PROXIES` | `string` | `""` | Comma-separated IP addresses/CIDRs allowed to supply `X-Forwarded-For`. When empty, forwarded headers are ignored and the socket peer identifies anonymous callers. |
 | `PLEWTUS_DEFAULT_LIMIT` | `integer` | `10` | Default results count when `limit` is omitted. |
@@ -44,9 +44,9 @@ For local development, Plewtus also reads an optional `.env` file from the worki
 | `PLEWTUS_AUTH_REQUIRED` | `boolean` | `false` | When `true`, requests without a registered API key are rejected (`401 Unauthorized`). |
 | `PLEWTUS_API_KEYS` | `string` | `""` | Comma-separated list of valid API keys. Can specify tier mapping (e.g. `key1:pro,key2:free`). Untagged keys default to `pro`. |
 | `PLEWTUS_FREE_TIER_RATE_LIMIT` | `integer` | `10` | Requests allowed per minute for anonymous clients and free tier keys. |
-| `PLEWTUS_FREE_TIER_DAILY_QUOTA` | `integer` | `100` | Requests allowed per UTC calendar day for the free tier (0 = unlimited). |
+| `PLEWTUS_FREE_TIER_DAILY_QUOTA` | `integer` | `100` | Requests allowed per UTC calendar day for the free tier (0 = unlimited; responses then carry no `X-Quota-*` headers). |
 | `PLEWTUS_PRO_TIER_RATE_LIMIT` | `integer` | `60` | Requests allowed per minute for pro tier API keys. |
-| `PLEWTUS_PRO_TIER_DAILY_QUOTA` | `integer` | `2000` | Requests allowed per UTC calendar day for pro tier keys. |
+| `PLEWTUS_PRO_TIER_DAILY_QUOTA` | `integer` | `2000` | Requests allowed per UTC calendar day for pro tier keys (0 = unlimited). |
 
 ---
 
@@ -56,6 +56,8 @@ For local development, Plewtus also reads an optional `.env` file from the worki
 |---|---|---|---|
 | `PLEWTUS_CIRCUIT_BREAKER_THRESHOLD` | `integer` | `3` | Consecutive failures required to trip a search engine's circuit breaker to `Open`. Errors, captchas, and responses discarded as off-topic all count. |
 | `PLEWTUS_CIRCUIT_BREAKER_COOLDOWN_MS` | `integer` | `30000` | Cooldown in milliseconds (default 30s) before an open breaker allows a trial probe. |
+
+When every requested engine's breaker is open, up to two healthy stand-ins are queried instead, in this order: the engines in `PLEWTUS_DEFAULT_PROVIDERS`, then Marginalia, then Brave only when `PLEWTUS_BRAVE_API_KEY` is set. Qwant is never used as a stand-in because it only serves some countries.
 
 ---
 

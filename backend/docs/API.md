@@ -37,7 +37,7 @@ Plewtus supports two modes of access:
 
 ## Response Headers
 
-Every `/search` response includes usage and rate limit status headers:
+Every `/search` response includes usage and rate limit status headers. The `X-Quota-*` headers are left out when the caller's tier has no daily quota (`PLEWTUS_*_DAILY_QUOTA=0`).
 
 | Header | Description |
 |---|---|
@@ -97,7 +97,9 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 
 **Result depth.** Each engine returns roughly 7–10 results per page. For windows (`offset + limit`) deeper than 10, every engine fetches further pages, up to three. That is slower (pages are fetched one after another) and best-effort: three engines typically yield 30–45 unique results, so deep pages can come back short. `metadata.stats.deduped_count` is the number of unique results available for the query.
 
-**Caching.** Responses are cached for `PLEWTUS_CACHE_TTL_SECONDS`. A response in which any engine failed is cached for at most one minute.
+**Stable pagination.** While the query's results are cached, pages never overlap or skip results. Each query's whole ranked list is cached per depth (1, 2 or 3 engine pages), independent of `offset`, `limit` and `extract`, and every page is cut from it. When a deeper page needs more engine pages, the earlier results keep their order and positions, and the results the deeper fetch adds are appended after them in its own order. So `ranking_score` decreases within that ordering but can rise again across the point where new results were appended. Pages served from a cached list have `metadata.cached: true`.
+
+**Caching.** Responses are cached for `PLEWTUS_CACHE_TTL_SECONDS`. A response in which any engine failed is cached for at most one minute, and so is the ranked list behind it.
 
 Request bodies are limited to 1 MiB and must contain exactly one JSON value. Search-engine HTML responses are capped at 4 MiB. Usage counters and the frontend proxy limiter are process-local in-memory guards; use a shared gateway/store for limits that must span replicas or survive restarts.
 
@@ -157,7 +159,7 @@ Notes on optional fields:
 
 - `metadata.filters` appears only when a filter or an offset was applied, and echoes it.
 - `metadata.cached` appears (as `true`) only when the response came from the cache.
-- `metadata.total_results` is the number of results in this response; `stats.deduped_count` is the number available. `raw_count` equals `deduped_count` plus the five rejection and merge counters.
+- `metadata.total_results` is the number of results in this response; `stats.deduped_count` is the number available. `raw_count` equals `deduped_count` plus the five rejection and merge counters, except after a deeper page extended an earlier list (see *Stable pagination*): the stats then describe the deeper fetch, and `deduped_count` also counts earlier results it did not return again.
 - `content_error` appears on a result when extraction was attempted for it but produced no content, with the reason (blocked address, non-HTML page, timeout).
 
 ---

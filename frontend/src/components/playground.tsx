@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SearchPreview, type ActiveTab } from "@/components/search-preview";
 import { buildSearchRequest } from "@/lib/build-request";
 import {
+  ALL_PROVIDERS,
   DEFAULT_ADVANCED_OPTIONS,
   DEFAULT_PROVIDERS,
   EXAMPLE_QUERIES,
+  LIMIT_CHOICES,
   MAX_RESULT_WINDOW,
   type AdvancedOptions,
   type ExtractionMode,
@@ -19,6 +21,13 @@ type ErrorResponse = components["schemas"]["ErrorResponse"];
 
 const SESSION_KEY = "plewtus:last-search";
 
+/** The option controls a search was run with. */
+interface SearchControls {
+  providers: ProviderName[];
+  extractionMode: ExtractionMode;
+  advancedOptions: AdvancedOptions;
+}
+
 /** What a completed search was run with, to tell when the controls have since changed. */
 interface SearchSnapshot {
   query: string;
@@ -26,6 +35,42 @@ interface SearchSnapshot {
   signature: string;
   /** One API response per page fetched so far ("Load more" appends pages). */
   pages: SearchResponse[];
+  /** The controls behind `signature`, restored with the search after a reload. */
+  controls: SearchControls;
+}
+
+const EXTRACTION_MODES: readonly ExtractionMode[] = ["none", "highlights", "markdown", "text"];
+const FRESHNESS_VALUES: readonly string[] = ["", "day", "week", "month", "year"];
+
+/**
+ * Validates controls read back from sessionStorage, so a stale or edited entry
+ * cannot put the playground into a state its controls cannot show.
+ */
+function parseControls(value: unknown): SearchControls | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  const providers = Array.isArray(v.providers)
+    ? ALL_PROVIDERS.filter((p) => (v.providers as unknown[]).includes(p))
+    : [];
+  const mode = EXTRACTION_MODES.find((m) => m === v.extractionMode);
+  const o = v.advancedOptions as Record<string, unknown> | undefined;
+  if (providers.length === 0 || !mode || !o || typeof o !== "object") return null;
+
+  const text = (key: keyof AdvancedOptions) => (typeof o[key] === "string" ? (o[key] as string) : "");
+  const limit = LIMIT_CHOICES.find((n) => n === o.limit) ?? DEFAULT_ADVANCED_OPTIONS.limit;
+  const freshness = FRESHNESS_VALUES.includes(text("freshness")) ? (text("freshness") as AdvancedOptions["freshness"]) : "";
+  return {
+    providers,
+    extractionMode: mode,
+    advancedOptions: {
+      limit,
+      freshness,
+      country: text("country").toLowerCase().replace(/[^a-z]/g, "").slice(0, 2),
+      language: text("language").toLowerCase().replace(/[^a-z]/g, "").slice(0, 2),
+      includeDomains: text("includeDomains"),
+      excludeDomains: text("excludeDomains"),
+    },
+  };
 }
 
 function isErrorResponse(value: unknown): value is ErrorResponse {
@@ -94,7 +139,12 @@ export function Playground() {
           setSnapshot(null);
           return;
         }
-        const next: SearchSnapshot = { query: q, signature: JSON.stringify(request), pages: [result] };
+        const next: SearchSnapshot = {
+          query: q,
+          signature: JSON.stringify(request),
+          pages: [result],
+          controls: { providers, extractionMode, advancedOptions },
+        };
         setSnapshot(next);
         try {
           sessionStorage.setItem(SESSION_KEY, JSON.stringify(next));
@@ -174,11 +224,22 @@ export function Playground() {
       const saved = sessionStorage.getItem(SESSION_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as SearchSnapshot;
-        if (parsed?.query && Array.isArray(parsed.pages) && parsed.pages[0]?.results) {
+        // Entries saved before the controls were stored are skipped: their
+        // options are unknown, so they would show as stale straight away.
+        const controls = parseControls(parsed?.controls);
+        if (parsed?.query && controls && Array.isArray(parsed.pages) && parsed.pages[0]?.results) {
+          // Restore the controls with the results, so the signature matches
+          // and the "Options changed" notice only appears after a real change.
           // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from storage
           setQuery(parsed.query);
-          // Only the first page is restored; its signature matches the default controls.
-          setSnapshot({ ...parsed, pages: [parsed.pages[0]] });
+          setProviders(controls.providers);
+          setExtractionMode(controls.extractionMode);
+          setAdvancedOptions(controls.advancedOptions);
+          // Only the first page is restored ("Load more" fetches the rest again).
+          const signature = JSON.stringify(
+            buildSearchRequest(parsed.query, controls.providers, controls.extractionMode, controls.advancedOptions)
+          );
+          setSnapshot({ query: parsed.query, signature, pages: [parsed.pages[0]], controls });
           return;
         }
       }

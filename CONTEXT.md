@@ -239,5 +239,12 @@ Measured live before and after (8 queries, top 10 pages each, markdown mode): pa
 - **MCP:** `max_chars` / `max_chars_per_page` values from 1 to 99 are raised to 100, the minimum the tool schemas advertise (`minMaxChars` in `internal/mcp/server.go`).
 - **Docs:** README/MCP.md example paths use the clone folder (`/absolute/path/to/Plewtus`); README lists the opt-in engines; `frontend/README.md` describes how the proxy identifies visitors (Vercel header, or `X-Real-IP` then the last `X-Forwarded-For` hop when `PLEWTUS_TRUST_PROXY_HEADERS=true`).
 
+## Bug Fixes (2026-11-24)
+- **Stable pagination (`orchestrator`):** `fetchRanked` returns the whole ranked list; `search` cuts the page, extracts content for that page only, and caches the response as before. Ranked lists are cached per depth (1-3 engine pages; key `list:<depth>:<hash>` without offset, limit or extraction). A request reuses any cached list at least as deep as it needs. A deeper fetch is merged onto a cached shallower list with `extendRanked`: the earlier order is kept and new results (by canonical URL) are appended, with ranks and ids renumbered. `providerBudget` depends only on the depth (want = 10 or 20; 50 at depth 3). Lists with a failed engine are cached for 1 minute, like responses. Tests: `orchestrator/pagination_test.go`.
+- **Fallback (`orchestrator`, `app`):** `WithFallbackProviders` sets the stand-in order; `app.FallbackProviders` = default engines, then Marginalia, then Brave only with an API key (never Qwant). Up to 2 stand-ins are queried. Previously the alphabetical registry order picked Brave, which nearly always serves a captcha without a key.
+- **Quota headers (`usage`, `server`):** an unlimited daily quota (0) no longer reports a negative `X-Quota-Remaining`; the `X-Quota-*` headers are omitted for it.
+- **Write timeout (`server`):** `writeTimeout(cfg)` = provider timeout + extraction timeout + 1 s + 10 s margin, at least 30 s.
+- **Playground session restore (`frontend/src/components/playground.tsx`):** the saved search stores its controls (engines, content mode, options) and restores them with the results, so the "Options changed" notice no longer appears on reload. Stored controls are validated; entries saved before this change are ignored.
+
 ## Next Step
 - Optional: charset decoding for non-UTF-8 pages (needs `golang.org/x/text`).
