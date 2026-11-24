@@ -37,8 +37,8 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.plewtus]
 enabled = true
-command = "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
-cwd = "/absolute/path/to/PlewtusV1"
+command = "/absolute/path/to/Plewtus/backend/bin/plewtus-mcp"
+cwd = "/absolute/path/to/Plewtus"
 
 [mcp_servers.plewtus.env]
 PLEWTUS_CACHE_ENABLED = "true"
@@ -50,8 +50,8 @@ PLEWTUS_CACHE_TTL_SECONDS = "600"
 Navigate to **Settings → MCP Servers → Connect to a custom MCP**:
 - **Name:** `plewtus`
 - **Type:** `STDIO`
-- **Command to launch:** `/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp`
-- **Working directory:** `/absolute/path/to/PlewtusV1`
+- **Command to launch:** `/absolute/path/to/Plewtus/backend/bin/plewtus-mcp`
+- **Working directory:** `/absolute/path/to/Plewtus`
 
 ### 3. Claude Desktop
 
@@ -65,7 +65,7 @@ Add Plewtus to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "plewtus": {
-      "command": "/absolute/path/to/PlewtusV1/backend/bin/plewtus",
+      "command": "/absolute/path/to/Plewtus/backend/bin/plewtus",
       "args": ["mcp"],
       "env": {
         "PLEWTUS_CACHE_ENABLED": "true",
@@ -84,7 +84,7 @@ Add to your MCP settings:
 {
   "mcpServers": {
     "plewtus": {
-      "command": "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+      "command": "/absolute/path/to/Plewtus/backend/bin/plewtus-mcp"
     }
   }
 }
@@ -99,7 +99,7 @@ Add to `~/.dsh/profiles/<profile>/cordis.patch.yml`. New plugins must go under `
       config:
         serverName: plewtus
         transport: stdio
-        command: "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+        command: "/absolute/path/to/Plewtus/backend/bin/plewtus-mcp"
 ```
 The tools appear as `mcp__plewtus__search` and `mcp__plewtus__extract`. Start a new session after editing; existing sessions keep the tool list they started with.
 

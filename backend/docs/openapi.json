@@ -3,10 +3,10 @@
   "info": {
     "title": "Plewtus Metasearch API",
     "version": "0.1.0",
-    "description": "Plewtus is an AI-agent search API backend that aggregates search results across\nmultiple search engines (DuckDuckGo, Bing, Yahoo, and opt-in Marginalia, Brave and Qwant) using metasearch architecture.\nResults are normalized, deduplicated, filtered for relevance, and ranked with\nReciprocal Rank Fusion (RRF) plus a small query-relevance boost,\nwith optional AI-friendly webpage extraction (clean text, highlights, Markdown).\n",
+    "description": "Plewtus is an AI-agent search API backend that aggregates search results across\nmultiple search engines (DuckDuckGo, Bing, Yahoo, and opt-in Marginalia, Brave and Qwant) using metasearch architecture.\nResults are normalized, deduplicated, filtered for relevance, and ranked with\nReciprocal Rank Fusion (RRF) plus a small query-relevance boost,\nwith optional AI-friendly webpage extraction (clean text, highlights, Markdown).\n\nUnknown endpoints return 404 (`not_found`) and a wrong HTTP method returns\n405 (`method_not_allowed`), both with the `ErrorResponse` body.\n",
     "license": {
-      "name": "Apache-2.0",
-      "identifier": "Apache-2.0"
+      "name": "MIT",
+      "identifier": "MIT"
     }
   },
   "servers": [

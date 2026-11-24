@@ -23,4 +23,8 @@ npm run generate:types   # regenerate src/types/api.ts from backend/docs/openapi
 npm run verify           # checks for the search proxy
 ```
 
-The frontend IP guard is in-memory per Node process. Production deployments that need a global quota should enforce it at a shared gateway/store. The deployment proxy must append or overwrite `X-Forwarded-For`; the route uses the last valid address in that chain.
+The frontend IP guard is in-memory per Node process. Production deployments that need a global quota should enforce it at a shared gateway/store. How the route identifies a visitor:
+
+- On Vercel, it uses the platform's `x-vercel-forwarded-for` header.
+- With `PLEWTUS_TRUST_PROXY_HEADERS=true` (only behind a reverse proxy you control), it uses `X-Real-IP` if that is a valid address, otherwise the last valid address in `X-Forwarded-For`.
+- Otherwise forwarded headers are ignored and all visitors share one rate-limit bucket.

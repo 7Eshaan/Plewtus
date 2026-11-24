@@ -8,9 +8,12 @@ info:
     Results are normalized, deduplicated, filtered for relevance, and ranked with
     Reciprocal Rank Fusion (RRF) plus a small query-relevance boost,
     with optional AI-friendly webpage extraction (clean text, highlights, Markdown).
+
+    Unknown endpoints return 404 (`not_found`) and a wrong HTTP method returns
+    405 (`method_not_allowed`), both with the `ErrorResponse` body.
   license:
-    name: Apache-2.0
-    identifier: Apache-2.0
+    name: MIT
+    identifier: MIT
 
 servers:
   - url: http://localhost:8080

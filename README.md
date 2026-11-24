@@ -12,7 +12,7 @@
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black">
   <img alt="Protocol" src="https://img.shields.io/badge/MCP-Protocol-8A2BE2?style=flat-square">
   <img alt="Docker" src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white">
-  <img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue?style=flat-square">
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=flat-square">
 </p>
 
 [Quickstart](#quickstart) • [Architecture](#architecture) • [MCP Integration](#model-context-protocol-mcp-integration) • [Search & Extraction](#search--page-extraction) • [Configuration](#configuration-reference)
@@ -23,7 +23,7 @@
 
 ## Key Capabilities
 
-- **Zero Search API Keys Required** — Built-in resilient scrapers for DuckDuckGo, Bing, and Yahoo with automatic query escaping and anti-bot mitigation.
+- **Zero Search API Keys Required** — Built-in scrapers for DuckDuckGo, Bing, and Yahoo (queried by default) that detect and report captchas and decoy pages instead of failing silently. Opt-in engines: Marginalia (official API), Brave (official API with `PLEWTUS_BRAVE_API_KEY`, otherwise its HTML page) and Qwant (JSON API, some countries only).
 - **Concurrent Search** — Fan-out queries across all providers in parallel (typically 1–2.5 s uncached, milliseconds from cache) with per-engine timeouts, circuit breakers, a cut-off for one hung engine, and graceful fallback.
 - **Consensus ranking** — Deduplicates by canonical URL, removes off-topic results (including decoy result pages some engines serve to bots), then ranks with Reciprocal Rank Fusion ($k=60$): agreement between engines decides the order, and query relevance only separates near-ties.
 - **On-The-Fly Web Extraction** — Automatically strips boilerplate, adverts, and scripts, converting target web pages into clean Markdown, Highlights, or plain text.
@@ -51,6 +51,7 @@ flowchart TD
             DDG["DuckDuckGo Scraper"]
             Bing["Bing Scraper"]
             Yahoo["Yahoo Scraper"]
+            OptIn["Opt-in: Marginalia · Brave · Qwant"]
         end
 
         Fusion["URL Deduplication & Reciprocal Rank Fusion (RRF)"]
@@ -68,8 +69,8 @@ flowchart TD
 
     Router <--> Cache
     Router --> Breakers
-    Breakers --> DDG & Bing & Yahoo
-    DDG & Bing & Yahoo --> Fusion
+    Breakers --> DDG & Bing & Yahoo & OptIn
+    DDG & Bing & Yahoo & OptIn --> Fusion
     Fusion --> SSRF --> Sanitize --> Formatter
     Formatter --> Router
 ```
@@ -137,16 +138,16 @@ Rebuild after pulling changes: MCP clients launch this binary, not the source.
 Under **Settings → MCP Servers → Connect to a custom MCP**:
 - **Name:** `plewtus`
 - **Type:** `STDIO`
-- **Command to launch:** `/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp`
-- **Working directory:** `/absolute/path/to/PlewtusV1`
+- **Command to launch:** `/absolute/path/to/Plewtus/backend/bin/plewtus-mcp`
+- **Working directory:** `/absolute/path/to/Plewtus`
 
 ### 2. OpenAI Codex / ChatGPT CLI (`~/.codex/config.toml`)
 Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.plewtus]
 enabled = true
-command = "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
-cwd = "/absolute/path/to/PlewtusV1"
+command = "/absolute/path/to/Plewtus/backend/bin/plewtus-mcp"
+cwd = "/absolute/path/to/Plewtus"
 
 [mcp_servers.plewtus.env]
 PLEWTUS_CACHE_ENABLED = "true"
@@ -159,7 +160,7 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "plewtus": {
-      "command": "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp",
+      "command": "/absolute/path/to/Plewtus/backend/bin/plewtus-mcp",
       "env": {
         "PLEWTUS_CACHE_ENABLED": "true",
         "PLEWTUS_CACHE_TTL_SECONDS": "600"
@@ -175,7 +176,7 @@ Add to your workspace `.cursor/mcp.json` or MCP Extension config:
 {
   "mcpServers": {
     "plewtus": {
-      "command": "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+      "command": "/absolute/path/to/Plewtus/backend/bin/plewtus-mcp"
     }
   }
 }
@@ -190,7 +191,7 @@ Add to `~/.dsh/profiles/<profile>/cordis.patch.yml`. New plugins must go under `
       config:
         serverName: plewtus
         transport: stdio
-        command: "/absolute/path/to/PlewtusV1/backend/bin/plewtus-mcp"
+        command: "/absolute/path/to/Plewtus/backend/bin/plewtus-mcp"
 ```
 The tools appear as `mcp__plewtus__search` and `mcp__plewtus__extract`. Start a new session after editing; existing sessions keep the tool list they started with.
 
@@ -294,7 +295,7 @@ The full list is in [backend/docs/CONFIGURATION.md](backend/docs/CONFIGURATION.m
 ## Repository Structure
 
 ```text
-PlewtusV1/
+Plewtus/
 ├── backend/
 │   ├── cmd/
 │   │   ├── plewtus/         # Unified server & CLI binary
@@ -323,4 +324,4 @@ PlewtusV1/
 
 ## License
 
-Distributed under the Apache License 2.0. See [LICENSE](LICENSE) for more information.
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.

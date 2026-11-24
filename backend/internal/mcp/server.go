@@ -486,7 +486,7 @@ func (s *Server) toolDefinitions() []map[string]any {
 					},
 					"max_chars_per_page": map[string]any{
 						"type":        "integer",
-						"minimum":     100,
+						"minimum":     minMaxChars,
 						"maximum":     20000,
 						"description": "Character limit per extracted page (default 4000).",
 					},
@@ -525,7 +525,7 @@ func (s *Server) toolDefinitions() []map[string]any {
 					},
 					"max_chars": map[string]any{
 						"type":        "integer",
-						"minimum":     100,
+						"minimum":     minMaxChars,
 						"maximum":     20000,
 						"description": "Maximum characters per page (default 4000).",
 					},
@@ -625,7 +625,7 @@ func (s *Server) executeSearchTool(ctx context.Context, argsRaw json.RawMessage)
 			Enabled:         true,
 			Mode:            args.ExtractMode,
 			MaxPages:        args.MaxPages,
-			MaxCharsPerPage: args.MaxCharsPerPage,
+			MaxCharsPerPage: raiseToMinChars(args.MaxCharsPerPage),
 		}
 	}
 
@@ -650,6 +650,19 @@ func (s *Server) executeSearchTool(ctx context.Context, argsRaw json.RawMessage)
 		return toolText(string(data)), nil
 	}
 	return toolText(formatSearchResponse(resp)), nil
+}
+
+// minMaxChars is the smallest per-page character limit the tool schemas
+// advertise; smaller positive values are raised to it.
+const minMaxChars = 100
+
+// raiseToMinChars applies minMaxChars to a caller-supplied limit, leaving
+// zero (use the default) and negative values for the normal defaulting.
+func raiseToMinChars(n int) int {
+	if n > 0 && n < minMaxChars {
+		return minMaxChars
+	}
+	return n
 }
 
 // extractToolArgs represents arguments for the 'extract' tool.
@@ -691,7 +704,7 @@ func (s *Server) executeExtractTool(ctx context.Context, argsRaw json.RawMessage
 	if mode != "markdown" && mode != "highlights" && mode != "text" && mode != "metadata" {
 		return toolError("Error: mode must be markdown, highlights, text, or metadata"), nil
 	}
-	maxChars := args.MaxChars
+	maxChars := raiseToMinChars(args.MaxChars)
 	if maxChars <= 0 {
 		maxChars = 4000
 	} else if maxChars > 20000 {

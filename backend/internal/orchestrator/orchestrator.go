@@ -255,7 +255,7 @@ func (o *Orchestrator) search(ctx context.Context, req *model.SearchRequest, cac
 		providersToQuery = append(providersToQuery, pName)
 	}
 
-	// Provider Fallback: if all requested engines were tripped, attempt a healthy registered engine
+	// 3. Provider fallback: if all requested engines were tripped, attempt a healthy registered engine
 	queried := append([]string(nil), providersToQuery...)
 	if len(providersToQuery) == 0 && len(requested) > 0 {
 		for _, candidate := range o.registry.Names() {

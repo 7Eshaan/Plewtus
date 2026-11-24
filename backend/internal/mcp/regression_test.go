@@ -223,3 +223,14 @@ func TestRegression_BatchRequests(t *testing.T) {
 		t.Fatalf("an empty batch must be an invalid request, got %+v", single)
 	}
 }
+
+// The tool schemas advertise a 100-character minimum; smaller positive limits
+// are raised to it, while zero still selects the default.
+func TestRaiseToMinChars(t *testing.T) {
+	cases := map[int]int{-5: -5, 0: 0, 1: minMaxChars, 99: minMaxChars, 100: 100, 4000: 4000}
+	for in, want := range cases {
+		if got := raiseToMinChars(in); got != want {
+			t.Errorf("raiseToMinChars(%d) = %d, want %d", in, got, want)
+		}
+	}
+}

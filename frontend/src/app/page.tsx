@@ -18,7 +18,7 @@ export default function HomePage() {
           id="demo"
           className="relative w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] flex flex-col items-center justify-center overflow-hidden scroll-mt-14"
         >
-          {/* Grid sky with a glowing planet rim that follows the pointer */}
+          {/* Starfield sky with a glowing planet rim that follows the pointer */}
           <HorizonBackground />
 
           {/* Centered Hero Content Container */}
@@ -86,7 +86,7 @@ export default function HomePage() {
             rel="noopener noreferrer"
             className="hover:text-brand dark:hover:text-brand-light transition-colors"
           >
-            Apache-2.0 · Source on GitHub
+            MIT · Source on GitHub
           </a>
         </div>
       </footer>
