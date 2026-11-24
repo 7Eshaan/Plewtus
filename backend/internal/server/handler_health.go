@@ -14,6 +14,7 @@ func (s *Server) handleHealth() http.HandlerFunc {
 		resp := model.HealthResponse{
 			Status:        "ok",
 			Version:       s.cfg.Version,
+			Commit:        s.cfg.Commit,
 			UptimeSeconds: uptime,
 			Timestamp:     time.Now().UTC().Format(time.RFC3339),
 		}

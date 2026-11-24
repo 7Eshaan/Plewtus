@@ -94,7 +94,7 @@ export interface components {
              */
             freshness?: "day" | "week" | "month" | "year";
             /**
-             * @description Restrict search results strictly to these domains or subdomains.
+             * @description Restrict search results strictly to these domains or subdomains. At most 20 domains; each must be a host name (letters, digits, '-' and '.'). A scheme, path, port, 'www.' or '*.' prefix is ignored.
              * @example [
              *       "go.dev",
              *       "golang.org"
@@ -102,7 +102,7 @@ export interface components {
              */
             include_domains?: string[];
             /**
-             * @description Exclude any search results originating from these domains or subdomains.
+             * @description Exclude any search results originating from these domains or subdomains. At most 20 domains; each must be a host name (letters, digits, '-' and '.'). A scheme, path, port, 'www.' or '*.' prefix is ignored.
              * @example [
              *       "pinterest.com"
              *     ]
@@ -188,8 +188,8 @@ export interface components {
             /** @description Search engines that independently discovered this result. */
             engines: components["schemas"]["EngineSource"][];
             /**
-             * @description Publication date extracted from SERP or document.
-             * @example Mar 13, 2014
+             * @description Publication date from the engines or the page, as YYYY-MM-DD (relative dates such as "3 days ago" are resolved when the search runs). A date in a form that cannot be read is passed through as given.
+             * @example 2014-03-13
              */
             published_date?: string;
             content?: components["schemas"]["ExtractedContent"];
@@ -295,6 +295,11 @@ export interface components {
             status: string;
             /** @example 0.1.0 */
             version: string;
+            /**
+             * @description VCS revision the server was built from, when known (build flag, embedded git revision, or PLEWTUS_COMMIT / RENDER_GIT_COMMIT).
+             * @example 4f509bb28980
+             */
+            commit?: string;
             /**
              * Format: double
              * @example 125.4

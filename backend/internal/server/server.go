@@ -100,6 +100,7 @@ func (s *Server) Start() error {
 		slog.String("addr", s.cfg.Addr()),
 		slog.String("env", s.cfg.Env),
 		slog.String("version", s.cfg.Version),
+		slog.String("commit", s.cfg.Commit),
 		slog.Bool("cache_enabled", s.cfg.CacheEnabled),
 		slog.Bool("auth_required", s.cfg.AuthRequired),
 		slog.Int("free_rate_limit", s.cfg.FreeTierRateLimit),

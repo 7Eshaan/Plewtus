@@ -106,6 +106,7 @@ type SearchStats struct {
 type HealthResponse struct {
 	Status        string  `json:"status"`
 	Version       string  `json:"version"`
+	Commit        string  `json:"commit,omitempty"` // VCS revision of the build, when known
 	UptimeSeconds float64 `json:"uptime_seconds"`
 	Timestamp     string  `json:"timestamp"`
 }

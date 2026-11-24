@@ -28,10 +28,19 @@ type Components struct {
 // Build constructs the provider registry, extractor, cache, circuit breakers,
 // and orchestrator from configuration.
 func Build(cfg *config.Config, logger *slog.Logger) *Components {
+	for _, warning := range cfg.Warnings {
+		logger.Warn("configuration: " + warning)
+	}
 	registry := all.NewRegistry(cfg.DefaultTimeout, cfg.UserAgent, all.Options{
 		MarginaliaAPIKey: cfg.MarginaliaAPIKey,
 		BraveAPIKey:      cfg.BraveAPIKey,
 	})
+	for _, name := range cfg.DefaultProviders {
+		if _, ok := registry.Get(strings.ToLower(name)); !ok {
+			logger.Error("configuration: PLEWTUS_DEFAULT_PROVIDERS names an unknown engine; searches that use the defaults will be rejected",
+				slog.String("engine", name), slog.Any("available", registry.Names()))
+		}
+	}
 	// A single page gets less than the whole extraction stage, so one slow
 	// site cannot hold back the pages that already finished.
 	pageTimeout := cfg.ExtractTimeout

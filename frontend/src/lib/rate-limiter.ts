@@ -88,15 +88,27 @@ class InMemoryRateLimiter {
   }
 }
 
-// Global singleton instance for the route handler
+// Process-wide limiters: one for searches, one for favicon lookups. They are
+// separate so a page of result icons never uses up a visitor's searches.
 const globalLimiter = new InMemoryRateLimiter(60_000, 20);
+const faviconLimiter = new InMemoryRateLimiter(60_000, 300);
 
 export function checkRateLimit(ip: string, limit?: number): RateLimitResult {
   return globalLimiter.check(ip, limit);
 }
 
+/**
+ * Rate guard for /api/favicon, which fetches from a third party on each
+ * cache miss. A results page shows at most 50 icons and browsers cache them
+ * for a week, so the default (300 per minute per client) only stops abuse.
+ */
+export function checkFaviconRateLimit(ip: string, limit?: number): RateLimitResult {
+  return faviconLimiter.check(ip, limit);
+}
+
 export function resetRateLimits(): void {
   globalLimiter.reset();
+  faviconLimiter.reset();
 }
 
 /**

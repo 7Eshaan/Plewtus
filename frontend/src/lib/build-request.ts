@@ -7,9 +7,10 @@ import {
 } from "@/types/search";
 import { DEMO_LIMITS, type SearchRequest } from "@/lib/sanitize-request";
 
+/** Commas or spaces separate domains (a domain itself has neither). */
 function splitDomains(value: string): string[] {
   return value
-    .split(",")
+    .split(/[\s,]+/)
     .map((d) => d.trim())
     .filter(Boolean);
 }

@@ -4,20 +4,17 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"plewtus/internal/model"
 )
 
 type mergedResult struct {
-	canonicalKey  string
 	url           string
 	title         string
 	snippet       string
 	publishedDate string
 	engines       []model.EngineSource
-	bestPosition  int
-	engineCount   int
-	firstSeen     int
 	relevance     float64
 	relevant      bool
 }
@@ -150,7 +147,6 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 			existing, found := seen[c.key]
 			if !found {
 				item := &mergedResult{
-					canonicalKey:  c.key,
 					url:           c.cleanURL,
 					title:         strings.TrimSpace(raw.Title),
 					snippet:       cleanSnippet(raw.Snippet),
@@ -161,11 +157,8 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 							Position: raw.Position,
 						},
 					},
-					bestPosition: raw.Position,
-					engineCount:  1,
-					firstSeen:    len(list),
-					relevance:    c.relevance,
-					relevant:     c.relevant,
+					relevance: c.relevance,
+					relevant:  c.relevant,
 				}
 				seen[c.key] = item
 				list = append(list, item)
@@ -189,20 +182,14 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 					Name:     resp.Engine,
 					Position: raw.Position,
 				})
-				existing.engineCount++
 			}
 
-			// 2. Update best position
-			if raw.Position < existing.bestPosition {
-				existing.bestPosition = raw.Position
-			}
-
-			// 3. Merge published date if not previously available
+			// 2. Merge published date if not previously available
 			if existing.publishedDate == "" && strings.TrimSpace(raw.PublishedDate) != "" {
 				existing.publishedDate = strings.TrimSpace(raw.PublishedDate)
 			}
 
-			// 4. Merge the best title and snippet independently. A strong snippet
+			// 3. Merge the best title and snippet independently. A strong snippet
 			// must not cause a weaker title from the same provider response to
 			// replace a better title from another engine.
 			existing.title = query.selectTitle(existing.title, strings.TrimSpace(raw.Title))
@@ -213,7 +200,7 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 			}
 			existing.relevant = existing.relevant || c.relevant
 
-			// 5. Prefer secure HTTPS URL over insecure HTTP
+			// 4. Prefer secure HTTPS URL over insecure HTTP
 			if strings.HasPrefix(c.cleanURL, "https://") && strings.HasPrefix(existing.url, "http://") {
 				existing.url = c.cleanURL
 			}
@@ -248,7 +235,8 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 		})
 	}
 
-	// Build unranked SearchResult slice
+	// Build unranked SearchResult slice, with dates in one (ISO) form
+	now := time.Now()
 	unranked := make([]model.SearchResult, len(list))
 	for i, item := range list {
 		unranked[i] = model.SearchResult{
@@ -257,7 +245,7 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 			Snippet:       item.snippet,
 			Relevance:     item.relevance,
 			Engines:       item.engines,
-			PublishedDate: item.publishedDate,
+			PublishedDate: NormalizeDate(item.publishedDate, now),
 		}
 	}
 

@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"plewtus/internal/model"
+	"plewtus/internal/pipeline"
 )
 
 // ContentExtractor defines the interface for webpage content extraction.
@@ -126,7 +127,7 @@ func (e *Extractor) Extract(ctx context.Context, targetURL string, opts *model.E
 		Author:        parsed.Metadata.Author,
 		Description:   parsed.Metadata.Description,
 		ExtractedAt:   time.Now().UTC().Format(time.RFC3339),
-		PublishedDate: parsed.Metadata.PublishedDate,
+		PublishedDate: pipeline.NormalizeDate(parsed.Metadata.PublishedDate, time.Now()),
 	}
 
 	mode := opts.Mode

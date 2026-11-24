@@ -1,7 +1,7 @@
 /** Checks for the search proxy's request sanitizer and client identification. */
 
 import { sanitizeSearchRequest, DEMO_LIMITS } from "../src/lib/sanitize-request.ts";
-import { getClientIp, checkRateLimit, resetRateLimits } from "../src/lib/rate-limiter.ts";
+import { getClientIp, checkRateLimit, checkFaviconRateLimit, resetRateLimits } from "../src/lib/rate-limiter.ts";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new Error(`FAIL: ${message}`);
@@ -58,5 +58,12 @@ delete process.env.PLEWTUS_TRUST_PROXY_HEADERS;
 process.env.VERCEL = "1";
 assert(getClientIp(request({ "x-vercel-forwarded-for": "8.8.8.8" })) === "8.8.8.8", "Vercel platform header is trusted on Vercel");
 delete process.env.VERCEL;
+
+// Favicon guard: its own bucket, so icons never use up a visitor's searches.
+resetRateLimits();
+const icons = [1, 2, 3].map(() => checkFaviconRateLimit("7.7.7.7", 2).success);
+assert(icons.join() === "true,true,false", "favicon requests are rate limited");
+assert(checkRateLimit("7.7.7.7", 1).success, "favicon requests do not consume the search limit");
+resetRateLimits();
 
 console.log("Proxy checks passed.");

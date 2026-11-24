@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -14,6 +15,13 @@ const MaxResultWindow = 50
 // MaxQueryChars bounds the query length; longer text is not a search query
 // and would be forwarded verbatim to every upstream engine.
 const MaxQueryChars = 500
+
+// MaxDomainFilters bounds include_domains and exclude_domains (each). Every
+// domain becomes a site: operator in the query sent to the engines.
+const MaxDomainFilters = 20
+
+// maxDomainChars is the longest valid DNS name.
+const maxDomainChars = 253
 
 // ErrInvalidRequest marks caller errors (HTTP 400) detected after decoding,
 // such as references to unknown providers.
@@ -141,6 +149,7 @@ func cleanDomainString(d string) string {
 	d = strings.ToLower(strings.TrimSpace(d))
 	d = strings.TrimPrefix(d, "http://")
 	d = strings.TrimPrefix(d, "https://")
+	d = strings.TrimPrefix(d, "*.") // subdomains are always included
 	d = strings.TrimPrefix(d, "www.")
 	d = strings.TrimPrefix(d, ".")
 	d = strings.TrimRight(d, "/")
@@ -163,6 +172,20 @@ func (r *SearchRequest) Validate() error {
 	}
 	if r.Offset+r.Limit > MaxResultWindow {
 		return fmt.Errorf("offset + limit cannot exceed the %d-result provider window; reduce either value", MaxResultWindow)
+	}
+
+	for _, list := range []struct {
+		field   string
+		domains []string
+	}{{"include_domains", r.IncludeDomains}, {"exclude_domains", r.ExcludeDomains}} {
+		if len(list.domains) > MaxDomainFilters {
+			return fmt.Errorf("%s cannot list more than %d domains", list.field, MaxDomainFilters)
+		}
+		for _, d := range list.domains {
+			if !isDomainName(d) {
+				return fmt.Errorf("%s entry %q is not a domain name (letters, digits, '-' and '.', at most %d characters)", list.field, d, maxDomainChars)
+			}
+		}
 	}
 
 	if r.Freshness != "" {
@@ -196,6 +219,21 @@ func (r *SearchRequest) Validate() error {
 	}
 
 	return nil
+}
+
+// isDomainName accepts host names made of letters (any script), digits, '-'
+// and '.'. Anything else (spaces, quotes, parentheses) would change the
+// meaning of the site: operators built from it.
+func isDomainName(d string) bool {
+	if d == "" || len(d) > maxDomainChars {
+		return false
+	}
+	for _, r := range d {
+		if r != '-' && r != '.' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func isAlphaString(s string) bool {

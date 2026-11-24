@@ -116,7 +116,7 @@ Searches DuckDuckGo, Bing, and Yahoo, removes duplicate and off-topic results, a
 - `offset` (`integer`, optional): Pagination offset (default 0); `offset + limit` cannot exceed 50. Pages of one query do not overlap or skip results while it is cached.
 - `providers` (`array<string>`, optional): Any of `duckduckgo`, `bing`, `yahoo`, `marginalia`, `brave`, `qwant` (default: `PLEWTUS_DEFAULT_PROVIDERS`, i.e. the first three). Marginalia is an independent small-web index queried through its official API. Brave uses its official API when `PLEWTUS_BRAVE_API_KEY` is set (its HTML page usually serves a captcha otherwise). Qwant only serves some countries.
 - `freshness` (`string`, optional): Recency filter (`"day"`, `"week"`, `"month"`, `"year"`).
-- `include_domains` / `exclude_domains` (`array<string>`, optional): Domain allow/deny lists (subdomains included).
+- `include_domains` / `exclude_domains` (`array<string>`, optional): Domain allow/deny lists (subdomains included; at most 20 each, host names only).
 - `country` / `language` (`string`, optional): 2-letter ISO codes (e.g. `"us"`, `"en"`).
 - `extract_mode` (`string`, optional): Extract page content as `"markdown"`, `"highlights"`, `"text"`, or `"metadata"`.
 - `max_pages` (`integer`, optional): Number of top results to extract (default 3, max 10).

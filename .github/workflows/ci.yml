@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      # Live tests against real search engines are opt-in (PLEWTUS_LIVE_TESTS=1)
+      # and are skipped here.
+      - name: go test
+        run: go test -race ./...
+      - name: Build binaries
+        run: go build ./cmd/plewtus ./cmd/plewtus-mcp
+
+  openapi:
+    name: OpenAPI YAML and JSON match
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare backend/docs/openapi.yaml with openapi.json
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 - <<'EOF'
+          import json, sys, yaml
+          with open("backend/docs/openapi.yaml") as f:
+              spec_yaml = yaml.safe_load(f)
+          with open("backend/docs/openapi.json") as f:
+              spec_json = json.load(f)
+          if spec_yaml != spec_json:
+              sys.exit("backend/docs/openapi.json does not match openapi.yaml; update both.")
+          print("openapi.yaml and openapi.json match")
+          EOF
+
+  frontend:
+    name: Frontend (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Proxy checks
+        run: npm run verify
+      - name: API types match the OpenAPI spec
+        run: |
+          npm run generate:types
+          git diff --exit-code -- src/types/api.ts || {
+            echo "src/types/api.ts is out of date: run 'npm run generate:types' in frontend/"; exit 1; }
+      - name: Build
+        run: npm run build

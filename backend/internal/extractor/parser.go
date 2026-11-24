@@ -509,15 +509,6 @@ func isDescendant(n, ancestor *html.Node) bool {
 	return false
 }
 
-func hasAttr(n *html.Node, key string) bool {
-	for _, a := range n.Attr {
-		if strings.EqualFold(a.Key, key) {
-			return true
-		}
-	}
-	return false
-}
-
 // extractNodeText recursively extracts raw text from a node.
 func extractNodeText(n *html.Node) string {
 	var buf strings.Builder

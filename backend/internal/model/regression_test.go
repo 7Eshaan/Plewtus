@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -42,6 +43,34 @@ func TestRegression_CloneKeepsEmptyArrays(t *testing.T) {
 	for _, field := range []string{`"results":[]`, `"queried":[]`, `"successful":[]`, `"failed":[]`} {
 		if !strings.Contains(string(data), field) {
 			t.Errorf("expected %s in %s", field, data)
+		}
+	}
+}
+
+// Domain filters are bounded and must be plain host names, since each one
+// becomes a site: operator in the query sent to every engine.
+func TestRegression_DomainFiltersAreValidated(t *testing.T) {
+	valid := func(inc, exc []string) error {
+		req := &SearchRequest{Query: "go", IncludeDomains: inc, ExcludeDomains: exc}
+		req.Normalize(10, 50, []string{"bing"})
+		return req.Validate()
+	}
+	if err := valid([]string{"https://www.go.dev/doc", "*.example.com", "bücher.de", "my-site.co.uk:8080"}, nil); err != nil {
+		t.Fatalf("ordinary domains should be accepted: %v", err)
+	}
+	many := make([]string, MaxDomainFilters+1)
+	for i := range many {
+		many[i] = fmt.Sprintf("d%d.com", i)
+	}
+	if err := valid(many, nil); err == nil {
+		t.Fatal("more than MaxDomainFilters include domains must be rejected")
+	}
+	if err := valid(nil, many); err == nil {
+		t.Fatal("more than MaxDomainFilters exclude domains must be rejected")
+	}
+	for _, bad := range []string{"example.com OR site:evil.com", `ex"ample.com`, "a(b).com", strings.Repeat("a", 254) + ".com"} {
+		if err := valid([]string{bad}, nil); err == nil {
+			t.Errorf("domain %q should be rejected", bad)
 		}
 	}
 }

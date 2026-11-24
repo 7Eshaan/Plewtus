@@ -4,6 +4,10 @@ Plewtus is configured via environment variables. Sane defaults are provided so t
 
 For local development, Plewtus also reads an optional `.env` file from the working directory (or the path in `PLEWTUS_ENV_FILE`). Values from the real environment always take precedence, and container images exclude `.env` files.
 
+**Startup checks.** A value that cannot be used (not a number, below its minimum, an invalid port, a boolean other than `true/false/1/0/yes/no/on/off`, an unknown log level, a malformed `PLEWTUS_TRUSTED_PROXIES` entry, an unknown key tier) falls back to its default and is logged as a warning that names the variable. API keys copied from this repository's examples (such as `pro_live_agent123` or `free_demo_key`) are logged as a `SECURITY` warning, since anyone can use them. An unknown engine in `PLEWTUS_DEFAULT_PROVIDERS` is logged as an error, because every search that uses the defaults would be rejected.
+
+**Build metadata.** `/health` reports `version` and, when known, `commit`. Set them at build time with `-ldflags "-X plewtus/internal/config.Version=1.2.3 -X plewtus/internal/config.commit=<sha>"` (the Dockerfile takes `VERSION` and `COMMIT` build args, and docker compose passes `PLEWTUS_COMMIT`). Otherwise the git revision embedded by `go build` is used, then `PLEWTUS_COMMIT` or Render's `RENDER_GIT_COMMIT` from the environment.
+
 ---
 
 ## Environment Variables

@@ -5,7 +5,13 @@ RUN apk add --no-cache ca-certificates
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/plewtus ./cmd/plewtus
+# Optional build metadata reported by /health (.git is not in the build context):
+#   docker build --build-arg VERSION=1.2.3 --build-arg COMMIT=$(git rev-parse --short=12 HEAD) .
+ARG VERSION=""
+ARG COMMIT=""
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags="-s -w ${VERSION:+-X plewtus/internal/config.Version=$VERSION} ${COMMIT:+-X plewtus/internal/config.commit=$COMMIT}" \
+    -o /out/plewtus ./cmd/plewtus
 
 FROM alpine:3.22
 # poppler-utils provides pdftotext, used to extract text from PDF results.

@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { checkFaviconRateLimit, getClientIp } from "@/lib/rate-limiter";
 
 /**
  * Serves site icons for result cards from our own origin. Without this the
@@ -14,6 +15,16 @@ function notFound(): Response {
 }
 
 export async function GET(request: Request): Promise<Response> {
+  const limit = parseInt(process.env.PLEWTUS_FAVICON_RATE_LIMIT_PER_MINUTE || "300", 10);
+  const rateLimit = checkFaviconRateLimit(getClientIp(request), limit);
+  if (!rateLimit.success) {
+    // The result card falls back to a generic icon; nothing here is cached.
+    return new Response(null, {
+      status: 429,
+      headers: { "Retry-After": String(rateLimit.reset), "Cache-Control": "no-store" },
+    });
+  }
+
   const domain = (new URL(request.url).searchParams.get("domain") ?? "").trim().toLowerCase();
   // Only plain public hostnames are forwarded: no IPs, ports, paths, or credentials.
   if (!HOSTNAME.test(domain) || isIP(domain) !== 0) return notFound();

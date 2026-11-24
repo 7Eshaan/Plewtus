@@ -80,8 +80,8 @@ Authorization: Bearer <token>   # Optional (Free tier used if omitted)
 | `offset` | `integer` | No | `0` | Offset for slicing results. `offset + limit` must be at most `50`. When `limit` is omitted it shrinks to fit the window. |
 | `providers` | `[]string` | No | `["duckduckgo", "bing", "yahoo"]` | Search engines to query: `duckduckgo`, `bing`, `yahoo`, `marginalia`, `brave`, `qwant` (all three opt-in). Unknown names are rejected with `400`. Marginalia supports only the `year` freshness window and Qwant has no freshness filter; other windows report them as unsupported for that search. Brave usually needs `PLEWTUS_BRAVE_API_KEY` (its HTML page answers non-browser clients with a captcha). Qwant only serves some countries and is behind bot protection; when unavailable it appears in `providers.failed` with the reason. |
 | `freshness` | `string` | No | `""` | Discovery recency: `"day"`, `"week"`, `"month"`, or `"year"`. |
-| `include_domains` | `[]string` | No | `[]` | Only return results matching these hostnames/subdomains. |
-| `exclude_domains` | `[]string` | No | `[]` | Exclude any results matching these hostnames/subdomains. |
+| `include_domains` | `[]string` | No | `[]` | Only return results matching these hostnames/subdomains. At most 20; each must be a host name (letters, digits, `-`, `.`). A scheme, path, port, `www.` or `*.` prefix is ignored. |
+| `exclude_domains` | `[]string` | No | `[]` | Exclude any results matching these hostnames/subdomains. Same rules as `include_domains`. |
 | `country` | `string` | No | `""` | 2-letter ISO 3166-1 alpha-2 country code (e.g. `"us"`, `"gb"`). |
 | `language` | `string` | No | `""` | 2-letter ISO 639-1 language code (e.g. `"en"`, `"de"`). |
 | `extract` | `object` | No | `null` | Optional webpage content extraction configuration. |
@@ -125,7 +125,7 @@ Request bodies are limited to 1 MiB and must contain exactly one JSON value. Sea
         { "name": "bing", "position": 1 },
         { "name": "yahoo", "position": 1 }
       ],
-      "published_date": "Mar 13, 2014",
+      "published_date": "2014-03-13",
       "content": {
         "markdown": "# Go Concurrency Patterns: Pipelines and cancellation\n\n...",
         "extracted_at": "2026-11-03T10:00:00Z"
@@ -160,6 +160,7 @@ Notes on optional fields:
 - `metadata.filters` appears only when a filter or an offset was applied, and echoes it.
 - `metadata.cached` appears (as `true`) only when the response came from the cache.
 - `metadata.total_results` is the number of results in this response; `stats.deduped_count` is the number available. `raw_count` equals `deduped_count` plus the five rejection and merge counters, except after a deeper page extended an earlier list (see *Stable pagination*): the stats then describe the deeper fetch, and `deduped_count` also counts earlier results it did not return again.
+- `published_date` is `YYYY-MM-DD` whichever engine or page supplied it ("Mar 13, 2014", "19 August 2026" and ISO timestamps are converted; "3 days ago" is resolved when the search runs). A date that cannot be read is passed through unchanged.
 - `content_error` appears on a result when extraction was attempted for it but produced no content, with the reason (blocked address, non-HTML page, timeout).
 
 ---
@@ -174,6 +175,7 @@ Health check probes for monitoring systems, load balancers, and orchestrators.
 {
   "status": "ok",
   "version": "0.1.0",
+  "commit": "4f509bb28980",
   "uptime_seconds": 345.12,
   "timestamp": "2026-11-03T10:00:00Z"
 }
@@ -196,7 +198,7 @@ Standardized JSON error responses are returned on failures:
 | HTTP Status | Error Token | Cause |
 |---|---|---|
 | `400 Bad Request` | `invalid_json` | Malformed JSON in request payload |
-| `400 Bad Request` | `validation_error` | Missing or overlong query, invalid ISO codes, unknown provider, or invalid extract mode |
+| `400 Bad Request` | `validation_error` | Missing or overlong query, invalid ISO codes, unknown provider, invalid extract mode, or more than 20 / malformed domain filters |
 | `401 Unauthorized` | `unauthorized` | Missing API key when `PLEWTUS_AUTH_REQUIRED=true`, or invalid key |
 | `404 Not Found` | `not_found` | Unknown endpoint |
 | `405 Method Not Allowed` | `method_not_allowed` | Wrong HTTP method for the endpoint |

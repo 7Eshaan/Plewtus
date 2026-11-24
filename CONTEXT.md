@@ -246,5 +246,13 @@ Measured live before and after (8 queries, top 10 pages each, markdown mode): pa
 - **Write timeout (`server`):** `writeTimeout(cfg)` = provider timeout + extraction timeout + 1 s + 10 s margin, at least 30 s.
 - **Playground session restore (`frontend/src/components/playground.tsx`):** the saved search stores its controls (engines, content mode, options) and restores them with the results, so the "Options changed" notice no longer appears on reload. Stored controls are validated; entries saved before this change are ignored.
 
+## Hardening (2026-11-24)
+- **Startup checks (`config/validate.go`, `app.Build`):** unusable settings (not a number, below minimum, invalid port/boolean/log level, malformed trusted proxy, unknown key tier) fall back to defaults and are collected in `Config.Warnings`, which `app.Build` logs. Example API keys from this repo produce a `SECURITY` warning (a warning, not a refusal, so an existing deploy keeps running). Unknown engines in `PLEWTUS_DEFAULT_PROVIDERS` are logged as errors.
+- **Domain filters (`model/request.go`):** at most 20 include and 20 exclude domains, each a host name (letters, digits, `-`, `.`, at most 253 chars); a `*.` prefix is stripped. Anything else is a 400, since each domain becomes a `site:` operator sent to every engine. The playground splits domains on commas or spaces.
+- **Build metadata:** `config.Version` and `config.commit` can be set with `-ldflags -X`; `/health` reports `commit` (ldflags, then Go's embedded VCS revision, then `PLEWTUS_COMMIT` / `RENDER_GIT_COMMIT`). The Dockerfile takes `VERSION`/`COMMIT` build args; compose passes `PLEWTUS_COMMIT`.
+- **Favicon route:** its own per-client limiter (`PLEWTUS_FAVICON_RATE_LIMIT_PER_MINUTE`, default 300), separate from the search limiter; over the limit it answers 429 (the card shows a generic icon).
+- **Dates (`pipeline/date.go`):** `published_date` (and extracted `PublishedDate`) is normalized to `YYYY-MM-DD`: month-name dates, ISO/RFC 1123 timestamps (keeping the source's calendar day), and relative dates ("3 days ago", "yesterday") resolved at search time. Unreadable dates pass through unchanged. Providers still return raw dates; normalization happens in the pipeline and extractor.
+- **CI (`.github/workflows/ci.yml`):** gofmt, `go vet`, `go test -race`, binary builds; OpenAPI YAML/JSON equality (PyYAML); frontend lint, `tsc`, `npm run verify`, generated types in sync with the spec, and `npm run build`. Live engine tests stay opt-in.
+
 ## Next Step
 - Optional: charset decoding for non-UTF-8 pages (needs `golang.org/x/text`).

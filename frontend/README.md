@@ -23,7 +23,7 @@ npm run generate:types   # regenerate src/types/api.ts from backend/docs/openapi
 npm run verify           # checks for the search proxy
 ```
 
-The frontend IP guard is in-memory per Node process. Production deployments that need a global quota should enforce it at a shared gateway/store. How the route identifies a visitor:
+The frontend IP guards are in-memory per Node process: `PLEWTUS_RATE_LIMIT_PER_MINUTE` (default 20) for `/api/search`, and a separate `PLEWTUS_FAVICON_RATE_LIMIT_PER_MINUTE` (default 300) for `/api/favicon`, so result icons never use up a visitor's searches. Production deployments that need a global quota should enforce it at a shared gateway/store. How the route identifies a visitor:
 
 - On Vercel, it uses the platform's `x-vercel-forwarded-for` header.
 - With `PLEWTUS_TRUST_PROXY_HEADERS=true` (only behind a reverse proxy you control), it uses `X-Real-IP` if that is a valid address, otherwise the last valid address in `X-Forwarded-For`.

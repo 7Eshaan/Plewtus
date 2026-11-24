@@ -87,8 +87,9 @@ func TestE2E_BraveResultsFlowThroughPipeline(t *testing.T) {
 		if r.Title == "" || r.URL == "" {
 			t.Errorf("incomplete result: %+v", r)
 		}
-		if r.URL == "https://go.dev/blog/go1.27" && r.PublishedDate != "19 August 2026" {
-			t.Errorf("published date lost: %+v", r)
+		// Brave shows "19 August 2026"; the API reports dates in ISO form.
+		if r.URL == "https://go.dev/blog/go1.27" && r.PublishedDate != "2026-08-19" {
+			t.Errorf("published date lost or not normalized: %+v", r)
 		}
 	}
 }
