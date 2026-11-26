@@ -65,6 +65,8 @@ type candidate struct {
 	key       string
 	relevance float64
 	relevant  bool
+	// Title and snippet tokens, computed once for pool weights and scoring.
+	titleTokens, snippetTokens map[string]struct{}
 }
 
 // DeduplicateDetailed canonicalizes and deduplicates raw provider responses,
@@ -95,8 +97,6 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 	meanCoverage := make([]float64, len(sortedResponses))
 	healthyResponses := 0
 	for i, resp := range sortedResponses {
-		relevantCount := 0
-		coverageSum := 0.0
 		for _, raw := range resp.Results {
 			if strings.TrimSpace(raw.URL) == "" {
 				stats.InvalidURL++
@@ -111,12 +111,44 @@ func DeduplicateDetailed(responses []*model.ProviderResponse, opts DeduplicateOp
 				stats.DomainRejected++
 				continue
 			}
-			relevance, relevant, coverage := query.match(raw.Title, raw.Snippet)
+			perResponse[i] = append(perResponse[i], candidate{
+				raw: raw, cleanURL: cleanURL, key: key,
+				titleTokens: tokenSet(raw.Title), snippetTokens: tokenSet(raw.Snippet),
+			})
+		}
+	}
+
+	// Weight the query terms by how many candidates use them, across engines,
+	// so the words a question is about count more than incidental ones (see
+	// withPoolWeights). Only with two or more engines: one engine's results
+	// cannot vouch for themselves.
+	contributing := 0
+	for _, cands := range perResponse {
+		if len(cands) > 0 {
+			contributing++
+		}
+	}
+	if contributing >= 2 {
+		var pool [][]map[string]struct{}
+		for _, cands := range perResponse {
+			for _, c := range cands {
+				pool = append(pool, []map[string]struct{}{c.titleTokens, c.snippetTokens})
+			}
+		}
+		query = query.withPoolWeightsTokens(pool)
+	}
+
+	for i := range sortedResponses {
+		relevantCount := 0
+		coverageSum := 0.0
+		for j := range perResponse[i] {
+			c := &perResponse[i][j]
+			relevance, relevant, coverage := query.matchTokens(c.raw.Title, c.raw.Snippet, c.titleTokens, c.snippetTokens)
+			c.relevance, c.relevant = relevance, relevant
 			if relevant {
 				relevantCount++
 			}
 			coverageSum += coverage
-			perResponse[i] = append(perResponse[i], candidate{raw: raw, cleanURL: cleanURL, key: key, relevance: relevance, relevant: relevant})
 		}
 		n := len(perResponse[i])
 		if n > 0 {
