@@ -27,64 +27,6 @@ func init() {
 type queryProfile struct {
 	terms  map[string]struct{}
 	phrase string
-	// weights, when set, holds each term's importance from the candidate pool
-	// (see withPoolWeights). Nil: every term counts the same.
-	weights map[string]float64
-}
-
-const (
-	// poolWeightFloor is the least a query term weighs, however few candidates
-	// use it: a word no engine returned still counts for something.
-	poolWeightFloor = 0.5
-	// weightedCoverageMin is the share of the query's total term weight a
-	// result must cover to be relevant through pool weighting.
-	weightedCoverageMin = 0.6
-)
-
-// withPoolWeights returns a copy of the profile whose terms are weighted by
-// how many candidate results (titles and snippets, across all engines) use
-// them: weight = floor + (1 - floor) x share of candidates containing the term.
-//
-// A natural-language question carries words the answer pages need not repeat
-// ("who *wrote* the hobbit": pages about The Hobbit rarely say "wrote"). The
-// engines' results show which words the question is about: nearly all of them
-// mention "hobbit", few mention "wrote". With weights, a result covering the
-// heavily used terms is relevant even when it misses an incidental one, while
-// a decoy page that matches only a word the other engines' results do not use
-// (a dictionary entry for "meaning") still is not.
-func (q queryProfile) withPoolWeights(texts []string) queryProfile {
-	sets := make([][]map[string]struct{}, len(texts))
-	for i, text := range texts {
-		sets[i] = []map[string]struct{}{tokenSet(text)}
-	}
-	return q.withPoolWeightsTokens(sets)
-}
-
-// withPoolWeightsTokens is withPoolWeights for candidates already tokenized:
-// each candidate is a list of token sets (title, snippet), and a term counts
-// once per candidate when any of its sets holds it.
-func (q queryProfile) withPoolWeightsTokens(candidates [][]map[string]struct{}) queryProfile {
-	if len(q.terms) < 2 || len(candidates) == 0 {
-		return q
-	}
-	counts := make(map[string]int, len(q.terms))
-	for _, sets := range candidates {
-		for term := range q.terms {
-			for _, tokens := range sets {
-				if _, ok := tokens[term]; ok {
-					counts[term]++
-					break
-				}
-			}
-		}
-	}
-	weights := make(map[string]float64, len(q.terms))
-	for term := range q.terms {
-		share := float64(counts[term]) / float64(len(candidates))
-		weights[term] = poolWeightFloor + (1-poolWeightFloor)*share
-	}
-	q.weights = weights
-	return q
 }
 
 func newQueryProfile(query string) queryProfile {
@@ -161,32 +103,25 @@ func (q queryProfile) relevance(title, snippet string) (score float64, relevant 
 // match scores a result and also reports coverage: the fraction of query
 // terms found anywhere in the title or snippet.
 func (q queryProfile) match(title, snippet string) (score float64, relevant bool, coverage float64) {
-	return q.matchTokens(title, snippet, tokenSet(title), tokenSet(snippet))
-}
-
-// matchTokens is match with the title and snippet already tokenized, so the
-// pipeline can tokenize each candidate once for both pool weights and scoring.
-func (q queryProfile) matchTokens(title, snippet string, titleTokens, snippetTokens map[string]struct{}) (score float64, relevant bool, coverage float64) {
 	queryTerms := q.terms
 	if len(queryTerms) == 0 {
 		return 1, true, 1
 	}
 
+	titleTokens := tokenSet(title)
+	snippetTokens := tokenSet(snippet)
 	matched := 0
 	titleMatched := 0
 	snippetMatched := 0
-	weightMatched, weightTotal := 0.0, 0.0
 	missingCompoundIdentifier := false
 	for term := range queryTerms {
 		_, inTitle := titleTokens[term]
 		_, inSnippet := snippetTokens[term]
-		weightTotal += q.weights[term]
 		if inSnippet {
 			snippetMatched++
 		}
 		if inTitle || inSnippet {
 			matched++
-			weightMatched += q.weights[term]
 			if inTitle {
 				titleMatched++
 			}
@@ -214,10 +149,7 @@ func (q queryProfile) matchTokens(title, snippet string, titleTokens, snippetTok
 			minimumCoverage = 2
 		}
 	}
-	// With pool weights, covering most of the query's weight also counts: the
-	// words the engines' results are about, not every word of the question.
-	weighted := weightTotal > 0 && weightMatched/weightTotal >= weightedCoverageMin
-	return score, !missingCompoundIdentifier && (phraseMatch || matched >= minimumCoverage || weighted), coverage
+	return score, !missingCompoundIdentifier && (phraseMatch || matched >= minimumCoverage), coverage
 }
 
 func (q queryProfile) containsPhrase(text string) bool {
