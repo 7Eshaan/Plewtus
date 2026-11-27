@@ -20,6 +20,7 @@ Open [http://localhost:3000](http://localhost:3000). Start the Go server from `b
 npm run lint
 npm run build
 npm run generate:types   # regenerate src/types/api.ts from backend/docs/openapi.yaml
+npm run generate:theme   # regenerate src/app/m3-theme.css (Material 3 colors from the #8700ff seed)
 npm run verify           # checks for the search proxy
 ```
 

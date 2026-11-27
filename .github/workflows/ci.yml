@@ -84,5 +84,10 @@ jobs:
           npm run generate:types
           git diff --exit-code -- src/types/api.ts || {
             echo "src/types/api.ts is out of date: run 'npm run generate:types' in frontend/"; exit 1; }
+      - name: Material 3 theme matches its generator
+        run: |
+          npm run generate:theme
+          git diff --exit-code -- src/app/m3-theme.css || {
+            echo "src/app/m3-theme.css is out of date: run 'npm run generate:theme' in frontend/"; exit 1; }
       - name: Build
         run: npm run build

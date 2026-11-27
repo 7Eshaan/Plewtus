@@ -1,11 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Roboto_Flex, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SnackbarProvider } from "@/components/ui/snackbar";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+// Material 3's variable typeface. The optical-size axis lets large display
+// text and small labels each use the cut drawn for their size.
+const robotoFlex = Roboto_Flex({
+  variable: "--font-roboto-flex",
   subsets: ["latin"],
+  axes: ["opsz"],
   display: "swap",
 });
 
@@ -37,9 +41,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // M3 surface colors (see m3-theme.css).
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+    { media: "(prefers-color-scheme: light)", color: "#fff7ff" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
   ],
 };
 
@@ -49,16 +54,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="min-h-screen bg-[var(--background)] text-[var(--foreground)] antialiased flex flex-col">
+    <html lang="en" suppressHydrationWarning className={`${robotoFlex.variable} ${jetbrainsMono.variable}`}>
+      <body className="flex min-h-screen flex-col bg-surface text-on-surface antialiased">
         <a
           href="#demo"
-          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-3 focus:py-2 focus:rounded-md focus:bg-brand focus:text-white focus:text-sm"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-corner-full focus:bg-primary-container focus:px-4 focus:py-2 focus:text-label-lg focus:text-on-primary-container"
         >
           Skip to search
         </a>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
-          {children}
+          <SnackbarProvider>{children}</SnackbarProvider>
         </ThemeProvider>
       </body>
     </html>

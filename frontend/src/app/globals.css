@@ -1,31 +1,199 @@
 @import "tailwindcss";
+/* Material 3 color scheme and spring curves, generated from the brand seed
+   (npm run generate:theme). */
+@import "./m3-theme.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Brand palette exposed as Tailwind utilities (bg-brand, text-brand-light, ...) */
+/* ------------------------------------------------------------------------
+ * Material 3 design tokens (static part; colors live in m3-theme.css).
+ * Values follow the M3 / M3 Expressive token sets.
+ * ---------------------------------------------------------------------- */
 @theme {
-  --color-brand: #8700ff;
-  --color-brand-hover: #9924ff;
-  --color-brand-light: #a84dff;
-  --color-surface-dark: #09090b;
-  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: var(--font-roboto-flex), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale: text-display-lg ... text-label-sm set size, line height,
+     tracking and weight together. For the M3 Expressive "emphasized" styles,
+     add one weight step: font-medium on Display/Headline/Title-lg/Body,
+     font-bold on Title-md/sm and Label. */
+  --text-display-lg: 3.5625rem;
+  --text-display-lg--line-height: 4rem;
+  --text-display-lg--letter-spacing: -0.015625rem;
+  --text-display-lg--font-weight: 400;
+  --text-display-md: 2.8125rem;
+  --text-display-md--line-height: 3.25rem;
+  --text-display-md--letter-spacing: 0;
+  --text-display-md--font-weight: 400;
+  --text-display-sm: 2.25rem;
+  --text-display-sm--line-height: 2.75rem;
+  --text-display-sm--letter-spacing: 0;
+  --text-display-sm--font-weight: 400;
+
+  --text-headline-lg: 2rem;
+  --text-headline-lg--line-height: 2.5rem;
+  --text-headline-lg--letter-spacing: 0;
+  --text-headline-lg--font-weight: 400;
+  --text-headline-md: 1.75rem;
+  --text-headline-md--line-height: 2.25rem;
+  --text-headline-md--letter-spacing: 0;
+  --text-headline-md--font-weight: 400;
+  --text-headline-sm: 1.5rem;
+  --text-headline-sm--line-height: 2rem;
+  --text-headline-sm--letter-spacing: 0;
+  --text-headline-sm--font-weight: 400;
+
+  --text-title-lg: 1.375rem;
+  --text-title-lg--line-height: 1.75rem;
+  --text-title-lg--letter-spacing: 0;
+  --text-title-lg--font-weight: 400;
+  --text-title-md: 1rem;
+  --text-title-md--line-height: 1.5rem;
+  --text-title-md--letter-spacing: 0.009375rem;
+  --text-title-md--font-weight: 500;
+  --text-title-sm: 0.875rem;
+  --text-title-sm--line-height: 1.25rem;
+  --text-title-sm--letter-spacing: 0.00625rem;
+  --text-title-sm--font-weight: 500;
+
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.5rem;
+  --text-body-lg--letter-spacing: 0.03125rem;
+  --text-body-lg--font-weight: 400;
+  --text-body-md: 0.875rem;
+  --text-body-md--line-height: 1.25rem;
+  --text-body-md--letter-spacing: 0.015625rem;
+  --text-body-md--font-weight: 400;
+  --text-body-sm: 0.75rem;
+  --text-body-sm--line-height: 1rem;
+  --text-body-sm--letter-spacing: 0.025rem;
+  --text-body-sm--font-weight: 400;
+
+  --text-label-lg: 0.875rem;
+  --text-label-lg--line-height: 1.25rem;
+  --text-label-lg--letter-spacing: 0.00625rem;
+  --text-label-lg--font-weight: 500;
+  --text-label-md: 0.75rem;
+  --text-label-md--line-height: 1rem;
+  --text-label-md--letter-spacing: 0.03125rem;
+  --text-label-md--font-weight: 500;
+  --text-label-sm: 0.6875rem;
+  --text-label-sm--line-height: 1rem;
+  --text-label-sm--letter-spacing: 0.03125rem;
+  --text-label-sm--font-weight: 500;
+
+  /* Shape (corner radius): rounded-corner-xs ... rounded-corner-full. */
+  --radius-corner-xs: 0.25rem; /* 4dp: snackbars, text fields */
+  --radius-corner-sm: 0.5rem; /* 8dp: chips */
+  --radius-corner-md: 0.75rem; /* 12dp: cards */
+  --radius-corner-lg: 1rem; /* 16dp: FABs, drawers */
+  --radius-corner-lg-increased: 1.25rem; /* 20dp */
+  --radius-corner-xl: 1.75rem; /* 28dp: large containers, dialogs */
+  --radius-corner-xl-increased: 2rem; /* 32dp */
+  --radius-corner-2xl: 3rem; /* 48dp: M3 Expressive extra-extra-large */
+  --radius-corner-full: calc(infinity * 1px); /* buttons, search bar */
+
+  /* Elevation shadows (levels 1-5 = 1, 3, 6, 8, 12dp): shadow-elevation-1 ...
+     In M3, depth comes mainly from the surface-container tones; shadows are
+     for things floating above content (menus, snackbars, FABs). */
+  --shadow-elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+  --shadow-elevation-2: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+  --shadow-elevation-3: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 4px 8px 3px rgb(0 0 0 / 0.15);
+  --shadow-elevation-4: 0 2px 3px 0 rgb(0 0 0 / 0.3), 0 6px 10px 4px rgb(0 0 0 / 0.15);
+  --shadow-elevation-5: 0 4px 4px 0 rgb(0 0 0 / 0.3), 0 8px 12px 6px rgb(0 0 0 / 0.15);
+
+  /* Classic M3 easing (springs are in m3-theme.css): ease-emphasized, ... */
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-standard-decelerate: cubic-bezier(0, 0, 0, 1);
+  --ease-standard-accelerate: cubic-bezier(0.3, 0, 1, 1);
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #09090b;
+  /* M3 duration tokens, for hand-written CSS (utilities: duration-150, ...). */
+  --md-duration-short1: 50ms;
+  --md-duration-short2: 100ms;
+  --md-duration-short3: 150ms;
+  --md-duration-short4: 200ms;
+  --md-duration-medium1: 250ms;
+  --md-duration-medium2: 300ms;
+  --md-duration-medium3: 350ms;
+  --md-duration-medium4: 400ms;
+  --md-duration-long1: 450ms;
+  --md-duration-long2: 500ms;
+  --md-duration-long3: 550ms;
+  --md-duration-long4: 600ms;
+  --md-duration-extra-long1: 700ms;
+  --md-duration-extra-long2: 800ms;
+  --md-duration-extra-long3: 900ms;
+  --md-duration-extra-long4: 1000ms;
+
+  /* State layer opacities. */
+  --md-state-hover: 0.08;
+  --md-state-focus: 0.1;
+  --md-state-pressed: 0.1;
+  --md-state-dragged: 0.16;
+}
+
+/* M3 state layer: a content-colored overlay that shows hover, focus and press.
+   It sits above the element's background and below its content, and takes
+   the element's corner radius. Disabled elements show none. */
+@utility state-layer {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background-color: currentColor;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--md-duration-short3) var(--ease-standard);
+  }
+
+  @media (hover: hover) {
+    &:hover::before {
+      opacity: var(--md-state-hover);
+    }
+  }
+
+  &:focus-visible::before {
+    opacity: var(--md-state-focus);
+  }
+
+  &:active::before {
+    opacity: var(--md-state-pressed);
+  }
+
+  &:disabled::before,
+  &[aria-disabled="true"]::before {
+    opacity: 0;
+  }
+}
+
+/* M3 focus indicator: a 3px ring in the secondary color, 2px outside the element. */
+@utility focus-ring {
+  &:focus-visible {
+    outline: 3px solid var(--color-secondary);
+    outline-offset: 2px;
+  }
+}
+
+:root {
   color-scheme: light;
 }
 
 .dark {
-  --background: #09090b;
-  --foreground: #fafafa;
   color-scheme: dark;
 }
 
 ::selection {
-  background-color: rgba(135, 0, 255, 0.25);
+  background-color: color-mix(in srgb, var(--md-sys-color-primary-container) 35%, transparent);
   color: inherit;
 }
 
@@ -35,11 +203,12 @@ html {
 }
 
 body {
-  font-feature-settings: "cv11", "ss01", "ss03";
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
   font-family: var(--font-sans);
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition:
+    background-color var(--md-duration-short4) var(--ease-standard),
+    color var(--md-duration-short4) var(--ease-standard);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -68,19 +237,23 @@ body {
   --hz-shift-y: 0px;
   --hz-horizon: clamp(110px, 21vh, 230px);
 
-  /* light theme */
-  /* Space follows the neutral site theme; the planet keeps the purple accent. */
-  --hz-sky: #ffffff;
-  --hz-star-colors: 9, 9, 11 | 39, 39, 42 | 82, 82, 91;
+  /* Colors come from the M3 scheme, so the hero follows the theme (and the
+     high-contrast scheme). The sky is the lowest surface, the planet the page
+     surface, so the hero flows into the sections below; the rim is lit by the
+     brand purple (primary-container) with a magenta (tertiary) halo.
+     Star colors are "r, g, b" lists for the canvas, matching M3 roles:
+     light = on-surface, on-surface-variant, outline, primary. */
+  --hz-sky: var(--md-sys-color-surface-container-low);
+  --hz-star-colors: 31, 25, 37 | 76, 67, 86 | 125, 115, 136 | 104, 0, 198;
   --hz-stars-opacity: 0.4;
-  --hz-planet: #ffffff;
-  --hz-planet-lit: rgba(135, 0, 255, 0.07);
-  --hz-rim-hot: #8700ff;
-  --hz-rim: #a84dff;
-  --hz-rim-base: rgba(135, 0, 255, 0.28);
-  --hz-glow: rgba(135, 0, 255, 0.3);
-  --hz-halo: rgba(135, 0, 255, 0.1);
-  --hz-corner: rgba(135, 0, 255, 0.16);
+  --hz-planet: var(--md-sys-color-surface);
+  --hz-planet-lit: color-mix(in srgb, var(--md-sys-color-primary-container) 7%, transparent);
+  --hz-rim-hot: var(--md-sys-color-primary-container);
+  --hz-rim: var(--md-sys-color-secondary-container);
+  --hz-rim-base: color-mix(in srgb, var(--md-sys-color-primary-container) 28%, transparent);
+  --hz-glow: color-mix(in srgb, var(--md-sys-color-primary-container) 30%, transparent);
+  --hz-halo: color-mix(in srgb, var(--md-sys-color-tertiary-container) 10%, transparent);
+  --hz-corner: color-mix(in srgb, var(--md-sys-color-primary-container) 16%, transparent);
 
   position: absolute;
   inset: 0;
@@ -89,18 +262,20 @@ body {
   z-index: 0;
 }
 
+/* Dark: black space and a black planet (the dark scheme's surface), white
+   and neutral-grey stars; purple only in the rim light and its glow. */
 .dark .horizon-bg {
-  --hz-sky: #050505;
-  --hz-star-colors: 255, 255, 255 | 255, 255, 255 | 228, 228, 231 | 212, 212, 216;
+  --hz-sky: var(--md-sys-color-surface);
+  --hz-star-colors: 255, 255, 255 | 255, 255, 255 | 226, 226, 226 | 198, 198, 198;
   --hz-stars-opacity: 1;
-  --hz-planet: #040308;
-  --hz-planet-lit: rgba(135, 0, 255, 0.12);
-  --hz-rim-hot: #f6efff;
-  --hz-rim: #b37dff;
-  --hz-rim-base: rgba(150, 90, 255, 0.5);
-  --hz-glow: rgba(135, 0, 255, 0.6);
-  --hz-halo: rgba(120, 40, 255, 0.22);
-  --hz-corner: rgba(135, 0, 255, 0.22);
+  --hz-planet: var(--md-sys-color-surface);
+  --hz-planet-lit: color-mix(in srgb, var(--md-sys-color-primary-container) 12%, transparent);
+  --hz-rim-hot: var(--md-sys-color-primary-fixed);
+  --hz-rim: var(--md-sys-color-primary);
+  --hz-rim-base: color-mix(in srgb, var(--md-sys-color-primary) 50%, transparent);
+  --hz-glow: color-mix(in srgb, var(--md-sys-color-primary-container) 60%, transparent);
+  --hz-halo: color-mix(in srgb, var(--md-sys-color-primary-container) 18%, transparent);
+  --hz-corner: color-mix(in srgb, var(--md-sys-color-primary-container) 22%, transparent);
 }
 
 /* Plain space: a flat sky, only stars on top. */
@@ -108,7 +283,7 @@ body {
   position: absolute;
   inset: 0;
   background: var(--hz-sky);
-  transition: background-color 0.2s ease;
+  transition: background-color var(--md-duration-short4) var(--ease-standard);
 }
 
 /* Star layers are oversized so parallax never shows an edge; nearer layers move more. */
@@ -271,10 +446,11 @@ body {
 .deep-space {
   --ds-p: 0;
 
-  /* light theme */
-  --ds-surface: #ffffff;
-  --ds-star-colors: 9, 9, 11 | 39, 39, 42 | 82, 82, 91;
-  --ds-stars-opacity: 0.35;
+  /* Starts on the hero planet's color (the same M3 role as --hz-planet) and
+     fades into the page surface. Star colors match the hero's. */
+  --ds-surface: var(--md-sys-color-surface);
+  --ds-star-colors: 31, 25, 37 | 76, 67, 86 | 125, 115, 136;
+  --ds-stars-opacity: 0.3;
 
   position: absolute;
   inset: 0;
@@ -284,10 +460,8 @@ body {
 }
 
 .dark .deep-space {
-  /* Near-black like the hero planet's surface, so the two blocks join. */
-  --ds-surface: #040308;
-  --ds-star-colors: 255, 255, 255 | 255, 255, 255 | 228, 228, 231 | 212, 212, 216;
-  --ds-stars-opacity: 1;
+  --ds-star-colors: 255, 255, 255 | 255, 255, 255 | 226, 226, 226 | 198, 198, 198;
+  --ds-stars-opacity: 0.9;
 }
 
 .deep-space__surface {
@@ -327,35 +501,120 @@ body {
   to { opacity: var(--ds-stars-opacity); }
 }
 
-/* Section dividers as thin lines of light that fade out at both ends. */
-.section-divider {
-  width: 100%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(24, 24, 27, 0.18), transparent);
-}
-
-.dark .section-divider {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
-  box-shadow: 0 0 12px rgba(255, 255, 255, 0.06);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .deep-space__stars { animation: none; }
 }
 
-/* Playground option dropdowns (components/ui/dropdown.tsx): a quick fade and lift on open. */
+/* ------------------------------------------------------------------------
+ * M3 component motion (components/ui/*)
+ * ---------------------------------------------------------------------- */
+
+/* Menus (dropdown.tsx) grow open from their top edge. */
 .dropdown-panel {
-  animation: dropdown-in 120ms ease-out;
   transform-origin: top left;
+  animation: m3-menu-in var(--md-duration-medium1) var(--ease-emphasized-decelerate);
 }
 
-@keyframes dropdown-in {
-  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+@keyframes m3-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scaleY(0.9); }
   to { opacity: 1; transform: none; }
 }
 
+/* Snackbars (snackbar.tsx) rise in on a spatial spring. */
+.m3-snackbar {
+  animation: m3-snackbar-in var(--md-motion-spatial-duration) var(--ease-spatial);
+}
+
+@keyframes m3-snackbar-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Navigation drawer (mobile-nav.tsx) slides in from the left over a fading scrim. */
+.m3-drawer[open] {
+  animation: m3-drawer-in var(--md-duration-medium4) var(--ease-emphasized-decelerate);
+}
+
+.m3-drawer[open]::backdrop {
+  animation: m3-fade-in var(--md-duration-medium2) var(--ease-standard);
+}
+
+@keyframes m3-drawer-in {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+
+@keyframes m3-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Result cards (search-preview.tsx) rise in one after another when a page of
+   results arrives; --m3-stagger is the card's place in that page. */
+/* "backwards" (not "both"): once the entrance ends the animation lets go of
+   the element, so cards don't keep their own compositing layers, which Chrome
+   can paint over a scroll container's custom scrollbar. */
+.m3-enter {
+  animation: m3-enter var(--md-motion-spatial-duration) var(--ease-spatial) backwards;
+  animation-delay: calc(var(--m3-stagger, 0) * 35ms);
+}
+
+@keyframes m3-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A newly shown view (an output tab) fades in. */
+.m3-view-in {
+  animation: m3-fade-in var(--md-motion-effects-duration) var(--ease-effects) backwards;
+}
+
+/* Entrances are decoration: skip them entirely with reduced motion (the
+   global rule above would still apply the stagger delay). */
+@media (prefers-reduced-motion: reduce) {
+  .m3-enter,
+  .m3-view-in { animation: none; }
+}
+
+/* Indeterminate progress indicators (progress.tsx). */
+.m3-linear-indeterminate {
+  animation: m3-linear 1.8s var(--ease-emphasized) infinite;
+}
+
+@keyframes m3-linear {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+.m3-circular {
+  animation: m3-rotate 1.4s linear infinite;
+}
+
+.m3-circular circle {
+  animation: m3-dash 1.4s var(--ease-standard) infinite;
+}
+
+@keyframes m3-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* Circumference of r=20 is about 126. */
+@keyframes m3-dash {
+  0% { stroke-dasharray: 1 126; stroke-dashoffset: 0; }
+  50% { stroke-dasharray: 90 126; stroke-dashoffset: -20; }
+  100% { stroke-dasharray: 90 126; stroke-dashoffset: -125; }
+}
+
+/* Loading indicators still need to show activity with reduced motion, so
+   they run slower instead of being cut to nothing by the global rule above. */
+@media (prefers-reduced-motion: reduce) {
+  .m3-linear-indeterminate { animation-duration: 3.6s !important; }
+  .m3-circular,
+  .m3-circular circle { animation-duration: 2.8s !important; }
+}
+
 /* ------------------------------------------------------------------------
- * Scrollbars: 4px, in the search button's purple (--color-brand), no track.
+ * Scrollbars: 4px, in the brand purple (primary-container), no track.
  * They only appear where content overflows (every scroller uses overflow:
  * auto). Chrome does not repaint a custom scrollbar when a :hover style
  * changes, so the thumb is always drawn rather than revealed on hover.
@@ -376,16 +635,16 @@ body {
 
 ::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: var(--color-brand);
+  background: var(--md-sys-color-primary-container);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-brand-hover);
+  background: var(--md-sys-color-primary);
 }
 
 @supports not selector(::-webkit-scrollbar) {
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--color-brand) transparent;
+    scrollbar-color: var(--md-sys-color-primary-container) transparent;
   }
 }

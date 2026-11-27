@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Check } from "lucide-react";
 import { CodePanel, type CodeLanguage } from "./ui/code-panel";
 import { SectionHeader } from "./ui/section-header";
 
@@ -86,18 +87,26 @@ export function ApiQuickstart() {
   const example = EXAMPLES[active];
 
   return (
-    <section id="quickstart" className="w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] py-20 flex flex-col justify-center scroll-mt-14">
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-14 lg:gap-16 items-center">
-        <div className="flex flex-col gap-12">
+    <section
+      id="quickstart"
+      className="flex min-h-[calc(100vh-4rem)] min-h-[calc(100dvh-4rem)] w-full scroll-mt-16 flex-col justify-center py-20"
+    >
+      <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16">
+        <div className="flex flex-col gap-10">
           <SectionHeader eyebrow="HTTP API" title="One request, every engine">
-            Send a query to <span className="font-mono text-[0.9em] text-zinc-900 dark:text-zinc-200">POST /search</span>{" "}
-            and get back one ranked list.
+            Send a query to <span className="font-mono text-[0.9em] text-on-surface">POST /search</span> and get back one ranked
+            list.
           </SectionHeader>
 
           <ul className="flex flex-col gap-4">
             {POINTS.map((point) => (
-              <li key={point} className="flex items-center gap-3.5 text-[17px] text-zinc-600 dark:text-zinc-400">
-                <span aria-hidden="true" className="w-2 h-2 rounded-full bg-brand/70 shrink-0" />
+              <li key={point} className="flex items-center gap-3.5 text-body-lg text-on-surface-variant">
+                <span
+                  aria-hidden="true"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-container text-on-primary-container"
+                >
+                  <Check className="size-4 stroke-[2.5]" />
+                </span>
                 {point}
               </li>
             ))}

@@ -2,17 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { Button } from "./button";
+import { IconButton } from "./icon-button";
+import { useSnackbar } from "./snackbar";
 
 interface CopyButtonProps {
   /** Returns the text to copy; read at click time so it is always current. */
   getText: () => string;
   ariaLabel: string;
+  /** "sm" is an icon button; "md" an outlined button labelled "Copy". */
   size?: "sm" | "md";
+  /** "code" styles the small icon button for the always-dark code surfaces. */
+  tone?: "default" | "code";
 }
 
-export function CopyButton({ getText, ariaLabel, size = "md" }: CopyButtonProps) {
+/** Copies text, confirming with a check mark and a snackbar. */
+export function CopyButton({ getText, ariaLabel, size = "md", tone = "default" }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showSnackbar = useSnackbar();
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
@@ -22,36 +30,27 @@ export function CopyButton({ getText, ariaLabel, size = "md" }: CopyButtonProps)
     try {
       await navigator.clipboard.writeText(getText());
       setCopied(true);
+      showSnackbar("Copied to clipboard");
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard access can be blocked (e.g. insecure context); nothing to do.
+      // Clipboard access can be blocked (e.g. an insecure context).
+      showSnackbar("Couldn't copy: clipboard access is blocked");
     }
   }
 
-  const sizing = size === "sm" ? "gap-1 px-2 py-0.5 text-[11px]" : "gap-1.5 px-2.5 py-1 text-xs";
-  const icon = size === "sm" ? "w-3 h-3" : "w-3.5 h-3.5";
+  const icon = copied ? <Check className={tone === "code" ? "text-code-primary" : "text-primary"} /> : <Copy />;
 
+  if (size === "sm") {
+    return (
+      <IconButton label={ariaLabel} size="xs" variant={tone === "code" ? "code" : "standard"} onClick={handleCopy}>
+        {icon}
+      </IconButton>
+    );
+  }
   return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      aria-label={ariaLabel}
-      className={`inline-flex items-center ${sizing} rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:border-zinc-400 dark:hover:border-zinc-500 font-mono transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60`}
-    >
-      {copied ? (
-        <>
-          <Check className={`${icon} text-emerald-500`} />
-          <span className="text-emerald-600 dark:text-emerald-400 font-semibold" aria-live="polite">
-            Copied
-          </span>
-        </>
-      ) : (
-        <>
-          <Copy className={icon} />
-          <span>Copy</span>
-        </>
-      )}
-    </button>
+    <Button variant="outlined" size="xs" icon={icon} onClick={handleCopy} aria-label={ariaLabel}>
+      {copied ? "Copied" : "Copy"}
+    </Button>
   );
 }

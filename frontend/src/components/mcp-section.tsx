@@ -70,18 +70,21 @@ export function McpSection() {
   const snippet = CLIENT_SNIPPETS[activeTab];
 
   return (
-    <section id="mcp" className="w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] py-20 flex flex-col justify-center scroll-mt-14">
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-14 lg:gap-16 items-center">
-        <div className="flex flex-col gap-12">
+    <section
+      id="mcp"
+      className="flex min-h-[calc(100vh-4rem)] min-h-[calc(100dvh-4rem)] w-full scroll-mt-16 flex-col justify-center py-20"
+    >
+      <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-16">
+        <div className="flex flex-col gap-10">
           <SectionHeader eyebrow="MCP server" title="Give your agent the web">
             Add Plewtus to Claude, Cursor, Codex, DeepSeek Harness or any MCP client. Your agent gets two tools.
           </SectionHeader>
 
-          <ul className="flex flex-col gap-7">
+          <ul className="flex flex-col gap-3">
             {TOOLS.map((tool) => (
-              <li key={tool.name} className="flex flex-col gap-1.5 pl-5 border-l-2 border-brand/50">
-                <span className="font-mono text-base font-medium text-zinc-950 dark:text-zinc-50">{tool.name}</span>
-                <span className="text-[17px] text-zinc-600 dark:text-zinc-400">{tool.body}</span>
+              <li key={tool.name} className="flex flex-col gap-1.5 rounded-corner-lg bg-surface-container-low/80 p-5 backdrop-blur-sm">
+                <code className="font-mono text-title-md text-primary">{tool.name}</code>
+                <span className="text-body-lg text-on-surface-variant">{tool.body}</span>
               </li>
             ))}
           </ul>

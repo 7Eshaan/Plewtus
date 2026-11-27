@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { FileJson, Download, Layers } from "lucide-react";
+import { FileJson, Download } from "lucide-react";
 import { CopyButton } from "./ui/copy-button";
+import { Button } from "./ui/button";
+import { chipClasses } from "./ui/chip";
 import type { components } from "@/types/api";
 
 type SearchResponse = components["schemas"]["SearchResponse"];
@@ -15,26 +17,28 @@ interface JsonViewerProps {
   loading: boolean;
 }
 
+/** Syntax colors for the always-dark code surface (both themes). */
+const SYNTAX = {
+  key: "text-violet-300",
+  string: "text-emerald-300",
+  number: "text-amber-300",
+  boolean: "text-fuchsia-300",
+  null: "text-rose-300",
+} as const;
+
 function highlightJson(json: string): string {
-  const escaped = json
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  const escaped = json.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   return escaped.replace(
     /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
     (match) => {
-      let cls = "text-amber-400 dark:text-amber-300"; // number
+      let cls: string = SYNTAX.number;
       if (/^"/.test(match)) {
-        if (/:$/.test(match)) {
-          cls = "text-sky-400 dark:text-sky-300 font-medium"; // key
-        } else {
-          cls = "text-emerald-400 dark:text-emerald-300"; // string
-        }
+        cls = /:$/.test(match) ? SYNTAX.key : SYNTAX.string;
       } else if (/true|false/.test(match)) {
-        cls = "text-purple-400 dark:text-purple-300 font-semibold"; // boolean
+        cls = SYNTAX.boolean;
       } else if (/null/.test(match)) {
-        cls = "text-rose-400 dark:text-rose-300 font-semibold"; // null
+        cls = SYNTAX.null;
       }
       return `<span class="${cls}">${match}</span>`;
     }
@@ -43,35 +47,28 @@ function highlightJson(json: string): string {
 
 export function JsonViewer({ response, error, loading }: JsonViewerProps) {
   const payload = error ?? response;
-  const jsonString = useMemo(() => {
-    return payload ? JSON.stringify(payload, null, 2) : "";
-  }, [payload]);
-
-  const highlightedHtml = useMemo(() => {
-    return jsonString ? highlightJson(jsonString) : "";
-  }, [jsonString]);
+  const jsonString = useMemo(() => (payload ? JSON.stringify(payload, null, 2) : ""), [payload]);
+  const highlightedHtml = useMemo(() => (jsonString ? highlightJson(jsonString) : ""), [jsonString]);
 
   if (loading) {
     return (
-      <div className="flex-1 min-h-0 flex flex-col gap-2 p-2 animate-pulse text-left">
+      <div className="flex min-h-0 flex-1 animate-pulse flex-col gap-3" aria-hidden="true">
         <div className="flex items-center justify-between">
-          <div className="w-32 h-4 rounded bg-zinc-200 dark:bg-zinc-800" />
-          <div className="w-24 h-4 rounded bg-zinc-200 dark:bg-zinc-800" />
+          <div className="h-6 w-40 rounded-corner-xs bg-surface-container-highest" />
+          <div className="h-8 w-40 rounded-corner-full bg-surface-container-highest" />
         </div>
-        <div className="flex-1 rounded-lg bg-zinc-100 dark:bg-zinc-900/60" />
+        <div className="flex-1 rounded-corner-md bg-code-surface" />
       </div>
     );
   }
 
   if (!payload) {
     return (
-      <div className="flex-1 min-h-0 py-12 px-4 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 flex flex-col items-center justify-center text-center gap-2 text-left my-auto">
-        <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-400">
-          <FileJson className="w-4 h-4" />
+      <div className="my-auto flex min-h-0 flex-1 flex-col items-center justify-center gap-3 rounded-corner-lg border border-dashed border-outline-variant px-4 py-12 text-center">
+        <div className="flex size-10 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant">
+          <FileJson className="size-5" aria-hidden="true" />
         </div>
-        <p className="text-xs font-mono text-zinc-500">
-          Submit a search query above to inspect real JSON output
-        </p>
+        <p className="text-body-md text-on-surface-variant">Submit a search query above to inspect real JSON output</p>
       </div>
     );
   }
@@ -91,55 +88,35 @@ export function JsonViewer({ response, error, loading }: JsonViewerProps) {
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col gap-2 text-left">
-      {/* Top Controls Toolbar */}
-      <div className="flex items-center justify-between gap-2 flex-shrink-0 text-xs font-mono">
-        {/* Left: Status & Metrics */}
-        <div className="flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-          {error ? (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-              {error.code > 0 ? `HTTP ${error.code}` : "No response"}
-            </span>
-          ) : (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              200 OK
-            </span>
-          )}
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-label-md text-on-surface-variant">
+          <span className={chipClasses({ interactive: false, dense: true, selected: !error, tone: error ? "error" : "default" })}>
+            {error ? (error.code > 0 ? `HTTP ${error.code}` : "No response") : "200 OK"}
+          </span>
           <span>{sizeKb} KB</span>
           {!error && response && (
             <>
-              <span>•</span>
+              <span aria-hidden="true">·</span>
               <span>{response.metadata.took_ms} ms</span>
-              <span>•</span>
-              <span className="inline-flex items-center gap-1">
-                <Layers className="w-3 h-3 text-zinc-400" />
-                <span>{response.results.length} results</span>
-              </span>
+              <span aria-hidden="true">·</span>
+              <span>{response.results.length} results</span>
             </>
           )}
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={handleDownload}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-600 text-xs font-mono transition-colors cursor-pointer shadow-2xs"
-            title="Download JSON file"
-            aria-label="Download JSON response"
-          >
-            <Download className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-2">
+          <Button variant="outlined" size="xs" icon={<Download />} onClick={handleDownload} aria-label="Download JSON response">
             <span className="hidden sm:inline">Download</span>
-          </button>
-
+          </Button>
           <CopyButton getText={() => jsonString} ariaLabel="Copy JSON response" />
         </div>
       </div>
 
-      {/* Code Display Area: Left-aligned, syntax highlighted, scrollable */}
-      <div className="flex-1 min-h-0 rounded-lg border border-zinc-200 dark:border-zinc-800/80 bg-[#0a0a0c] p-3 overflow-auto text-left font-mono text-xs leading-relaxed shadow-inner">
+      {/* Always-dark code surface, in both themes */}
+      <div className="min-h-0 flex-1 overflow-auto rounded-corner-md bg-code-surface p-4">
         <pre
-          className="text-left font-mono text-xs text-zinc-300 selection:bg-zinc-800 whitespace-pre"
+          className="whitespace-pre font-mono text-[12px] leading-relaxed text-code-on-surface selection:bg-primary-container/60"
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       </div>
