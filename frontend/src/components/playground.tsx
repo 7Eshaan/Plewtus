@@ -111,6 +111,10 @@ export function Playground() {
 
   const abortRef = useRef<AbortController | null>(null);
   const initializedRef = useRef(false);
+  // The example query for the first-load search. Chosen once and kept across
+  // development-mode remounts, so a repeated first-load search is the same
+  // query and the backend answers it from the search already in flight.
+  const exampleRef = useRef<string | null>(null);
 
   const handleQueryChange = useCallback((nextQuery: string) => {
     setQuery(nextQuery);
@@ -246,12 +250,23 @@ export function Playground() {
     } catch {
       // Ignore malformed storage and fall through to a live search.
     }
-    const example = EXAMPLE_QUERIES[Math.floor(Math.random() * EXAMPLE_QUERIES.length)];
+    exampleRef.current ??= EXAMPLE_QUERIES[Math.floor(Math.random() * EXAMPLE_QUERIES.length)];
+    const example = exampleRef.current;
     setQuery(example);
     void executeSearch(example);
   }, [executeSearch]);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  // On unmount, cancel any search in flight and clear the first-load mark.
+  // React's development mode mounts, unmounts and remounts every component;
+  // without the reset, that remount would skip the first-load search that
+  // the abort just cancelled, leaving the playground empty.
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      initializedRef.current = false;
+    },
+    []
+  );
 
   const runSuggestion = useCallback(
     (suggestion: string) => {

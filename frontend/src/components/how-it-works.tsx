@@ -17,18 +17,23 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="w-full min-h-[calc(100vh-3.5rem)] min-h-[calc(100dvh-3.5rem)] py-20 flex flex-col justify-center scroll-mt-14 gap-16 sm:gap-20">
+    <section
+      id="how-it-works"
+      className="flex min-h-[calc(100vh-4rem)] min-h-[calc(100dvh-4rem)] w-full scroll-mt-16 flex-col justify-center gap-12 py-20 sm:gap-16"
+    >
       <SectionHeader eyebrow="How it works" title="Three engines in, one clean list out" />
 
-      <ol className="grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-10">
+      <ol className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {STEPS.map((step, i) => (
-          <li key={step.title} className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-base font-medium text-brand dark:text-brand-light tabular-nums">0{i + 1}</span>
-              <span aria-hidden="true" className="h-px flex-1 bg-gradient-to-r from-zinc-300 dark:from-zinc-700 to-transparent" />
-            </div>
-            <h3 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">{step.title}</h3>
-            <p className="text-[17px] leading-relaxed text-zinc-600 dark:text-zinc-400">{step.body}</p>
+          <li key={step.title} className="flex flex-col gap-4 rounded-corner-xl bg-surface-container-low/80 p-6 backdrop-blur-sm">
+            <span
+              aria-hidden="true"
+              className="flex size-12 items-center justify-center rounded-corner-lg bg-secondary-container text-title-lg font-medium text-on-secondary-container tabular-nums"
+            >
+              {i + 1}
+            </span>
+            <h3 className="text-headline-sm text-on-surface">{step.title}</h3>
+            <p className="text-body-lg text-on-surface-variant">{step.body}</p>
           </li>
         ))}
       </ol>

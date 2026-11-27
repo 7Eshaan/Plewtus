@@ -3,6 +3,7 @@
 import { useTheme } from "next-themes";
 import { useSyncExternalStore } from "react";
 import { Sun, Moon } from "lucide-react";
+import { IconButton } from "./ui/icon-button";
 
 const emptySubscribe = () => () => {};
 
@@ -14,30 +15,15 @@ export function ThemeToggle() {
     () => false
   );
 
+  // The theme is only known on the client; keep the space until then.
   if (!mounted) {
-    return (
-      <div
-        className="w-8 h-8 rounded-md border border-zinc-200 dark:border-zinc-800 bg-transparent"
-        aria-hidden="true"
-      />
-    );
+    return <div className="size-10" aria-hidden="true" />;
   }
 
   const isDark = theme === "dark";
-
   return (
-    <button
-      type="button"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="w-8 h-8 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 flex items-center justify-center transition-colors focus:outline-none focus:ring-1 focus:ring-brand/50 cursor-pointer"
-      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
-      title={isDark ? "Switch to light theme" : "Switch to dark theme"}
-    >
-      {isDark ? (
-        <Sun className="w-4 h-4 text-zinc-300 hover:text-brand-light transition-colors" />
-      ) : (
-        <Moon className="w-4 h-4 text-zinc-700 hover:text-brand transition-colors" />
-      )}
-    </button>
+    <IconButton label={isDark ? "Switch to light theme" : "Switch to dark theme"} onClick={() => setTheme(isDark ? "light" : "dark")}>
+      {isDark ? <Sun /> : <Moon />}
+    </IconButton>
   );
 }

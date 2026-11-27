@@ -3,6 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { CopyButton } from "./copy-button";
 import { handleArrowNav } from "@/lib/arrow-nav";
+import { cn } from "@/lib/cn";
 
 export type CodeLanguage = "bash" | "typescript" | "python" | "go" | "json" | "toml" | "yaml";
 
@@ -47,12 +48,13 @@ const COMMENT: Record<CodeLanguage, string> = {
 
 type Token = { text: string; className?: string };
 
+/** Syntax colors for the always-dark code surface (matching json-viewer.tsx). */
 const STYLES = {
-  comment: "text-zinc-500 italic",
-  string: "text-emerald-200/80",
-  key: "text-violet-200",
-  number: "text-amber-200/80",
-  keyword: "text-sky-300/90",
+  comment: "text-code-on-surface-variant/70 italic",
+  string: "text-emerald-300",
+  key: "text-violet-300",
+  number: "text-amber-300",
+  keyword: "text-sky-300",
 } as const;
 
 /** A deliberately small highlighter: strings, comments, numbers, keywords and JSON keys. */
@@ -86,7 +88,7 @@ function tokenize(code: string, language: CodeLanguage): Token[] {
   return tokens;
 }
 
-/** A dark code window with optional text tabs and a copy button. */
+/** A code window (dark in both themes) with optional tabs and a copy button. */
 export function CodePanel<T extends string>({
   code,
   language,
@@ -101,10 +103,15 @@ export function CodePanel<T extends string>({
   const tokens = useMemo(() => tokenize(code, language), [code, language]);
 
   return (
-    <div className="rounded-2xl border border-white/[0.08] bg-[#0b0b0e] overflow-hidden shadow-[0_20px_60px_-30px_rgba(0,0,0,0.6)] flex flex-col min-w-0">
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-corner-xl border border-code-outline bg-code-surface shadow-elevation-3">
       <div className="flex items-center justify-between gap-3 px-2.5 pt-2.5">
         {tabs && activeTab && onTabChange ? (
-          <div role="tablist" aria-label={tabsLabel} onKeyDown={handleArrowNav} className="flex items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+          <div
+            role="tablist"
+            aria-label={tabsLabel}
+            onKeyDown={handleArrowNav}
+            className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none]"
+          >
             {tabs.map((tab) => {
               const selected = tab.value === activeTab;
               return (
@@ -115,9 +122,10 @@ export function CodePanel<T extends string>({
                   aria-selected={selected}
                   tabIndex={selected ? 0 : -1}
                   onClick={() => onTabChange(tab.value)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[14px] whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
-                    selected ? "bg-white/[0.08] text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
-                  }`}
+                  className={cn(
+                    "state-layer focus-ring inline-flex h-8 shrink-0 cursor-pointer items-center rounded-corner-full px-3 text-label-lg whitespace-nowrap transition-colors motion-effects",
+                    selected ? "bg-code-surface-high text-code-on-surface" : "text-code-on-surface-variant"
+                  )}
                 >
                   {tab.label}
                 </button>
@@ -125,15 +133,13 @@ export function CodePanel<T extends string>({
             })}
           </div>
         ) : (
-          <div className="px-3 py-1.5 text-[13px] text-zinc-400 truncate">{caption}</div>
+          <div className="truncate px-3 py-1.5 text-label-lg text-code-on-surface-variant">{caption}</div>
         )}
-        <div className="[&_button]:border-transparent [&_button]:bg-transparent [&_button]:text-zinc-500 [&_button:hover]:text-zinc-200 [&_button:hover]:border-transparent">
-          <CopyButton size="sm" getText={() => code} ariaLabel={copyLabel} />
-        </div>
+        <CopyButton size="sm" tone="code" getText={() => code} ariaLabel={copyLabel} />
       </div>
 
-      <div className={`overflow-auto ${maxHeight}`}>
-        <pre className="px-6 pt-5 pb-7 text-[14px] leading-[1.8] min-h-[260px] font-mono [tab-size:4] text-zinc-300 selection:bg-brand/40">
+      <div className={cn("overflow-auto", maxHeight)}>
+        <pre className="min-h-[260px] px-6 pb-7 pt-5 font-mono text-[14px] leading-[1.8] text-code-on-surface [tab-size:4] selection:bg-primary-container/60">
           <code>
             {tokens.map((token, i) =>
               token.className ? (

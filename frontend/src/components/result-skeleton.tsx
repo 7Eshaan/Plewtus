@@ -1,33 +1,26 @@
+/** Placeholder result cards while a search runs (shaped like result-card.tsx). */
 export function ResultSkeleton() {
   return (
-    <div className="flex flex-col gap-2 animate-pulse" aria-busy="true" aria-label="Loading search results">
+    <div className="flex animate-pulse flex-col gap-2" aria-hidden="true">
       {[1, 2, 3, 4].map((index) => (
-        <div
-          key={index}
-          className="p-3 sm:p-3.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-white/50 dark:bg-[#121215]/50 flex flex-col gap-1.5"
-        >
-          {/* Top row */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-md bg-zinc-200 dark:bg-zinc-800 flex-shrink-0" />
-              <div className="w-48 sm:w-64 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
+        <div key={index} className="flex flex-col gap-2 rounded-corner-md bg-surface-container p-3 sm:p-4">
+          <div className="flex items-start gap-3">
+            <div className="size-8 shrink-0 rounded-full bg-surface-container-highest" />
+            <div className="flex flex-1 flex-col gap-1.5 pt-0.5">
+              <div className="h-3 w-28 rounded-corner-xs bg-surface-container-highest" />
+              <div className="h-4 w-3/5 rounded-corner-xs bg-surface-container-highest" />
             </div>
-            <div className="w-20 h-3 rounded bg-zinc-200 dark:bg-zinc-800" />
           </div>
-
-          {/* Snippet line */}
-          <div className="flex flex-col gap-1 pl-7">
-            <div className="w-full h-3 rounded bg-zinc-100 dark:bg-zinc-800/60" />
-            <div className="w-3/4 h-3 rounded bg-zinc-100 dark:bg-zinc-800/60" />
+          <div className="flex flex-col gap-1.5 sm:pl-11">
+            <div className="h-3 w-full rounded-corner-xs bg-surface-container-high" />
+            <div className="h-3 w-4/5 rounded-corner-xs bg-surface-container-high" />
           </div>
-
-          {/* Bottom row */}
-          <div className="flex items-center justify-between pt-1.5 border-t border-zinc-100 dark:border-zinc-800/40 pl-7">
-            <div className="flex items-center gap-1.5">
-              <div className="w-14 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
-              <div className="w-12 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
+          <div className="flex items-center justify-between pt-1 sm:pl-11">
+            <div className="flex gap-1">
+              <div className="h-6 w-20 rounded-corner-xs bg-surface-container-highest" />
+              <div className="h-6 w-16 rounded-corner-xs bg-surface-container-highest" />
             </div>
-            <div className="w-16 h-3.5 rounded bg-zinc-200 dark:bg-zinc-800" />
+            <div className="h-5 w-16 rounded-corner-full bg-surface-container-highest" />
           </div>
         </div>
       ))}

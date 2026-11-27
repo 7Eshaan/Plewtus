@@ -6,13 +6,13 @@ interface EmptyStateProps {
 
 export function EmptyState({ query }: EmptyStateProps) {
   return (
-    <div className="py-12 px-4 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-800 flex flex-col items-center justify-center text-center gap-3 my-auto">
-      <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-500">
-        <SearchX className="w-5 h-5" />
+    <div className="my-auto flex flex-col items-center justify-center gap-3 rounded-corner-lg border border-dashed border-outline-variant px-4 py-12 text-center">
+      <div className="flex size-12 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant">
+        <SearchX className="size-6" aria-hidden="true" />
       </div>
-      <div className="flex flex-col gap-1 max-w-sm">
-        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">No matching results</h3>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+      <div className="flex max-w-sm flex-col gap-1">
+        <h3 className="text-title-md text-on-surface">No matching results</h3>
+        <p className="text-body-md text-on-surface-variant">
           No on-topic results were found for &ldquo;{query}&rdquo;. Try broader terms, another freshness window, or fewer domain filters.
         </p>
       </div>

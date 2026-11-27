@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { handleArrowNav } from "@/lib/arrow-nav";
+import { cn } from "@/lib/cn";
 
 export interface SegmentOption<T extends string> {
   value: T;
@@ -14,26 +15,47 @@ interface SegmentedControlProps<T extends string> {
   onChange: (value: T) => void;
   ariaLabel: string;
   size?: "sm" | "md";
+  /** Stretch the group to its container, sharing the width equally. */
+  fullWidth?: boolean;
 }
 
-/** A compact single-choice switch (radio group) with arrow-key navigation. */
+const SIZES = {
+  sm: { button: "h-7 px-3 text-label-md", outer: 14 },
+  md: { button: "h-8 px-3.5 text-label-lg", outer: 16 },
+} as const;
+
+/** Inner corners of the connected buttons (M3 corner extra-small). */
+const INNER = 4;
+
+/**
+ * A single-choice M3 Expressive connected button group (radio group with
+ * arrow-key navigation). The group's outer corners are fully round and the
+ * corners between buttons small; the selected button morphs fully round.
+ */
 export function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
   ariaLabel,
   size = "md",
+  fullWidth = false,
 }: SegmentedControlProps<T>) {
-  const sizing = size === "sm" ? "px-2 py-0.5 text-[11px] rounded" : "px-2.5 py-1 text-xs rounded-md";
+  const { button, outer } = SIZES[size];
+  const last = options.length - 1;
+
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
       onKeyDown={handleArrowNav}
-      className="inline-flex items-center p-0.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 font-mono shrink-0"
+      className={cn("items-center gap-0.5", fullWidth ? "flex w-full" : "inline-flex shrink-0")}
     >
-      {options.map((option) => {
+      {options.map((option, i) => {
         const selected = option.value === value;
+        // Per-corner radii (top-left, top-right, bottom-right, bottom-left) as
+        // an inline style, so the morph between them animates.
+        const left = selected || i === 0 ? outer : INNER;
+        const right = selected || i === last ? outer : INNER;
         return (
           <button
             key={option.value}
@@ -42,11 +64,16 @@ export function SegmentedControl<T extends string>({
             aria-checked={selected}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(option.value)}
-            className={`inline-flex items-center gap-1.5 ${sizing} transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+            style={{ borderRadius: `${left}px ${right}px ${right}px ${left}px` }}
+            className={cn(
+              "state-layer focus-ring inline-flex items-center justify-center gap-1.5 whitespace-nowrap select-none cursor-pointer",
+              "transition-[border-radius,background-color,color] motion-spatial-fast",
+              button,
+              fullWidth && "flex-1",
               selected
-                ? "bg-white dark:bg-zinc-800 text-zinc-950 dark:text-zinc-50 font-medium shadow-2xs"
-                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
-            }`}
+                ? "bg-secondary-container text-on-secondary-container"
+                : "bg-surface-container-highest text-on-surface-variant"
+            )}
           >
             {option.label}
           </button>

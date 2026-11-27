@@ -2,6 +2,8 @@
 
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import { chipClasses } from "./chip";
+import { cn } from "@/lib/cn";
 
 interface DropdownProps {
   /** Stable id; the panel gets `${id}-panel`. */
@@ -21,8 +23,9 @@ interface DropdownProps {
 }
 
 /**
- * A toolbar button that opens a small panel below the toolbar. Closes on
- * Escape (returning focus to the button) and on any click outside.
+ * An M3 chip that opens a menu below the toolbar. The chip shows as selected
+ * (filter-chip colors) when its setting differs from the default. Closes on
+ * Escape (returning focus to the chip) and on any click outside.
  *
  * The panel is positioned against the toolbar (the nearest positioned
  * ancestor, which must be `relative`). On narrow screens it spans the toolbar;
@@ -89,28 +92,33 @@ export function Dropdown({
         aria-expanded={open}
         aria-controls={`${id}-panel`}
         onClick={() => onOpenChange(!open)}
-        className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-mono whitespace-nowrap transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
-          open
-            ? "border-zinc-300 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800/80 text-zinc-950 dark:text-zinc-50"
-            : modified
-              ? "border-brand/30 bg-brand/5 text-zinc-900 dark:text-zinc-100 hover:border-brand/50"
-              : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-950 dark:hover:text-zinc-100"
-        }`}
+        className={chipClasses({
+          selected: modified,
+          hasIcon: Boolean(icon),
+          hasTrailing: true,
+          className: cn(!modified && "aria-expanded:bg-surface-container-highest"),
+        })}
       >
-        {icon && <span className="text-zinc-400 dark:text-zinc-500 [&>svg]:w-3.5 [&>svg]:h-3.5">{icon}</span>}
+        {icon && (
+          <span aria-hidden="true" className={cn("flex", !modified && "text-primary")}>
+            {icon}
+          </span>
+        )}
         {/* The icon stands in for the label below desktop width; screen readers always get it. */}
-        <span className="sr-only lg:not-sr-only text-zinc-500 dark:text-zinc-500">{label}</span>
-        <span className="font-semibold text-zinc-900 dark:text-zinc-100">{value}</span>
-        <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+        <span className="sr-only lg:not-sr-only opacity-80">{label}</span>
+        <span className="font-semibold">{value}</span>
+        <ChevronDown className={cn("transition-transform motion-spatial-fast", open && "rotate-180")} aria-hidden="true" />
       </button>
 
       {open && (
         <div
           ref={panelRef}
           id={`${id}-panel`}
-          className={`dropdown-panel absolute z-30 top-full mt-1 left-3 right-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xl shadow-black/10 dark:shadow-black/40 p-1.5 text-left ${
+          className={cn(
+            "dropdown-panel absolute z-30 top-full mt-1 left-3 right-3 p-1.5 text-left",
+            "rounded-corner-lg bg-surface-container text-on-surface shadow-elevation-2",
             panelClassName ?? "sm:w-64"
-          }`}
+          )}
         >
           {children}
         </div>
@@ -119,7 +127,7 @@ export function Dropdown({
   );
 }
 
-/** A selectable row in a dropdown panel: a radio choice or a checkbox. */
+/** A selectable M3 menu item with a radio button or a checkbox. */
 export function DropdownOption({
   kind,
   checked,
@@ -146,23 +154,42 @@ export function DropdownOption({
       onClick={onSelect}
       aria-disabled={disabled || undefined}
       title={disabled ? disabledReason : undefined}
-      className={`w-full flex items-start gap-2.5 px-2 py-1.5 rounded-lg text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
-        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/80"
-      }`}
+      className={cn(
+        "state-layer focus-ring w-full flex items-start gap-3 px-3 py-2 rounded-corner-sm text-left text-on-surface",
+        disabled ? "cursor-not-allowed opacity-[0.38]" : "cursor-pointer"
+      )}
     >
-      <span
-        aria-hidden="true"
-        className={`mt-0.5 w-4 h-4 shrink-0 flex items-center justify-center border transition-colors ${
-          kind === "radio" ? "rounded-full" : "rounded"
-        } ${checked ? "bg-brand border-brand text-white" : "border-zinc-300 dark:border-zinc-600"}`}
-      >
-        {checked && (kind === "radio" ? <span className="w-1.5 h-1.5 rounded-full bg-white" /> : <Check className="w-3 h-3 stroke-[3]" />)}
-      </span>
-      <span className="flex flex-col min-w-0">
-        <span className={`text-xs font-mono ${checked ? "text-zinc-950 dark:text-zinc-50 font-semibold" : "text-zinc-700 dark:text-zinc-300"}`}>
-          {label}
+      {kind === "radio" ? (
+        // M3 radio button: a 20px ring with a dot when selected.
+        <span
+          aria-hidden="true"
+          className={cn(
+            "mt-px size-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors motion-effects-fast",
+            checked ? "border-primary" : "border-on-surface-variant"
+          )}
+        >
+          <span
+            className={cn(
+              "size-2.5 rounded-full bg-primary transition-transform motion-spatial-fast",
+              checked ? "scale-100" : "scale-0"
+            )}
+          />
         </span>
-        {hint && <span className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">{hint}</span>}
+      ) : (
+        // M3 checkbox: an 18px box with 2px corners, filled when checked.
+        <span
+          aria-hidden="true"
+          className={cn(
+            "mt-0.5 size-[18px] shrink-0 rounded-[2px] border-2 flex items-center justify-center transition-colors motion-effects-fast",
+            checked ? "bg-primary border-primary text-on-primary" : "border-on-surface-variant"
+          )}
+        >
+          {checked && <Check className="size-3.5 stroke-[3]" />}
+        </span>
+      )}
+      <span className="flex flex-col min-w-0">
+        <span className={cn("text-label-lg", checked && "font-semibold")}>{label}</span>
+        {hint && <span className="text-body-sm text-on-surface-variant">{hint}</span>}
       </span>
     </button>
   );
